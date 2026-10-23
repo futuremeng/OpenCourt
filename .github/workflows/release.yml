@@ -42,7 +42,13 @@ jobs:
         run: go test ./...
 
       - name: Build
-        run: wails build -clean -tags ${{ matrix.os == 'ubuntu-latest' && 'webkit2_41' || '' }}
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            wails build -clean -tags webkit2_41
+          else
+            wails build -clean
+          fi
 
       - name: Package artifact
         shell: bash
