@@ -33,7 +33,7 @@ import (
 var assets embed.FS
 
 // version 应用版本（Semantic Versioning）。
-const version = "0.1.0"
+const version = "0.1.0-preview"
 
 // App 应用服务：Wails bindings 的绑定对象。
 type App struct {

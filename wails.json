@@ -11,7 +11,7 @@
   },
   "info": {
     "productName": "OpenCourt",
-    "productVersion": "0.1.0",
+    "productVersion": "0.1.0-preview",
     "copyright": "Copyright © 2026 futuremeng",
     "comments": "面向法律场景的中立信息整理与逻辑推演辅助（AI 辅助性质，不替代裁判与专业判断）"
   }

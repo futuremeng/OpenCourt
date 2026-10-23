@@ -1,0 +1,63 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: OpenCourt-linux
+          - os: windows-latest
+            artifact: OpenCourt.exe
+          - os: macos-latest
+            artifact: OpenCourt-macos-universal
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Linux system deps (webkit/gtk)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libxss1
+        continue-on-error: true
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
+
+      - name: Verify tests
+        run: go test ./...
+
+      - name: Build
+        run: wails build -clean
+
+      - name: Package artifact
+        shell: bash
+        run: |
+          cd build/bin
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            zip -r ../../${{ matrix.artifact }}.zip OpenCourt.app
+          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp OpenCourt.exe ../../${{ matrix.artifact }}
+          else
+            zip -r ../../${{ matrix.artifact }}.zip OpenCourt
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}*
