@@ -1,0 +1,15 @@
+:root {
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  color: #1f2937;
+  background: #f6f7f9;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+button {
+  border: 1px solid #d1d5db; background: #fff; border-radius: 6px;
+  padding: 6px 14px; cursor: pointer;
+}
+button:hover { background: #eef2ff; }
+input, textarea, select {
+  border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 10px; font: inherit;
+}

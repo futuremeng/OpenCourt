@@ -1,0 +1,129 @@
+// Package config 配置管理（开发文档 8.4、9.3）：
+// config/settings.yaml 为主配置，支持环境变量覆盖（前缀 OPENCOURT_）。
+// 敏感信息（API Key 等）严禁写入配置文件，必须经 .env 或 Secret Manager 注入。
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Settings 主配置。
+type Settings struct {
+	Env     string `yaml:"env"` // dev / staging / prod
+	Profile struct {
+		Active string `yaml:"active"` // court / plaintiff / defendant / party
+	} `yaml:"profile"`
+	Model struct {
+		Provider  string `yaml:"provider"` // local / openai / azure
+		LocalPath string `yaml:"local_path"`
+		Enabled   bool   `yaml:"enabled"` // 默认 false：默认离线
+	} `yaml:"model"`
+	Retrieve struct {
+		VectorDim int `yaml:"vector_dim"`
+		TopK      int `yaml:"top_k"`
+	} `yaml:"retrieve"`
+	Security struct {
+		RedactLevel string `yaml:"redact_level"` // low / medium / high
+		Telemetry   bool   `yaml:"telemetry_enabled"`
+	} `yaml:"security"`
+	DataDir string `yaml:"data_dir"`
+}
+
+// Default 返回默认配置：默认离线、默认遥测关闭、脱敏级别 high。
+func Default() *Settings {
+	s := &Settings{Env: "dev", DataDir: "data"}
+	s.Profile.Active = "court"
+	s.Model.Provider = "local"
+	s.Model.LocalPath = "models"
+	s.Model.Enabled = false
+	s.Retrieve.VectorDim = 768
+	s.Retrieve.TopK = 5
+	s.Security.RedactLevel = "high"
+	s.Security.Telemetry = false
+	return s
+}
+
+// Load 读取 YAML 配置并叠加 OPENCOURT_* 环境变量覆盖。
+// path 不存在时返回默认配置（仍应用环境变量覆盖）。
+func Load(path string) (*Settings, error) {
+	s := Default()
+	if data, err := os.ReadFile(path); err == nil {
+		if err := yaml.Unmarshal(data, s); err != nil {
+			return nil, fmt.Errorf("解析配置文件失败: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+	s.applyEnv()
+	if err := s.validate(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// applyEnv 应用 OPENCOURT_ 前缀的环境变量覆盖（开发文档 8.4）。
+func (s *Settings) applyEnv() {
+	get := func(key string) (string, bool) { return os.LookupEnv("OPENCOURT_" + key) }
+	if v, ok := get("ENV"); ok {
+		s.Env = v
+	}
+	if v, ok := get("PROFILE_ACTIVE"); ok {
+		s.Profile.Active = v
+	}
+	if v, ok := get("MODEL_PROVIDER"); ok {
+		s.Model.Provider = v
+	}
+	if v, ok := get("MODEL_LOCAL_PATH"); ok {
+		s.Model.LocalPath = v
+	}
+	if v, ok := get("MODEL_ENABLED"); ok {
+		s.Model.Enabled = parseBool(v)
+	}
+	if v, ok := get("RETRIEVE_VECTOR_DIM"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			s.Retrieve.VectorDim = n
+		}
+	}
+	if v, ok := get("RETRIEVE_TOP_K"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			s.Retrieve.TopK = n
+		}
+	}
+	if v, ok := get("SECURITY_REDACT_LEVEL"); ok {
+		s.Security.RedactLevel = v
+	}
+	if v, ok := get("TELEMETRY"); ok {
+		s.Security.Telemetry = parseBool(v)
+	}
+	if v, ok := get("DATA_DIR"); ok {
+		s.DataDir = v
+	}
+}
+
+func parseBool(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Settings) validate() error {
+	switch s.Profile.Active {
+	case "court", "plaintiff", "defendant", "party":
+	default:
+		return fmt.Errorf("非法 profile.active: %q", s.Profile.Active)
+	}
+	switch s.Security.RedactLevel {
+	case "low", "medium", "high":
+	default:
+		return fmt.Errorf("非法 security.redact_level: %q", s.Security.RedactLevel)
+	}
+	return nil
+}

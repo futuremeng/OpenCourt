@@ -1,0 +1,25 @@
+# OpenCourt 主配置示例（复制为 config/settings.yaml 后按需修改）
+# 所有字段均可被 OPENCOURT_* 环境变量覆盖，例如：
+#   OPENCOURT_PROFILE_ACTIVE=plaintiff
+#   OPENCOURT_TELEMETRY=false
+# 敏感信息（API Key、密码）严禁写入本文件，请经 .env 注入。
+
+env: dev
+
+profile:
+  active: court          # court / plaintiff / defendant / party
+
+model:
+  provider: local        # local / openai / azure
+  local_path: models     # 本地模型路径（如 Ollama 模型名或 vLLM 地址）
+  enabled: false         # 默认离线：显式启用后才会发起模型调用
+
+retrieve:
+  vector_dim: 768
+  top_k: 5
+
+security:
+  redact_level: high     # low / medium / high
+  telemetry_enabled: false  # 默认关闭任何形式的数据上报，开启需二次确认
+
+data_dir: data

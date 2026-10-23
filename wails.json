@@ -1,0 +1,18 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "OpenCourt",
+  "outputfilename": "OpenCourt",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "futuremeng"
+  },
+  "info": {
+    "productName": "OpenCourt",
+    "productVersion": "0.1.0",
+    "copyright": "Copyright © 2026 futuremeng",
+    "comments": "面向法律场景的中立信息整理与逻辑推演辅助（AI 辅助性质，不替代裁判与专业判断）"
+  }
+}

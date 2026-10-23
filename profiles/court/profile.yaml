@@ -1,0 +1,19 @@
+name: 法院 Profile
+role: court
+# 启用能力：阅卷、汇聚、核验、要件匹配、文书校对（开发文档 5.2、5.6）
+enabled_agents:
+  - reader        # 阅卷 Agent
+  - aggregator    # 汇聚器
+  - verifier      # 核验器
+  - element_matcher
+  - doc_proofread # 文书校对
+# 禁用能力：所有策略类插件、胜算评估、抗辩预演、裁判倾向分析
+disabled_tools:
+  - strategy
+  - win_eval
+  - defense_rehearsal
+  - verdict_tendency
+data_dir: data/court
+output_rules:
+  - 保持绝对中立，不给出倾向性结论
+  - 明确标注辅助性质

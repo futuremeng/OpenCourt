@@ -1,0 +1,16 @@
+name: 原告 Profile
+role: plaintiff
+# 启用能力：阅卷、汇聚、核验、要件匹配、抗辩预演（开发文档 5.3、5.6）
+enabled_agents:
+  - reader
+  - aggregator
+  - verifier
+  - element_matcher
+  - defense_rehearsal_agent # 对方抗辩预演
+disabled_tools:
+  - doc_proofread    # 文书校对
+  - verdict_tendency # 裁判倾向分析
+data_dir: data/plaintiff
+output_rules:
+  - 所有结论必须带来源
+  - 概率性表述替换为逻辑条件表述

@@ -1,0 +1,16 @@
+name: 被告 Profile
+role: defendant
+# 启用能力：阅卷、汇聚、核验、要件匹配、质证分析（开发文档 5.4、5.6）
+enabled_agents:
+  - reader
+  - aggregator
+  - verifier
+  - element_matcher
+  - evidence_challenge # 三性质证 / 证据链断点查找
+disabled_tools:
+  - doc_proofread
+  - verdict_tendency
+data_dir: data/defendant
+output_rules:
+  - 质证意见必须引用具体证据编号
+  - 抗辩理由必须对应法条
