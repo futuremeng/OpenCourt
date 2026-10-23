@@ -80,6 +80,10 @@ func (a *App) startup(ctx context.Context) {
 		log.Fatalf("无法创建本机数据目录: %v", err)
 	}
 	a.dataDir = dataDir
+	// .env 注入敏感信息（API Key 等），文件不入库；已存在的环境变量优先。
+	if err := config.LoadDotEnv(".env"); err != nil {
+		log.Printf(".env 加载失败: %v", err)
+	}
 	settings, err := config.Load("config/settings.yaml")
 	if err != nil {
 		log.Printf("配置加载失败，使用默认配置: %v", err)

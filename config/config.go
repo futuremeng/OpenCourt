@@ -74,6 +74,38 @@ func Load(path string) (*Settings, error) {
 	return s, nil
 }
 
+// LoadDotEnv 读取 .env 文件并注入环境变量（已存在的变量不覆盖）。
+// 仅用于本地开发/桌面端注入敏感信息（如 API Key）；文件本身在
+// .gitignore 中，严禁提交。格式：KEY=VALUE，# 开头为注释。
+func LoadDotEnv(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for i, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, val, ok := strings.Cut(line, "=")
+		if !ok {
+			return fmt.Errorf(".env 第 %d 行格式错误（应为 KEY=VALUE）", i+1)
+		}
+		key = strings.TrimSpace(key)
+		val = strings.Trim(strings.TrimSpace(val), `"'`)
+		if key == "" {
+			continue
+		}
+		if _, exists := os.LookupEnv(key); !exists {
+			_ = os.Setenv(key, val)
+		}
+	}
+	return nil
+}
+
 // applyEnv 应用 OPENCOURT_ 前缀的环境变量覆盖（开发文档 8.4）。
 func (s *Settings) applyEnv() {
 	get := func(key string) (string, bool) { return os.LookupEnv("OPENCOURT_" + key) }
