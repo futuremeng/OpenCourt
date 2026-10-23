@@ -58,13 +58,15 @@ make build     # 产出安装包：build/bin/OpenCourt.app（macOS）/.msi/.AppI
 
 ## VS Code 一键调试（按 F5，选择配置）
 
-| 配置 | 作用 | 说明 |
+| 配置 | 一键行为 | 断点位置 |
 |---|---|---|
-| **1. 调试 Go 后端 (Delve 直接启动)** | 断点打在 `core/ neutral/ profiles/ adversary/` | 主推。Delve 编译并启动整个应用；前端使用已构建的 `frontend/dist`（改前端先 `npm run build`） |
-| **2. 调试前端 (wails dev + Chrome attach)** | 断点打在 `frontend/src/**/*.vue / *.ts` | 自动串联：`wails dev`（热重载，DevServer :34115）→ Chrome 以 9222 远程调试打开 DevServer → 附加调试器 |
-| **3. 调试当前 Go 测试** | 断点调试当前包测试 | 打开任意 `*_test.go` 按 F5 |
+| **1. 调试桌面应用 (Delve 直接启动)** | Delve 编译并启动**桌面应用原生窗口** | `core/ neutral/ profiles/ adversary/` 任意 Go 代码 |
+| **2. 调试桌面应用 (wails dev 热重载 + 附加进程)** | 自动起 `wails dev`（前端热重载），再 Delve 附加到桌面进程 `OpenCourt` | Go 代码；改 Go 触发重启后需重新 F5 附加 |
+| **3. 调试前端 (Chrome attach :34115)** | 等待 DevServer 就绪 → 以 9222 端口启动 Chrome 打开 DevServer → 附加 | `frontend/src/**/*.vue / *.ts` |
+| **4. 桌面端全栈调试 (Go + 前端)** | 组合 2+3：桌面应用 Go 断点与前端断点同时生效 | Go + 前端 |
+| **5. 调试当前 Go 测试** | 调试当前包测试 | 当前 `*_test.go` 所在包 |
 
-前置：安装推荐扩展（打开项目会提示，含 `golang.go`）；`make setup` 安装 Wails CLI；`go install github.com/go-delve/delve/cmd/dlv@latest`（Go 扩展也可自动安装）。Chrome 调试需本机装有 Google Chrome。
+前置：安装推荐扩展（打开项目会提示，含 `golang.go`）；`make setup` 安装 Wails CLI；`dlv`（`go install github.com/go-delve/delve/cmd/dlv@latest`，Go 扩展也可自动安装）。Chrome 调试需本机装有 Google Chrome。
 
 ## 项目边界（不做的事）
 

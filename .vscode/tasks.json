@@ -35,15 +35,9 @@
       }
     },
     {
-      "label": "start-wails-then-chrome",
-      "dependsOrder": "sequence",
-      "dependsOn": ["start-wails-server", "start-chrome-debug"],
-      "problemMatcher": []
-    },
-    {
-      "label": "start-chrome-debug",
+      "label": "start-chrome-waiting",
       "type": "shell",
-      "command": "\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --remote-debugging-port=9222 --user-data-dir=${workspaceFolder}/.vscode/chrome-profile http://localhost:34115",
+      "command": "until lsof -nP -iTCP:34115 -sTCP:LISTEN >/dev/null 2>&1; do sleep 1; done; \"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --remote-debugging-port=9222 --user-data-dir=${workspaceFolder}/.vscode/chrome-profile http://localhost:34115",
       "isBackground": true,
       "presentation": {
         "reveal": "silent",

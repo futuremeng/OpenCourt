@@ -2,11 +2,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      // 主推：F5 一键。Delve 直接编译并启动整个桌面应用，
-      // 断点可打在 core/ neutral/ profiles/ adversary/ 任意 Go 代码上。
-      // 注意：使用已构建的 frontend/dist（前端改动后先在 frontend/ 执行 npm run build，
-      // 或改用「调试前端」配置走热重载）。
-      "name": "1. 调试 Go 后端 (Delve 直接启动)",
+      // 桌面端调试（推荐起步）：Delve 直接编译并启动桌面应用（原生窗口），
+      // Go 断点可打在 core/ neutral/ profiles/ adversary/ 任意代码上。
+      // 前端使用已构建的 frontend/dist（改前端先 cd frontend && npm run build）。
+      "name": "1. 调试桌面应用 (Delve 直接启动)",
       "type": "go",
       "request": "launch",
       "mode": "debug",
@@ -18,19 +17,41 @@
       "showLog": true
     },
     {
-      // 一键：先启动 wails dev（热重载 + DevServer :34115），
-      // 再以远程调试端口 9222 启动 Chrome 打开 DevServer，然后附加前端调试器。
-      // 断点打在 frontend/src/**/*.vue / *.ts 上；Go 方法调用经 DevServer 桥接。
-      "name": "2. 调试前端 (wails dev + Chrome attach)",
+      // 桌面端调试（热重载）：一键启动 wails dev（前端热重载，DevServer :34115），
+      // 然后 Delve 附加到正在运行的桌面应用进程（OpenCourt）。
+      // 注意：修改 Go 代码触发重启后调试器会脱离，需再次 F5 重新附加。
+      "name": "2. 调试桌面应用 (wails dev 热重载 + 附加进程)",
+      "type": "go",
+      "request": "attach",
+      "mode": "local",
+      "processName": "OpenCourt",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "start-wails-server",
+      "showLog": true
+    },
+    {
+      // 前端调试：以 9222 远程调试端口启动 Chrome 并打开 DevServer（自动等待
+      // DevServer 就绪），附加前端调试器。断点打在 frontend/src/**/*.vue / *.ts。
+      // 前置：wails dev 已在运行（配置 2 会自动启动，或手动跑任务 start-wails-server）。
+      "name": "3. 调试前端 (Chrome attach :34115)",
       "type": "chrome",
       "request": "attach",
       "port": 9222,
       "webRoot": "${workspaceFolder}/frontend",
-      "preLaunchTask": "start-wails-then-chrome"
+      "preLaunchTask": "start-chrome-waiting"
     },
     {
-      // 调试光标所在文件所属包的 Go 测试（合规测试/状态机断点验证很实用）。
-      "name": "3. 调试当前 Go 测试",
+      // 桌面端全栈一键调试：桌面应用（热重载 + Go 断点）与前端（Chrome 断点）同时附加。
+      "name": "4. 桌面端全栈调试 (Go + 前端)",
+      "dependencies": ["2. 调试桌面应用 (wails dev 热重载 + 附加进程)", "3. 调试前端 (Chrome attach :34115)"],
+      "presentation": {
+        "hidden": false,
+        "order": 4
+      }
+    },
+    {
+      // 调试光标所在文件所属包的 Go 测试（状态机/门禁/合规测试断点验证很实用）。
+      "name": "5. 调试当前 Go 测试",
       "type": "go",
       "request": "launch",
       "mode": "test",
