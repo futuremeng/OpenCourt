@@ -56,6 +56,16 @@ make build     # 产出安装包：build/bin/OpenCourt.app（macOS）/.msi/.AppI
 
 首次运行：`cp config/settings.example.yaml config/settings.yaml`（可跳过，默认配置即安全值：离线、遥测关闭、脱敏 high）。
 
+## VS Code 一键调试（按 F5，选择配置）
+
+| 配置 | 作用 | 说明 |
+|---|---|---|
+| **1. 调试 Go 后端 (Delve 直接启动)** | 断点打在 `core/ neutral/ profiles/ adversary/` | 主推。Delve 编译并启动整个应用；前端使用已构建的 `frontend/dist`（改前端先 `npm run build`） |
+| **2. 调试前端 (wails dev + Chrome attach)** | 断点打在 `frontend/src/**/*.vue / *.ts` | 自动串联：`wails dev`（热重载，DevServer :34115）→ Chrome 以 9222 远程调试打开 DevServer → 附加调试器 |
+| **3. 调试当前 Go 测试** | 断点调试当前包测试 | 打开任意 `*_test.go` 按 F5 |
+
+前置：安装推荐扩展（打开项目会提示，含 `golang.go`）；`make setup` 安装 Wails CLI；`go install github.com/go-delve/delve/cmd/dlv@latest`（Go 扩展也可自动安装）。Chrome 调试需本机装有 Google Chrome。
+
 ## 项目边界（不做的事）
 
 不预测判决结果 · 不引导用户决策 · 不内置裁判文书/法条数据 · 不替代律师和法官判断 · 不恢复隐名信息

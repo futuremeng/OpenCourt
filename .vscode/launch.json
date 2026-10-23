@@ -1,0 +1,44 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // 主推：F5 一键。Delve 直接编译并启动整个桌面应用，
+      // 断点可打在 core/ neutral/ profiles/ adversary/ 任意 Go 代码上。
+      // 注意：使用已构建的 frontend/dist（前端改动后先在 frontend/ 执行 npm run build，
+      // 或改用「调试前端」配置走热重载）。
+      "name": "1. 调试 Go 后端 (Delve 直接启动)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "GOPROXY": "https://goproxy.cn,direct"
+      },
+      "showLog": true
+    },
+    {
+      // 一键：先启动 wails dev（热重载 + DevServer :34115），
+      // 再以远程调试端口 9222 启动 Chrome 打开 DevServer，然后附加前端调试器。
+      // 断点打在 frontend/src/**/*.vue / *.ts 上；Go 方法调用经 DevServer 桥接。
+      "name": "2. 调试前端 (wails dev + Chrome attach)",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9222,
+      "webRoot": "${workspaceFolder}/frontend",
+      "preLaunchTask": "start-wails-then-chrome"
+    },
+    {
+      // 调试光标所在文件所属包的 Go 测试（合规测试/状态机断点验证很实用）。
+      "name": "3. 调试当前 Go 测试",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${fileDirname}",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "GOPROXY": "https://goproxy.cn,direct"
+      }
+    }
+  ]
+}

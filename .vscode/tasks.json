@@ -1,0 +1,71 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "start-wails-server",
+      "type": "shell",
+      "command": "wails dev",
+      "options": {
+        "env": {
+          "PATH": "${env:PATH}:${env:HOME}/go/bin",
+          "GOPROXY": "https://goproxy.cn,direct"
+        }
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": {
+        "owner": "wails",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.*\\.go):(\\d+):(\\d+):\\s+(\\w+):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "\\s*•?\\s*(Building|Installing|Compiling).*",
+          "endsPattern": "(Running application|DevServer listening on).*"
+        }
+      }
+    },
+    {
+      "label": "start-wails-then-chrome",
+      "dependsOrder": "sequence",
+      "dependsOn": ["start-wails-server", "start-chrome-debug"],
+      "problemMatcher": []
+    },
+    {
+      "label": "start-chrome-debug",
+      "type": "shell",
+      "command": "\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --remote-debugging-port=9222 --user-data-dir=${workspaceFolder}/.vscode/chrome-profile http://localhost:34115",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "go-test-current-file",
+      "type": "shell",
+      "command": "go test -v ${fileDirname}",
+      "options": {
+        "env": {
+          "GOPROXY": "https://goproxy.cn,direct"
+        }
+      },
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

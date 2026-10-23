@@ -18,5 +18,9 @@ data/
 # 系统与编辑器
 .DS_Store
 .idea/
-.vscode/
 *.log
+
+# .vscode 中的调试/任务配置属于项目资产，保持入库；仅忽略个人本地覆盖
+.vscode/settings.local.json
+
+.vscode/chrome-profile/

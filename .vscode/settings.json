@@ -1,0 +1,25 @@
+{
+  // Go：保存时 gofmt 格式化（与 make lint 的 gofmt 检查一致）
+  "editor.formatOnSave": true,
+  "[go]": {
+    "editor.defaultFormatter": "golang.go",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "go.toolsEnvVars": {
+    "GOPROXY": "https://goproxy.cn,direct"
+  },
+  "go.testFlags": ["-v"],
+  "files.watcherExclude": {
+    "**/frontend/node_modules/**": true,
+    "**/frontend/dist/**": true,
+    "**/build/bin/**": true,
+    "**/.vscode/chrome-profile/**": true
+  },
+  "search.exclude": {
+    "**/frontend/node_modules": true,
+    "**/build/bin": true,
+    "**/go.sum": true
+  }
+}

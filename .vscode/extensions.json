@@ -1,0 +1,8 @@
+{
+  // 首次打开项目时 VS Code 会提示安装推荐扩展
+  "recommendations": [
+    "golang.go",        // Go 扩展（自动安装 gopls/dlv，提供 1/4/5 号调试配置能力）
+    "vue.volar"         // Vue 3 语言支持（前端断点/类型检查）
+  ],
+  "unwantedRecommendations": []
+}
