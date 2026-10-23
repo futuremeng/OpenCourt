@@ -18,14 +18,18 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/futuremeng/OpenCourt/config"
 	"github.com/futuremeng/OpenCourt/core/audit"
 	"github.com/futuremeng/OpenCourt/core/domain"
 	"github.com/futuremeng/OpenCourt/core/gate"
+	"github.com/futuremeng/OpenCourt/core/ingest"
 	"github.com/futuremeng/OpenCourt/core/redact"
 	"github.com/futuremeng/OpenCourt/core/statemachine"
 	"github.com/futuremeng/OpenCourt/core/storage"
+	"github.com/futuremeng/OpenCourt/neutral"
+	"github.com/futuremeng/OpenCourt/plugins"
 	"github.com/futuremeng/OpenCourt/profiles"
 )
 
@@ -43,6 +47,8 @@ type App struct {
 	profile  profiles.Profile
 	store    *storage.Store
 	auditLog *audit.Logger
+	model    plugins.ModelAdapter
+	ingest   *ingest.Registry
 }
 
 // appDataDir 返回本机应用数据目录（默认 ~/Library/Application Support/OpenCourt 等），
@@ -101,6 +107,19 @@ func (a *App) startup(ctx context.Context) {
 	a.auditLog = logger
 
 	_ = a.auditLog.Log(settings.Profile.Active, "SESSION_START", "app", "版本 "+version)
+
+	// 模型适配器：统一 OpenAI 兼容接口；默认禁用（默认离线安全）。
+	// API Key 只从配置指定的环境变量读取，严禁落盘。
+	apiKey := ""
+	if settings.Model.APIKeyEnv != "" {
+		apiKey = os.Getenv(settings.Model.APIKeyEnv)
+	}
+	a.model = plugins.NewOpenAIAdapter(
+		settings.Model.BaseURL, apiKey,
+		settings.Model.ReasoningModel, settings.Model.EmbeddingModel,
+		settings.Model.Enabled,
+	)
+	a.ingest = ingest.NewRegistry()
 }
 
 // shutdown 关闭资源。
@@ -217,6 +236,115 @@ func (a *App) RedactText(text string, names []string) redact.Result {
 		_ = a.auditLog.Log(a.profile.Role, "REDACT", act.RuleID, act.Strategy)
 	}
 	return res
+}
+
+// --- 阶段二：文档接入与阅卷（开发文档 4.1、4.8-4.12、11.2） ---
+
+// PickDocumentFile 弹出系统文件选择框（PDF/txt/md；图片与扫描件需 OCR）。
+func (a *App) PickDocumentFile() (string, error) {
+	return wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "选择卷宗文档",
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "卷宗文档（PDF/txt/md）", Pattern: "*.pdf;*.txt;*.md"},
+		},
+	})
+}
+
+// IngestDocument 解析并入库文档（保留页码坐标，供核验器回原文定位）。
+// 扫描型文档会被明确拒绝（OCR 引擎未配置）。
+func (a *App) IngestDocument(path string) (storage.DocumentInfo, error) {
+	if path == "" {
+		return storage.DocumentInfo{}, fmt.Errorf("未选择文件")
+	}
+	doc, err := a.ingest.Parse(path)
+	if err != nil {
+		_ = a.auditLog.Log(a.profile.Role, "INGEST_REJECTED", path, err.Error())
+		return storage.DocumentInfo{}, err
+	}
+	docID := newID("DOC")
+	if err := a.store.SaveDocument(docID, doc.File, doc.Pages); err != nil {
+		return storage.DocumentInfo{}, err
+	}
+	_ = a.auditLog.Log(a.profile.Role, "INGEST", docID, fmt.Sprintf("%s 共 %d 页", filepath.Base(path), len(doc.Pages)))
+	return a.store.GetDocumentInfo(docID)
+}
+
+// ListDocuments 列出已接入文档。
+func (a *App) ListDocuments() ([]storage.DocumentInfo, error) {
+	return a.store.ListDocuments()
+}
+
+// RunReader 对指定文档执行阅卷：模型产候选事实 → 核验器回原文定位仲裁。
+// 定位失败的候选被拒绝入库并记审计；时间/金额要素由正则确定性抽取。
+func (a *App) RunReader(docID string) (neutral.ReaderReport, error) {
+	doc, err := a.store.GetDocument(docID)
+	if err != nil {
+		return neutral.ReaderReport{}, err
+	}
+	report, err := neutral.RunReader(a.ctx, docID, doc, a.model)
+	if err != nil {
+		_ = a.auditLog.Log(a.profile.Role, "READER_FAILED", docID, err.Error())
+		return neutral.ReaderReport{}, err
+	}
+	for _, f := range report.Accepted {
+		if err := a.store.CreateFact(f); err != nil {
+			return neutral.ReaderReport{}, err
+		}
+	}
+	if err := a.store.SaveElements(report.Elements); err != nil {
+		return neutral.ReaderReport{}, err
+	}
+	_ = a.auditLog.Log(a.profile.Role, "READER", docID,
+		fmt.Sprintf("模型 %s：候选入库 %d 条，回原文失败拒绝 %d 条，要素 %d 个",
+			report.ModelName, len(report.Accepted), len(report.Rejected), len(report.Elements)))
+	return report, nil
+}
+
+// BuildTimeline 构建案件时间线（按时间要素锚定，无锚点排末尾，不虚构日期）。
+func (a *App) BuildTimeline() ([]neutral.TimelineItem, error) {
+	facts, err := a.store.ListFacts()
+	if err != nil {
+		return nil, err
+	}
+	elements, err := a.store.ListElements()
+	if err != nil {
+		return nil, err
+	}
+	return neutral.BuildTimeline(facts, elements), nil
+}
+
+// RunAggregate 汇聚全部事实：检测冲突并列输出入库（不自动消解）。
+func (a *App) RunAggregate() ([]domain.Conflict, error) {
+	facts, err := a.store.ListFacts()
+	if err != nil {
+		return nil, err
+	}
+	_, conflicts := neutral.Aggregate(facts)
+	for _, c := range conflicts {
+		if err := a.store.CreateConflict(c); err != nil {
+			return nil, err
+		}
+	}
+	_ = a.auditLog.Log(a.profile.Role, "AGGREGATE", "facts", fmt.Sprintf("发现冲突 %d 组（并列展示，不自动消解）", len(conflicts)))
+	return conflicts, nil
+}
+
+// RunElementMatch 要件匹配：只有「已溯源确认」的事实才能覆盖要件。
+func (a *App) RunElementMatch(requirements []string) (neutral.MatchResult, error) {
+	facts, err := a.store.ListFacts()
+	if err != nil {
+		return neutral.MatchResult{}, err
+	}
+	return neutral.MatchElements(facts, requirements), nil
+}
+
+// RunBlindspots 盲区生成：输出无法判断的问题与补证方向，绝不幻觉填补。
+func (a *App) RunBlindspots(requirements []string) ([]neutral.Blindspot, error) {
+	match, err := a.RunElementMatch(requirements)
+	if err != nil {
+		return nil, err
+	}
+	return neutral.GenerateBlindspots(match), nil
 }
 
 func main() {

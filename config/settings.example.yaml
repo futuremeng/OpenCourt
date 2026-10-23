@@ -10,9 +10,15 @@ profile:
   active: court          # court / plaintiff / defendant / party
 
 model:
-  provider: local        # local / openai / azure
-  local_path: models     # 本地模型路径（如 Ollama 模型名或 vLLM 地址）
-  enabled: false         # 默认离线：显式启用后才会发起模型调用
+  # 统一 OpenAI 兼容接口，不假定服务商：base_url 可指向 OpenAI、
+  # 云厂商兼容端点，或本地 OpenAI 兼容服务
+  # （LM Studio / llama.cpp server / vLLM / Ollama 的 /v1 等）
+  provider: openai
+  base_url: https://api.openai.com/v1
+  api_key_env: OPENCOURT_API_KEY # Key 严禁写入本文件，仅配置环境变量名
+  reasoning_model: gpt-4o-mini
+  embedding_model: text-embedding-3-small
+  enabled: false                 # 默认离线：显式启用后才会发起模型调用
 
 retrieve:
   vector_dim: 768

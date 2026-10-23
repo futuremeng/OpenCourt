@@ -43,6 +43,68 @@ async function checkGate() {
   const v = await App.CheckOutput(gateText.value);
   gateResult.value = v.length === 0 ? ["通过：未检测到引导性表述"] : v.map((x) => `[拦截] ${x.message}`);
 }
+
+// --- 阶段二：文档接入与阅卷 ---
+const docs = ref<any[]>([]);
+const readerReport = ref<any | null>(null);
+const timeline = ref<any[]>([]);
+const blindspots = ref<any[]>([]);
+const requirements = ref("合同成立, 违约行为");
+const busy = ref("");
+const ingestMsg = ref("");
+
+async function refreshDocs() {
+  docs.value = await App.ListDocuments();
+}
+
+async function pickAndIngest() {
+  error.value = ""; ingestMsg.value = "";
+  try {
+    const path = await App.PickDocumentFile();
+    if (!path) return;
+    const doc = await App.IngestDocument(path);
+    ingestMsg.value = `已接入 ${doc.file}（${doc.page_count} 页）。扫描件/无文本层 PDF 会被拒绝并要求 OCR。`;
+    await refreshDocs();
+  } catch (e) {
+    error.value = String(e);
+  }
+}
+
+async function runReader(docID: string) {
+  error.value = ""; readerReport.value = null; busy.value = docID;
+  try {
+    readerReport.value = await App.RunReader(docID);
+    await refresh();
+    await refreshTimeline();
+  } catch (e) {
+    error.value = String(e);
+  } finally {
+    busy.value = "";
+  }
+}
+
+async function refreshTimeline() {
+  timeline.value = await App.BuildTimeline();
+}
+
+async function runBlindspots() {
+  error.value = "";
+  try {
+    const reqs = requirements.value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+    blindspots.value = await App.RunBlindspots(reqs);
+  } catch (e) {
+    error.value = String(e);
+  }
+}
+
+onMounted(async () => {
+  try {
+    await refreshDocs();
+    await refreshTimeline();
+  } catch (e) {
+    error.value = String(e);
+  }
+});
 </script>
 
 <template>
@@ -89,6 +151,53 @@ async function checkGate() {
     </section>
 
     <section class="panel wide">
+      <h2>文档接入与阅卷（阶段二）</h2>
+      <p class="hint">
+        阅卷时模型只生成候选事实；每条候选必须回原文定位，定位失败即被拒绝入库（审计留痕）。时间/金额要素由正则确定性抽取。
+      </p>
+      <div class="row">
+        <button @click="pickAndIngest">接入文档（PDF/txt/md）</button>
+        <span v-if="ingestMsg" class="ok-msg">{{ ingestMsg }}</span>
+      </div>
+      <ul class="doc-list">
+        <li v-for="d in docs" :key="d.doc_id">
+          {{ d.file }}（{{ d.page_count }} 页）
+          <button :disabled="busy === d.doc_id" @click="runReader(d.doc_id)">
+            {{ busy === d.doc_id ? "阅卷中…" : "阅卷" }}
+          </button>
+        </li>
+      </ul>
+      <div v-if="readerReport" class="reader-report">
+        <p>模型 {{ readerReport.model_name }}：入库 {{ readerReport.accepted.length }} 条 ·
+          <b class="rejected">拒绝 {{ readerReport.rejected.length }} 条（回原文失败）</b> ·
+          要素 {{ readerReport.elements.length }} 个</p>
+        <ul>
+          <li v-for="r in readerReport.rejected" :key="r.description">
+            [拒绝] {{ r.description }} —— 声称片段「{{ r.snippet }}」未在原文定位
+          </li>
+        </ul>
+      </div>
+
+      <h2 style="margin-top:14px">时间线（按时间要素锚定，不虚构日期）</h2>
+      <ol class="timeline">
+        <li v-for="t in timeline" :key="t.Fact.fact_id">
+          <span class="tdate">{{ t.Date || "日期未定位" }}</span>
+          {{ t.Fact.description }}
+          <span class="tstate">{{ t.Fact.state }}</span>
+        </li>
+      </ol>
+
+      <h2 style="margin-top:14px">要件匹配与盲区</h2>
+      <div class="row">
+        <input v-model="requirements" placeholder="要件列表（逗号分隔）" style="flex:1" />
+        <button @click="runBlindspots">匹配并生成盲区</button>
+      </div>
+      <ul class="blindspots">
+        <li v-for="b in blindspots" :key="b.question">{{ b.question }} —— {{ b.supplement }}</li>
+      </ul>
+    </section>
+
+    <section class="panel wide">
       <h2>事实看板（五态）</h2>
       <FactBoard :facts="facts" @changed="refresh" />
     </section>
@@ -118,6 +227,17 @@ async function checkGate() {
 .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
 .error { color: #b91c1c; font-size: 13px; }
 .gate-result { font-size: 13px; padding-left: 18px; }
+.ok-msg { color: #065f46; font-size: 13px; }
+.doc-list { font-size: 13px; padding-left: 18px; }
+.doc-list li { margin: 4px 0; }
+.doc-list button { margin-left: 8px; }
+.reader-report { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+.reader-report .rejected { color: #b91c1c; }
+.timeline { font-size: 13px; padding-left: 20px; }
+.timeline li { margin: 4px 0; }
+.tdate { display: inline-block; min-width: 90px; color: #4338ca; font-weight: 600; }
+.tstate { color: #6b7280; font-size: 12px; margin-left: 6px; }
+.blindspots { font-size: 13px; padding-left: 18px; }
 .disclaimer {
   padding: 12px 24px; font-size: 12px; color: #6b7280;
   border-top: 1px solid #e5e7eb; background: #fff;

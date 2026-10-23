@@ -6,6 +6,10 @@ export function AppInfo() {
   return window['go']['main']['App']['AppInfo']();
 }
 
+export function BuildTimeline() {
+  return window['go']['main']['App']['BuildTimeline']();
+}
+
 export function CheckOutput(arg1) {
   return window['go']['main']['App']['CheckOutput'](arg1);
 }
@@ -14,16 +18,44 @@ export function CreateFact(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['CreateFact'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function IngestDocument(arg1) {
+  return window['go']['main']['App']['IngestDocument'](arg1);
+}
+
 export function ListConflicts() {
   return window['go']['main']['App']['ListConflicts']();
+}
+
+export function ListDocuments() {
+  return window['go']['main']['App']['ListDocuments']();
 }
 
 export function ListFacts() {
   return window['go']['main']['App']['ListFacts']();
 }
 
+export function PickDocumentFile() {
+  return window['go']['main']['App']['PickDocumentFile']();
+}
+
 export function RedactText(arg1, arg2) {
   return window['go']['main']['App']['RedactText'](arg1, arg2);
+}
+
+export function RunAggregate() {
+  return window['go']['main']['App']['RunAggregate']();
+}
+
+export function RunBlindspots(arg1) {
+  return window['go']['main']['App']['RunBlindspots'](arg1);
+}
+
+export function RunElementMatch(arg1) {
+  return window['go']['main']['App']['RunElementMatch'](arg1);
+}
+
+export function RunReader(arg1) {
+  return window['go']['main']['App']['RunReader'](arg1);
 }
 
 export function UpgradeFact(arg1, arg2, arg3, arg4, arg5) {

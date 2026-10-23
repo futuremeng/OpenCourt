@@ -3,6 +3,7 @@ module github.com/futuremeng/OpenCourt
 go 1.27.2
 
 require (
+	github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e
 	github.com/wailsapp/wails/v2 v2.17.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.61.0

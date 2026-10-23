@@ -25,8 +25,13 @@ type Registry struct {
 }
 
 // NewRegistry 返回注册了内置解析器的注册表。
+// OCRParser 默认未注入引擎：扫描件/图片会被显式拒绝（安全默认）。
 func NewRegistry() *Registry {
-	return &Registry{parsers: []Parser{&TextParser{}}}
+	return &Registry{parsers: []Parser{
+		&TextParser{},
+		&PDFParser{},
+		&OCRParser{},
+	}}
 }
 
 // Register 追加解析器（如后续的 PDFParser、OCRParser）。

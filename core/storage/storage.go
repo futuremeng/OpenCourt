@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/futuremeng/OpenCourt/core/domain"
+	"github.com/futuremeng/OpenCourt/core/extract"
+	"github.com/futuremeng/OpenCourt/core/verify"
 
 	_ "modernc.org/sqlite"
 )
@@ -46,6 +48,20 @@ CREATE TABLE IF NOT EXISTS assumptions (
     dependent_json        TEXT,
     affected_json         TEXT,
     is_rejected           INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS documents (
+    doc_id      TEXT PRIMARY KEY,
+    file        TEXT NOT NULL,
+    page_count  INTEGER NOT NULL,
+    pages_json  TEXT NOT NULL,
+    created_at  TIMESTAMP NOT NULL
+);
+CREATE TABLE IF NOT EXISTS elements (
+    element_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    type        TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    source_file TEXT NOT NULL,
+    page_num    INTEGER NOT NULL
 );
 `
 
@@ -213,4 +229,118 @@ func scanFact(row scanner) (domain.Fact, error) {
 		f.Citation = &c
 	}
 	return f, nil
+}
+
+// DocumentInfo 文档接入概况（不含全文，供列表展示）。
+type DocumentInfo struct {
+	DocID     string    `json:"doc_id"`
+	File      string    `json:"file"`
+	PageCount int       `json:"page_count"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// SaveDocument 保存已解析文档（页码 → 文本），供核验器与阅卷 Agent 使用。
+func (s *Store) SaveDocument(docID, file string, pages map[int]string) error {
+	pj, err := json.Marshal(pages)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO documents (doc_id, file, page_count, pages_json, created_at)
+		 VALUES (?, ?, ?, ?, ?)`,
+		docID, file, len(pages), string(pj), time.Now().UTC(),
+	)
+	return err
+}
+
+// GetDocument 读取文档全文（返回 core/verify 的可检索文本层）。
+func (s *Store) GetDocument(docID string) (*verify.DocumentText, error) {
+	var file, pj string
+	row := s.db.QueryRow(`SELECT file, pages_json FROM documents WHERE doc_id = ?`, docID)
+	if err := row.Scan(&file, &pj); err != nil {
+		return nil, fmt.Errorf("文档不存在: %s", docID)
+	}
+	pages := map[int]string{}
+	if err := json.Unmarshal([]byte(pj), &pages); err != nil {
+		return nil, err
+	}
+	return &verify.DocumentText{File: file, Pages: pages}, nil
+}
+
+// GetDocumentInfo 读取单个文档的概况。
+func (s *Store) GetDocumentInfo(docID string) (DocumentInfo, error) {
+	var d DocumentInfo
+	row := s.db.QueryRow(`SELECT doc_id, file, page_count, created_at FROM documents WHERE doc_id = ?`, docID)
+	err := row.Scan(&d.DocID, &d.File, &d.PageCount, &d.CreatedAt)
+	if err != nil {
+		return DocumentInfo{}, fmt.Errorf("文档不存在: %s", docID)
+	}
+	return d, nil
+}
+
+// ListDocuments 列出全部已接入文档。
+func (s *Store) ListDocuments() ([]DocumentInfo, error) {
+	rows, err := s.db.Query(
+		`SELECT doc_id, file, page_count, created_at FROM documents ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []DocumentInfo{}
+	for rows.Next() {
+		var d DocumentInfo
+		if err := rows.Scan(&d.DocID, &d.File, &d.PageCount, &d.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// SaveElements 批量保存已定位要素。未定位要素（Located=false）严禁入库。
+func (s *Store) SaveElements(elements []extract.Element) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	for _, e := range elements {
+		if !e.Located {
+			if err := tx.Rollback(); err != nil {
+				return err
+			}
+			return fmt.Errorf("未定位要素禁止入库: %s %q", e.Type, e.Value)
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO elements (type, value, source_file, page_num) VALUES (?, ?, ?, ?)`,
+			string(e.Type), e.Value, e.SourceFile, e.PageNum,
+		); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ListElements 列出全部已入库要素。
+func (s *Store) ListElements() ([]extract.Element, error) {
+	rows, err := s.db.Query(`SELECT type, value, source_file, page_num FROM elements ORDER BY element_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []extract.Element{}
+	for rows.Next() {
+		var (
+			typ, value, file string
+			page             int
+		)
+		if err := rows.Scan(&typ, &value, &file, &page); err != nil {
+			return nil, err
+		}
+		out = append(out, extract.Element{
+			Type: extract.ElementType(typ), Value: value,
+			SourceFile: file, PageNum: page, Located: true,
+		})
+	}
+	return out, rows.Err()
 }

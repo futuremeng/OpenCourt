@@ -2,6 +2,18 @@
 
 本项目遵循 Semantic Versioning，版本语义见开发文档 10.4。
 
+## Unreleased（阶段二开发中）
+
+### 新增
+- **文档接入（core/ingest）**：文本型 PDF 逐页文本层解析（纯 Go）；OCR 适配接口——扫描件/图片强制经 OCR，引擎未配置时明确拒绝，绝不静默入库
+- **阅卷 Agent（neutral/reader）**：模型只生成候选事实（描述+片段+页码），核验器逐条回原文定位、状态机判定初始态；定位失败的候选拒绝入库并记审计；时间/金额要素由正则确定性抽取（模型不参与）
+- **时间线构建（neutral/timeline）**：事实按同页时间要素锚定排序；无锚点排末尾并显式标注，不虚构日期
+- **App 服务链路**：PickDocumentFile / IngestDocument / RunReader / BuildTimeline / RunAggregate / RunElementMatch / RunBlindspots，前端新增「文档接入与阅卷」面板
+- **存储**：documents / elements 表；未定位要素（Located=false）禁止入库
+
+### 变更
+- **模型对接统一为 OpenAI 兼容接口**（`/chat/completions` + `/embeddings`），不再假定 Ollama：`base_url` 可指向 OpenAI、云厂商兼容端点或本地兼容服务（LM Studio / llama.cpp / vLLM / Ollama `/v1`）；API Key 仅经环境变量注入；每个请求强制附加「禁止用于模型训练」标识头；默认禁用（默认离线安全）
+
 ## v0.1.0-preview（2026-10-23）
 
 首个技术预览版（Tech Preview / Alpha），面向开发者展示「反幻觉、可溯源」安全内核。

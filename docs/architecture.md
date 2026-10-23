@@ -38,7 +38,7 @@ core/* 禁止依赖任何上层包
 - **neutral/**：汇聚器（时间线+冲突标记）、核验器、要件匹配器、盲区生成器、程序守护
 - **profiles/**：court / plaintiff / defendant / party 四份 profile.yaml + 加载器（默认拒绝：disabled_tools 命中即禁）
 - **adversary/**：对方模拟与漂移检测（接口，阶段三实现）、轨迹监控（已实现抖动判定）
-- **plugins/**：LawSourcePlugin / CaseSourcePlugin / ModelAdapter 接口；Ollama 本地适配骨架（默认禁用）
+- **plugins/**：LawSourcePlugin / CaseSourcePlugin / ModelAdapter 接口；OpenAI 兼容适配器（chat/completions + embeddings，默认禁用，Key 走环境变量，强制「禁止训练」头；不假定服务商）
 
 ## 桌面端安全模型
 

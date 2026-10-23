@@ -18,10 +18,15 @@ type Settings struct {
 	Profile struct {
 		Active string `yaml:"active"` // court / plaintiff / defendant / party
 	} `yaml:"profile"`
+	// Model 统一走 OpenAI 兼容接口（/chat/completions、/embeddings），
+	// 不假定具体服务商；默认禁用；API Key 只能经环境变量注入。
 	Model struct {
-		Provider  string `yaml:"provider"` // local / openai / azure
-		LocalPath string `yaml:"local_path"`
-		Enabled   bool   `yaml:"enabled"` // 默认 false：默认离线
+		Provider       string `yaml:"provider"` // openai（兼容接口）
+		BaseURL        string `yaml:"base_url"`
+		APIKeyEnv      string `yaml:"api_key_env"`
+		ReasoningModel string `yaml:"reasoning_model"`
+		EmbeddingModel string `yaml:"embedding_model"`
+		Enabled        bool   `yaml:"enabled"` // 默认 false：默认离线
 	} `yaml:"model"`
 	Retrieve struct {
 		VectorDim int `yaml:"vector_dim"`
@@ -38,8 +43,11 @@ type Settings struct {
 func Default() *Settings {
 	s := &Settings{Env: "dev", DataDir: "data"}
 	s.Profile.Active = "court"
-	s.Model.Provider = "local"
-	s.Model.LocalPath = "models"
+	s.Model.Provider = "openai"
+	s.Model.BaseURL = "https://api.openai.com/v1"
+	s.Model.APIKeyEnv = "OPENCOURT_API_KEY"
+	s.Model.ReasoningModel = "gpt-4o-mini"
+	s.Model.EmbeddingModel = "text-embedding-3-small"
 	s.Model.Enabled = false
 	s.Retrieve.VectorDim = 768
 	s.Retrieve.TopK = 5
@@ -78,8 +86,14 @@ func (s *Settings) applyEnv() {
 	if v, ok := get("MODEL_PROVIDER"); ok {
 		s.Model.Provider = v
 	}
-	if v, ok := get("MODEL_LOCAL_PATH"); ok {
-		s.Model.LocalPath = v
+	if v, ok := get("MODEL_BASE_URL"); ok {
+		s.Model.BaseURL = v
+	}
+	if v, ok := get("MODEL_REASONING"); ok {
+		s.Model.ReasoningModel = v
+	}
+	if v, ok := get("MODEL_EMBEDDING"); ok {
+		s.Model.EmbeddingModel = v
 	}
 	if v, ok := get("MODEL_ENABLED"); ok {
 		s.Model.Enabled = parseBool(v)

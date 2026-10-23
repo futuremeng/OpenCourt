@@ -6,14 +6,20 @@
 package compliance
 
 import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/futuremeng/OpenCourt/core/domain"
 	"github.com/futuremeng/OpenCourt/core/gate"
+	"github.com/futuremeng/OpenCourt/core/ingest"
 	"github.com/futuremeng/OpenCourt/core/redact"
 	"github.com/futuremeng/OpenCourt/core/statemachine"
 	"github.com/futuremeng/OpenCourt/core/storage"
+	"github.com/futuremeng/OpenCourt/neutral"
 )
 
 // 溯源测试：模型注入一个卷宗中不存在的事实并尝试引用，门禁必须拦截。
@@ -91,5 +97,82 @@ func TestConflictsRemainUnresolved(t *testing.T) {
 	}
 	if _, err := statemachine.ResolveConflict(list[0], false); err == nil {
 		t.Fatal("自动消解冲突必须被拒绝")
+	}
+}
+
+// fakeModel 端到端测试用模型：只产候选，无裁决权。
+type fakeModel struct{ out string }
+
+func (f fakeModel) Name() string  { return "fake" }
+func (f fakeModel) Enabled() bool { return true }
+func (f fakeModel) Embed(_ context.Context, _ string) ([]float64, error) {
+	return nil, errors.New("unsupported")
+}
+func (f fakeModel) Generate(_ context.Context, _ string) (string, error) { return f.out, nil }
+
+// 阶段二验收链路：文档接入 → 阅卷（含幻觉候选）→ 核验器仲裁 →
+// 时间线 → 要件匹配 → 盲区。幻觉候选必须被拒绝入库。
+func TestPhase2ReaderPipeline(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "judgment.txt")
+	text := "2023年5月10日，原告向被告支付定金50000元。\f被告未按期交货，双方对交货时间表述不一致。\f"
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	doc, err := ingest.NewRegistry().Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Pages) != 3 {
+		t.Fatalf("分页错误: %d", len(doc.Pages))
+	}
+
+	modelOut := `[
+	 {"description":"原告已付定金","snippet":"原告向被告支付定金50000元","page_num":1},
+	 {"description":"捏造：被告曾书面承诺赔偿","snippet":"被告书面承诺赔偿三倍定金","page_num":2},
+	 {"description":"对方主张已发货","snippet":"被告未按期交货","page_num":2,"from_opponent":true}
+	]`
+	report, err := neutral.RunReader(context.Background(), "DOC-1", doc, fakeModel{out: modelOut})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Accepted) != 2 || len(report.Rejected) != 1 {
+		t.Fatalf("仲裁结果错误: accepted=%d rejected=%d", len(report.Accepted), len(report.Rejected))
+	}
+	if report.Rejected[0].Description != "捏造：被告曾书面承诺赔偿" {
+		t.Errorf("被拒绝的必须是幻觉候选: %+v", report.Rejected)
+	}
+
+	// 事实入库后：时间线锚定 + 要件匹配 + 盲区。
+	s, err := storage.Open(filepath.Join(dir, "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, f := range report.Accepted {
+		if err := s.CreateFact(f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.SaveElements(report.Elements); err != nil {
+		t.Fatal(err)
+	}
+	facts, _ := s.ListFacts()
+	elements, _ := s.ListElements()
+	tl := neutral.BuildTimeline(facts, elements)
+	if len(tl) != 2 {
+		t.Fatalf("时间线长度错误: %d", len(tl))
+	}
+
+	// 阅卷产生的事实均为弱态（单源/对方主张），不能覆盖要件——
+	// 要件匹配必须报缺，盲区必须给出补证方向，绝不幻觉填补。
+	match := neutral.MatchElements(facts, []string{"合同成立", "违约行为"})
+	if len(match.Covered) != 0 || len(match.Missing) != 2 {
+		t.Errorf("弱态事实不得覆盖要件: %+v", match)
+	}
+	blind := neutral.GenerateBlindspots(match)
+	if len(blind) != 2 || !strings.Contains(blind[0].Supplement, "补证方向") {
+		t.Errorf("盲区输出错误: %+v", blind)
 	}
 }

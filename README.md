@@ -18,7 +18,7 @@
 | 分发形态 | **桌面应用**（主）：下载安装包即用，三平台（macOS / Windows / Linux） |
 | 框架 | [Wails v2](https://wails.io)：Go 内核 + Vue 3 / TypeScript 前端，单二进制、无 HTTP 服务、无端口暴露 |
 | 存储 | SQLite（`modernc.org/sqlite`，纯 Go 无 CGO），数据全本地、不出域 |
-| 模型 | 默认离线。本地 Ollama / vLLM 经 `plugins/model/` 显式启用后使用；框架不内置任何模型与法条数据 |
+| 模型 | 默认离线。统一对接 **OpenAI 兼容接口**（`/chat/completions` + `/embeddings`），不假定服务商——可指向任何云 API 或本地兼容服务（LM Studio / llama.cpp / vLLM / Ollama `/v1` 等）；经配置显式启用后才会发起请求；框架不内置任何模型与法条数据 |
 | 机构服务器模式 | 保留可选 Docker 部署，见 `deploy/` |
 
 ## 四层架构（依赖严格单向）
@@ -43,6 +43,10 @@ profiles/  adversary/        ← 立场层 / 对抗推演层（按角色加载�
 - **强制脱敏**（`core/redact`）：姓名一致替换（本地还原表）、证件号/账号掩码、地址泛化、案号保留
 - **审计日志**（`core/audit`）：JSONL 哈希链，篡改可检出
 - **四个 Profile**（`profiles/*/profile.yaml`）：court / plaintiff / defendant / party
+- **文档接入**（`core/ingest`）：文本 / 文本型 PDF（逐页文本层）；扫描件与图片强制经 OCR——引擎未配置时明确拒绝，绝不静默入库
+- **阅卷 Agent**（`neutral/reader`）：模型只产候选事实，核验器逐条回原文定位仲裁；定位失败即拒绝入库并记审计；时间/金额要素由正则确定性抽取
+- **时间线 / 要件匹配 / 盲区**（`neutral`）：按时间要素锚定排序（不虚构日期）；弱态事实不得覆盖要件；盲区只输出「无法判断 + 补证方向」
+- **OpenAI 兼容模型适配**（`plugins/model_openai.go`）：默认禁用、Key 仅经环境变量注入、请求强制附加「禁止用于模型训练」标识头
 
 ## 快速开始
 
@@ -76,8 +80,8 @@ make build     # 产出安装包：build/bin/OpenCourt.app（macOS）/.msi/.AppI
 
 ⚠️ **本版本是面向开发者的技术预览（Tech Preview / Alpha），不是面向法律从业者的产品**：
 
-- **已可用**：反幻觉安全内核（事实五态、状态机仲裁、门禁、脱敏、哈希链审计）、四套 Profile、合规测试、桌面应用外壳与演示界面
-- **尚不可用**：PDF/扫描件/OCR 文档接入、阅卷链路、模型接入（默认离线且未做真机评测）、案件管理、跨部署交换包
+- **已可用**：反幻觉安全内核（事实五态、状态机仲裁、门禁、脱敏、哈希链审计）、四套 Profile、合规测试、桌面应用外壳与演示界面；阶段二新增：PDF/文本接入、阅卷 Agent（模型产候选 + 核验器仲裁）、时间线、要件匹配与盲区、OpenAI 兼容模型接口（默认禁用）
+- **尚不可用**：扫描件 OCR（接口已就位，引擎待接）、Word/docx 解析、模型真机评测、案件管理、跨部署交换包
 - **未做验收**：开发文档 11.1 的「100 份真实判决书、幻觉率 < 1%、溯源准确率 > 98%」评测尚未执行
 - **请勿用于真实案件**。macOS 构建为自签名，首次打开需右键 → 打开（或 `xattr -dr com.apple.quarantine`）
 

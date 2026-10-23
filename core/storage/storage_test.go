@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/futuremeng/OpenCourt/core/domain"
+	"github.com/futuremeng/OpenCourt/core/extract"
 )
 
 func openTestStore(t *testing.T) *Store {
@@ -58,5 +59,54 @@ func TestConflictCRUD(t *testing.T) {
 	list, err := s.ListConflicts()
 	if err != nil || len(list) != 1 || list[0].IsResolved {
 		t.Fatalf("冲突读取错误: %v %v", list, err)
+	}
+}
+
+func TestDocumentCRUD(t *testing.T) {
+	s := openTestStore(t)
+	pages := map[int]string{1: "第一页原文", 2: "第二页原文 2023-05-10"}
+	if err := s.SaveDocument("DOC-1", "case.pdf", pages); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := s.GetDocument("DOC-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.File != "case.pdf" || doc.Pages[2] != "第二页原文 2023-05-10" {
+		t.Errorf("文档读回不一致: %+v", doc)
+	}
+	list, err := s.ListDocuments()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].PageCount != 2 {
+		t.Errorf("文档列表错误: %+v", list)
+	}
+	if _, err := s.GetDocument("DOC-X"); err == nil {
+		t.Error("不存在的文档必须报错")
+	}
+}
+
+func TestElementStoreRejectsUnlocated(t *testing.T) {
+	s := openTestStore(t)
+	// 未定位要素严禁入库（幻觉门禁前置）。
+	err := s.SaveElements([]extract.Element{
+		{Type: extract.ElementTime, Value: "2023-05-10", SourceFile: "a.txt", PageNum: 1, Located: false},
+	})
+	if err == nil {
+		t.Fatal("Located=false 的要素必须被拒绝入库")
+	}
+	list, _ := s.ListElements()
+	if len(list) != 0 {
+		t.Errorf("被拒绝的要素不得残留: %+v", list)
+	}
+	if err := s.SaveElements([]extract.Element{
+		{Type: extract.ElementAmount, Value: "50000元", SourceFile: "a.txt", PageNum: 1, Located: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ = s.ListElements()
+	if len(list) != 1 || !list[0].Located {
+		t.Errorf("要素读回错误: %+v", list)
 	}
 }

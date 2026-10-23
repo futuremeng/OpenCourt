@@ -92,6 +92,31 @@ export namespace domain {
 
 }
 
+export namespace extract {
+	
+	export class Element {
+	    type: string;
+	    value: string;
+	    source_file: string;
+	    page_num: number;
+	    located: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Element(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.value = source["value"];
+	        this.source_file = source["source_file"];
+	        this.page_num = source["page_num"];
+	        this.located = source["located"];
+	    }
+	}
+
+}
+
 export namespace gate {
 	
 	export class Violation {
@@ -109,6 +134,129 @@ export namespace gate {
 	        this.phrase = source["phrase"];
 	        this.message = source["message"];
 	    }
+	}
+
+}
+
+export namespace neutral {
+	
+	export class Blindspot {
+	    question: string;
+	    supplement: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Blindspot(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.question = source["question"];
+	        this.supplement = source["supplement"];
+	    }
+	}
+	export class CandidateFact {
+	    description: string;
+	    snippet: string;
+	    page_num: number;
+	    from_opponent: boolean;
+	    related_element?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CandidateFact(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.description = source["description"];
+	        this.snippet = source["snippet"];
+	        this.page_num = source["page_num"];
+	        this.from_opponent = source["from_opponent"];
+	        this.related_element = source["related_element"];
+	    }
+	}
+	export class MatchResult {
+	    Covered: string[];
+	    Missing: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new MatchResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Covered = source["Covered"];
+	        this.Missing = source["Missing"];
+	    }
+	}
+	export class ReaderReport {
+	    doc_id: string;
+	    model_name: string;
+	    accepted: domain.Fact[];
+	    rejected: CandidateFact[];
+	    elements: extract.Element[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ReaderReport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.doc_id = source["doc_id"];
+	        this.model_name = source["model_name"];
+	        this.accepted = this.convertValues(source["accepted"], domain.Fact);
+	        this.rejected = this.convertValues(source["rejected"], CandidateFact);
+	        this.elements = this.convertValues(source["elements"], extract.Element);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TimelineItem {
+	    Date: string;
+	    Fact: domain.Fact;
+	
+	    static createFrom(source: any = {}) {
+	        return new TimelineItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Date = source["Date"];
+	        this.Fact = this.convertValues(source["Fact"], domain.Fact);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }
@@ -166,6 +314,48 @@ export namespace redact {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.text = source["text"];
 	        this.actions = this.convertValues(source["actions"], Action);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace storage {
+	
+	export class DocumentInfo {
+	    doc_id: string;
+	    file: string;
+	    page_count: number;
+	    // Go type: time
+	    created_at: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new DocumentInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.doc_id = source["doc_id"];
+	        this.file = source["file"];
+	        this.page_count = source["page_count"];
+	        this.created_at = this.convertValues(source["created_at"], null);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
