@@ -61,7 +61,7 @@ make build     # 产出安装包：build/bin/OpenCourt.app（macOS）/.msi/.AppI
 | 配置 | 一键行为 | 断点位置 |
 |---|---|---|
 | **1. 调试桌面应用 (Delve 直接启动)** | Delve 编译并启动**桌面应用原生窗口** | `core/ neutral/ profiles/ adversary/` 任意 Go 代码 |
-| **2. 调试桌面应用 (wails dev 热重载 + 附加进程)** | 自动起 `wails dev`（前端热重载），再 Delve 附加到桌面进程 `OpenCourt` | Go 代码；改 Go 触发重启后需重新 F5 附加 |
+| **2. 调试桌面应用 (wails dev 热重载 + 自动附加)** | 自动起 `wails dev`（前端热重载），任务等待桌面进程出现后自动附加 Delve（:2345），**无需手动选进程** | Go 代码；改 Go 触发重启后需再次 F5 重新附加 |
 | **3. 调试前端 (Chrome attach :34115)** | 等待 DevServer 就绪 → 以 9222 端口启动 Chrome 打开 DevServer → 附加 | `frontend/src/**/*.vue / *.ts` |
 | **4. 桌面端全栈调试 (Go + 前端)** | 组合 2+3：桌面应用 Go 断点与前端断点同时生效 | Go + 前端 |
 | **5. 调试当前 Go 测试** | 调试当前包测试 | 当前 `*_test.go` 所在包 |

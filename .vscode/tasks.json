@@ -35,6 +35,38 @@
       }
     },
     {
+      "label": "attach-delve-to-desktop",
+      "type": "shell",
+      "command": "until PID=$(pgrep -x OpenCourt | head -1) && [ -n \"$PID\" ]; do sleep 1; done; dlv attach \"$PID\" --headless --listen=127.0.0.1:2345 --api-version=2",
+      "options": {
+        "env": {
+          "PATH": "${env:PATH}:${env:HOME}/go/bin"
+        }
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated"
+      },
+      "problemMatcher": {
+        "owner": "delve",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": "API server listening at.*"
+        }
+      }
+    },
+    {
+      "label": "start-wails-then-dlv",
+      "dependsOrder": "sequence",
+      "dependsOn": ["start-wails-server", "attach-delve-to-desktop"],
+      "problemMatcher": []
+    },
+    {
       "label": "start-chrome-waiting",
       "type": "shell",
       "command": "until lsof -nP -iTCP:34115 -sTCP:LISTEN >/dev/null 2>&1; do sleep 1; done; \"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --remote-debugging-port=9222 --user-data-dir=${workspaceFolder}/.vscode/chrome-profile http://localhost:34115",

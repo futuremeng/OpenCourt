@@ -18,15 +18,18 @@
     },
     {
       // 桌面端调试（热重载）：一键启动 wails dev（前端热重载，DevServer :34115），
-      // 然后 Delve 附加到正在运行的桌面应用进程（OpenCourt）。
-      // 注意：修改 Go 代码触发重启后调试器会脱离，需再次 F5 重新附加。
-      "name": "2. 调试桌面应用 (wails dev 热重载 + 附加进程)",
+      // 任务会等待桌面应用进程出现后以 headless 模式附加 Delve（:2345），
+      // VS Code 直接连该端口——无需手动选进程。
+      // 注意：修改 Go 代码触发应用重启后需再次 F5 重新附加。
+      "name": "2. 调试桌面应用 (wails dev 热重载 + 自动附加)",
       "type": "go",
       "request": "attach",
-      "mode": "local",
-      "processName": "OpenCourt",
+      "mode": "remote",
+      "backend": "dlv-dap",
+      "debugAdapter": "dlv-dap",
+      "port": 2345,
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "start-wails-server",
+      "preLaunchTask": "start-wails-then-dlv",
       "showLog": true
     },
     {
@@ -43,7 +46,7 @@
     {
       // 桌面端全栈一键调试：桌面应用（热重载 + Go 断点）与前端（Chrome 断点）同时附加。
       "name": "4. 桌面端全栈调试 (Go + 前端)",
-      "dependencies": ["2. 调试桌面应用 (wails dev 热重载 + 附加进程)", "3. 调试前端 (Chrome attach :34115)"],
+      "dependencies": ["2. 调试桌面应用 (wails dev 热重载 + 自动附加)", "3. 调试前端 (Chrome attach :34115)"],
       "presentation": {
         "hidden": false,
         "order": 4
