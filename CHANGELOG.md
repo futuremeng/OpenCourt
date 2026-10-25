@@ -5,6 +5,7 @@
 ## Unreleased（阶段二开发中）
 
 ### 变更
+- **语料许可可见性**：「法条数据」面板显示 manifest 内的机器可读许可声明（无声明时如实提示自行确认来源合法性）；`LawDataStatus` 新增 `license` 字段
 - **代码许可证统一为 Apache-2.0**（OpenCourt 由 MIT 变更，与 OpenLaw 一致；新增明示专利授权条款）；语料数据另行许可：官方文本公有领域 + 本项目汇编产物 CC BY 4.0 + 欧盟部分保留 © European Union 署名（OpenLaw `DATA-LICENSE.md`，随每个语料包分发副本；`index.json` 附 license 字段）；新增第三方依赖许可清单（dmg 内附副本）；DISCLAIMER 第 5 条对齐「官方语料包单独发布」的新分发模式
 
 ### 新增

@@ -412,6 +412,7 @@ type DataStatus struct {
 	EvidenceOK     bool   `json:"evidence_ok"`
 	ManifestSigned bool   `json:"manifest_signed"`
 	CorpusDate     string `json:"corpus_date"` // manifest generated_at（YYYYMMDD 化）
+	License        string `json:"license"`     // manifest 机器可读许可声明（DATA-LICENSE.md 摘要）
 }
 
 // Status 汇总语料概况。db 打不开（损坏/占用的极端情形）不报错，
@@ -436,7 +437,24 @@ func Status(dataDir string) DataStatus {
 	_, err := os.Stat(filepath.Join(dataDir, "manifest", "manifest.sig"))
 	st.ManifestSigned = err == nil
 	st.CorpusDate = corpusDate(dataDir)
+	st.License = manifestLicense(dataDir)
 	return st
+}
+
+// manifestLicense 读取语料 manifest 的机器可读许可声明（缺失返回空，
+// 前端如实显示「未声明」）。
+func manifestLicense(dataDir string) string {
+	body, err := os.ReadFile(filepath.Join(dataDir, "manifest", "manifest.json"))
+	if err != nil {
+		return ""
+	}
+	var m struct {
+		License string `json:"license"`
+	}
+	if json.Unmarshal(body, &m) != nil {
+		return ""
+	}
+	return m.License
 }
 
 // corpusDate 本地语料版本日期：manifest.json 的 generated_at 取数字部分

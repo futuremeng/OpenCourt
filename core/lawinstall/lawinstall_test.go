@@ -300,4 +300,18 @@ func TestStatus(t *testing.T) {
 	if !st.Installed || st.Docs != 1 || !st.EvidenceOK || st.ManifestSigned {
 		t.Errorf("状态汇总不符: %+v", st)
 	}
+	if st.License != "" {
+		t.Errorf("无 manifest 时许可应为空: %q", st.License)
+	}
+	// manifest 带机器可读许可声明 → 状态透出
+	if err := os.MkdirAll(filepath.Join(dir, "manifest"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "manifest", "manifest.json"),
+		[]byte(`{"generated_at":"2026-10-25T00:00:00Z","license":"公有领域 + CC BY 4.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := Status(dir).License; got != "公有领域 + CC BY 4.0" {
+		t.Errorf("许可声明未透出: %q", got)
+	}
 }

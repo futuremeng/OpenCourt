@@ -297,6 +297,7 @@ onMounted(() => {
           签名清单 {{ lawStatus.manifest_signed ? "已签名" : "无（无法验证真伪）" }}
         </span>
         <span class="hint" style="width:100%">语料目录: {{ lawStatus.data_dir }}</span>
+        <span class="hint" style="width:100%">{{ lawStatus.license ? '数据许可: ' + lawStatus.license : '数据许可: 该语料未声明（自行确认来源合法性）' }}</span>
       </div>
       <div class="row">
         <button :disabled="lawBusy" @click="loadLawDataZip">
