@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // FindBundled 从可执行文件位置推导 dmg 卷内的 law-data 目录。
@@ -26,6 +27,25 @@ func FindBundled(exePath string) string {
 	candidate = filepath.Join(appDir, "law-data")
 	if isLawData(candidate) {
 		return candidate
+	}
+	return ""
+}
+
+// FindDownloaded 语料独立包的自动发现：用户下载 lawdata-*.zip 双击解压
+// （默认落 Downloads）后，启动时自动识别。匹配 Downloads 直接子目录中
+// 名字以 law-data 开头的合法数据目录（归档工具重名会加 " 2" 后缀）。
+func FindDownloaded(downloadsDir string) string {
+	entries, err := os.ReadDir(downloadsDir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "law-data") {
+			continue
+		}
+		if p := filepath.Join(downloadsDir, e.Name()); isLawData(p) {
+			return p
+		}
 	}
 	return ""
 }

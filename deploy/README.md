@@ -1,19 +1,25 @@
 # 部署
 
-## 普通用户（推荐形态：一键安装包）
+## 普通用户（推荐形态：程序包 + 语料包分开下载）
 
 ```bash
-scripts/package-release.sh            # 默认打 ../OpenLaw/data 语料
-scripts/package-release.sh /path/to/law-data
+scripts/package-release.sh            # 程序包：轻量 dmg（~15MB，仅 app）
+scripts/package-lawdata.sh            # 语料包：lawdata-<日期>.zip + .sha256
 ```
 
-产出 `dist/OpenCourt-<ver>-darwin-<arch>.dmg`：卷内含 `OpenCourt.app + law-data/`。
-用户拿到后：打开 dmg → 双击 OpenCourt（或把 app 与 law-data 一起拖到本机）→
-首次启动自动把法条数据安装到 `~/Library/Application Support/OpenCourt/law-data/`
-（一次性、幂等，审计留痕 `LAW_DATA_INSTALLED`）→ 直接用，零配置。
+分开理由：程序与语料更新节奏不同——程序修 bug 频繁发版（15MB 重下无负担），
+语料 ~3G 大而慢（支持断点续传、多应用复用、网盘/镜像分发）。
 
-前置：发布版数据目录应已生成 manifest 签名（OpenLaw `docs/deploy.md` §5），
-否则用户端法条详情显示 UNVERIFIED；脚本会检查并警告。
+用户流程（零配置）：装 dmg → 双击 lawdata zip 解压（落 Downloads 即可）→
+启动 OpenCourt → 自动发现语料并安装到
+`~/Library/Application Support/OpenCourt/law-data/`（一次性、幂等，
+审计留痕 `LAW_DATA_INSTALLED`）→ 直接用。语料源发现顺序：
+dmg 卷内 `law-data/`（兼容旧打包形态）→ Downloads 中 `law-data*` 目录。
+
+前置：语料包内应已生成 manifest 签名（OpenLaw `docs/deploy.md` §5），
+否则用户端法条详情显示 UNVERIFIED；打包脚本会检查并警告。
+语料经任何渠道到达用户机器都可验证：zip sha256（下载完整性）+
+包内 Ed25519 签名清单（读取链路持续校验）。
 对外分发需 codesign + notarize（见下）。
 
 ## 桌面端（开发者构建）

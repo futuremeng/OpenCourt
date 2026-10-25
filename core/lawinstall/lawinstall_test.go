@@ -49,6 +49,28 @@ func TestFindBundled(t *testing.T) {
 	}
 }
 
+func TestFindDownloaded(t *testing.T) {
+	dl := t.TempDir()
+	if got := FindDownloaded(dl); got != "" {
+		t.Errorf("空 Downloads 应空, got %q", got)
+	}
+	// 普通文件夹与非法语料目录都不认
+	if err := os.MkdirAll(filepath.Join(dl, "law-data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dl, "other"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := FindDownloaded(dl); got != "" {
+		t.Errorf("无 db/openlaw.db 不应命中, got %q", got)
+	}
+	// 解压出 law-data（含合法 db）→ 命中；重名后缀 "law-data 2" 也认
+	mkLawData(t, filepath.Join(dl, "law-data"))
+	if got := FindDownloaded(dl); got != filepath.Join(dl, "law-data") {
+		t.Errorf("应命中 law-data, got %q", got)
+	}
+}
+
 func TestInstallCopyAndIdempotent(t *testing.T) {
 	src := t.TempDir()
 	mkLawData(t, src)

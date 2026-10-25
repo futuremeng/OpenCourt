@@ -134,17 +134,10 @@ func (a *App) startup(ctx context.Context) {
 	// 首次启动自动安装到本机应用数据目录（一次性、幂等；SQLite 需本地读写）。
 	if exe, err := os.Executable(); err == nil {
 		if bundled := lawinstall.FindBundled(exe); bundled != "" {
-			if settings.OpenLaw.DataDir == "" || !dirExists(settings.OpenLaw.DataDir) {
-				target := filepath.Join(dataDir, "law-data")
-				if err := lawinstall.Install(bundled, target, func(s string) {
-					log.Printf("法条数据安装: %s", s)
-				}); err != nil {
-					log.Printf("法条数据安装失败: %v", err)
-					_ = a.auditLog.Log(settings.Profile.Active, "LAW_DATA_INSTALL_FAIL", "lawinstall", err.Error())
-				} else {
-					settings.OpenLaw.DataDir = target
-					_ = a.auditLog.Log(settings.Profile.Active, "LAW_DATA_INSTALLED", "lawinstall", target)
-				}
+			settings.OpenLaw.DataDir = a.ensureLawData(settings, bundled)
+		} else if home, err := os.UserHomeDir(); err == nil {
+			if dl := lawinstall.FindDownloaded(filepath.Join(home, "Downloads")); dl != "" {
+				settings.OpenLaw.DataDir = a.ensureLawData(settings, dl)
 			}
 		}
 	}
@@ -179,6 +172,24 @@ func loadSettings(appDir string) (*config.Settings, error) {
 		return s, nil
 	}
 	return config.Load("") // 不存在 → 默认 + 环境变量覆盖
+}
+
+// ensureLawData 把发现的语料源（分发包内 / 下载目录解压）安装到本机应用
+// 数据目录并返回应使用的路径；用户已配置有效路径 → 原样返回不动。
+func (a *App) ensureLawData(settings *config.Settings, source string) string {
+	if settings.OpenLaw.DataDir != "" && dirExists(settings.OpenLaw.DataDir) {
+		return settings.OpenLaw.DataDir
+	}
+	target := filepath.Join(a.dataDir, "law-data")
+	if err := lawinstall.Install(source, target, func(s string) {
+		log.Printf("法条数据安装: %s", s)
+	}); err != nil {
+		log.Printf("法条数据安装失败: %v", err)
+		_ = a.auditLog.Log(settings.Profile.Active, "LAW_DATA_INSTALL_FAIL", "lawinstall", err.Error())
+		return settings.OpenLaw.DataDir
+	}
+	_ = a.auditLog.Log(settings.Profile.Active, "LAW_DATA_INSTALLED", "lawinstall", target)
+	return target
 }
 
 // dirExists 目录存在判据（配置路径有效性检查）。
