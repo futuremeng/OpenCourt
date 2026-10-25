@@ -1,0 +1,44 @@
+OpenCourt THIRD-PARTY NOTICES
+=============================
+本文件列出随 OpenCourt 二进制（dmg / exe）分发的第三方库及其许可证。
+所有依赖均为宽松许可（permissive），无 GPL/LGPL/AGPL copyleft 组件。
+各库完整许可证文本见对应项目仓库。
+
+本程序自身：Apache-2.0（见 LICENSE）。
+OpenLaw SDK（github.com/futuremeng/OpenLaw）：Apache-2.0。
+
+桌面运行时
+  github.com/wailsapp/wails/v2           MIT
+  github.com/wailsapp/go-webview2        MIT
+  github.com/labstack/echo/v4            MIT
+  github.com/labstack/gommon             MIT
+  github.com/gorilla/websocket           BSD-2-Clause
+  github.com/leaanthony/{gosod,slicer,go-ansi-parser,u}   MIT
+  github.com/mattn/{go-colorable,go-isatty}               MIT
+  github.com/valyala/{bytebufferpool,fasttemplate}        MIT
+  github.com/rivo/uniseg                 MIT
+  github.com/samber/lo                   MIT
+  github.com/gabriel-vasile/mimetype     MIT
+  github.com/dustin/go-humanize          MIT
+  github.com/google/uuid                 BSD-3-Clause
+  github.com/pkg/browser                 BSD-3-Clause
+  github.com/pkg/errors                  BSD-2-Clause
+  github.com/bep/debounce                MIT
+  git.sr.ht/~jackmordaunt/go-toast/v2    MIT
+  github.com/go-ole/go-ole               MIT   (Windows)
+  github.com/godbus/dbus/v5              BSD-2-Clause (Linux)
+  github.com/jchv/go-winloader           ISC   (Windows)
+  github.com/tkrajina/go-reflector       Apache-2.0
+
+文档/存储
+  github.com/ledongthuc/pdf              BSD-3-Clause
+  gopkg.in/yaml.v3                       MIT OR Apache-2.0
+  modernc.org/sqlite                     BSD-3-Clause（SQLite 本身为公有领域）
+  modernc.org/{libc,mathutil,memory}     BSD-3-Clause
+  github.com/remyoudompheng/bigfft       BSD-2-Clause
+  github.com/ncruces/go-strftime         MIT
+  golang.org/x/{crypto,net,sys,text}     BSD-3-Clause（含附加专利授权）
+
+语料数据的许可另见 OpenLaw DATA-LICENSE.md（随每个 lawdata 包分发副本）：
+法条官方文本为公有领域；本项目汇编产物 CC BY 4.0；欧盟文本保留
+© European Union 署名。

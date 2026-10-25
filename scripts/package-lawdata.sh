@@ -30,10 +30,18 @@ fi
 
 SRC_ABS="$(cd "$LAW_DATA" && pwd)"
 PACKAGES=""
+# 语料许可声明（随包分发）：位于数据源仓库根（OpenLaw/DATA-LICENSE.md）
+DL="$(dirname "$SRC_ABS")/DATA-LICENSE.md"
+if [ ! -f "$DL" ]; then
+  echo "警告: 未找到 $DL —— 语料包将不含许可声明。" >&2
+  DL=""
+fi
 pack() { # pack <kind> <out.zip> <zip根名> <源目录> [zip -x 排除...]
   local kind="$1" out="$2" root="$3" src="$4"; shift 4
   local stage; stage="$(mktemp -d)"
-  ln -s "$src" "$stage/$root"   # zip 默认跟随目录符号链接 → 根名可控
+  mkdir -p "$stage/$root"
+  ln -s "$src"/* "$stage/$root/" 2>/dev/null || true   # zip 跟随目录符号链接 → 根名可控
+  if [ -n "$DL" ]; then cp "$DL" "$stage/$root/DATA-LICENSE.md"; fi
   ( cd "$stage" && zip -qr "$OLDPWD/$out" "$root" "$@" )
   rm -rf "$stage"
   shasum -a 256 "$out" > "$out.sha256"
@@ -64,7 +72,7 @@ fi
 # 发布索引：OpenCourt「法条数据」面板应用内勾选下载的数据源。
 # 上传到 GitHub Release（asset 名保持 index.json，与 zip 同 Release），
 # 客户端默认索引 URL = …/releases/latest/download/index.json。
-printf '{"generated":"%s","packages":[%s]}\n' "$(date +%Y-%m-%d)" "$PACKAGES" > dist/index.json
+printf '{"generated":"%s","license":"官方文本公有领域；汇编产物 CC-BY-4.0；EU (c) European Union——见包内 DATA-LICENSE.md","packages":[%s]}\n' "$(date +%Y-%m-%d)" "$PACKAGES" > dist/index.json
 
 echo "校验:"; cat "$CORE.sha256" "$EVID.sha256"
 echo "索引: dist/index.json（随包上传到同一 GitHub Release）"

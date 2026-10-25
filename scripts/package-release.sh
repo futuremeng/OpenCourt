@@ -18,6 +18,7 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 cp -R build/bin/OpenCourt.app "$STAGE/"
 cp scripts/INSTALL.md "$STAGE/读我-安装说明.md"
+cp THIRD-PARTY-NOTICES.txt "$STAGE/第三方许可清单.txt"
 
 mkdir -p dist
 rm -f "$OUT"

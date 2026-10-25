@@ -4,6 +4,9 @@
 
 ## Unreleased（阶段二开发中）
 
+### 变更
+- **代码许可证统一为 Apache-2.0**（OpenCourt 由 MIT 变更，与 OpenLaw 一致；新增明示专利授权条款）；语料数据另行许可：官方文本公有领域 + 本项目汇编产物 CC BY 4.0 + 欧盟部分保留 © European Union 署名（OpenLaw `DATA-LICENSE.md`，随每个语料包分发副本；`index.json` 附 license 字段）；新增第三方依赖许可清单（dmg 内附副本）；DISCLAIMER 第 5 条对齐「官方语料包单独发布」的新分发模式
+
 ### 新增
 - **法条数据应用内分发**：首屏「法条数据」面板——在线拉取发布索引（GitHub Release `index.json`），勾选下载 core/evidence/update 数据包（下载即 sha256 校验）；亦支持手动选择 zip/目录；core 原子替换带回滚，evidence 只补缺不覆盖
 - **程序自更新（macOS）**：启动静默检查 GitHub Release（semver 比较），首屏横幅提示新版本与更新说明；一键「下载并更新」——下载 dmg + 强制 `.sha256` 资产校验（缺失即拒绝安装），分离脚本完成「等待退出 → 挂载 → 替换 .app（失败回滚）→ 重启」；`app.update_api` 可配置镜像源

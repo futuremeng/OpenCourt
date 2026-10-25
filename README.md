@@ -87,7 +87,9 @@ make build     # 产出安装包：build/bin/OpenCourt.app（macOS）/.msi/.AppI
 
 ## 许可证与合规
 
-- 代码：MIT（见 [LICENSE](LICENSE)）
+- 代码：Apache-2.0（见 [LICENSE](LICENSE)，与 OpenLaw 一致）
+- 语料数据：另行许可（法条原文为公有领域；本项目汇编产物 CC BY 4.0；EU 数据保留 © European Union 署名），见 OpenLaw [DATA-LICENSE.md](https://github.com/futuremeng/OpenLaw/blob/main/DATA-LICENSE.md)，每个语料包内附副本
+- 第三方依赖许可清单：[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)（dmg 内附副本）
 - 免责声明：[DISCLAIMER.md](DISCLAIMER.md)
 - 贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)
 - 架构文档：[docs/architecture.md](docs/architecture.md)
