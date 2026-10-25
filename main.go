@@ -13,6 +13,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/wailsapp/wails/v2"
@@ -353,6 +354,144 @@ func (a *App) LoadLawData(path string) (map[string]any, error) {
 
 	a.openLawSource() // 语料已变，重开法条源
 	return a.LawDataStatus(), nil
+}
+
+// CheckLawDataUpdates 拉取发布索引并与本机语料比对，返回可下载包列表：
+// action = install（本机缺）/ update（有更新版本）/ optional（可重装）/
+// skip（不适用，如未装 core 时的 evidence）。前端据此渲染勾选项。
+func (a *App) CheckLawDataUpdates() map[string]any {
+	indexURL := a.settings.OpenLaw.IndexURL
+	if indexURL == "" {
+		return map[string]any{"ok": false, "error": "未配置数据包索引（openlaw.index_url）"}
+	}
+	ctx := context.Background()
+	if a.ctx != nil {
+		ctx = a.ctx
+	}
+	idx, err := lawinstall.FetchIndex(ctx, indexURL)
+	if err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	cur := lawinstall.Status(a.settings.OpenLaw.DataDir)
+	hasNewer := func(date string) bool {
+		return cur.CorpusDate != "" && date > cur.CorpusDate
+	}
+	pkgs := make([]map[string]any, 0, len(idx.Packages))
+	for _, p := range idx.Packages {
+		action := "optional"
+		switch p.Kind {
+		case "core", "full":
+			if !cur.Installed {
+				action = "install"
+			} else if hasNewer(p.Date) {
+				action = "update"
+			}
+		case "evidence":
+			switch {
+			case !cur.Installed:
+				action = "skip"
+			case !cur.EvidenceOK:
+				action = "install"
+			case hasNewer(p.Date):
+				action = "update"
+			}
+		case "update":
+			if cur.Installed && hasNewer(p.Date) {
+				action = "install"
+			} else {
+				action = "skip"
+			}
+		}
+		pkgs = append(pkgs, map[string]any{
+			"kind": p.Kind, "name": p.Name, "date": p.Date,
+			"size": p.Size, "action": action,
+		})
+	}
+	return map[string]any{
+		"ok": true, "generated": idx.GeneratedAt, "packages": pkgs,
+		"current": a.LawDataStatus(),
+	}
+}
+
+// DownloadAndInstallLawData 按名称下载所选包（自动排序：core/full →
+// evidence → update），每个包下载后先按索引 sha256 校验完整性，再走
+// LoadLawData 完整流水线（内容真实性由包内签名 manifest 独立校验）。
+// 成功即清缓存；失败保留已装结果并报错（审计 LAW_DATA_LOAD_FAIL）。
+func (a *App) DownloadAndInstallLawData(names []string) (map[string]any, error) {
+	if len(names) == 0 {
+		return nil, fmt.Errorf("未勾选任何数据包")
+	}
+	indexURL := a.settings.OpenLaw.IndexURL
+	if indexURL == "" {
+		return nil, fmt.Errorf("未配置数据包索引（openlaw.index_url）")
+	}
+	ctx := context.Background()
+	if a.ctx != nil {
+		ctx = a.ctx
+	}
+	idx, err := lawinstall.FetchIndex(ctx, indexURL)
+	if err != nil {
+		return nil, err
+	}
+	byName := map[string]lawinstall.PackageInfo{}
+	for _, p := range idx.Packages {
+		byName[p.Name] = p
+	}
+	order := map[string]int{"core": 0, "full": 0, "evidence": 1, "update": 2}
+	sel := make([]lawinstall.PackageInfo, 0, len(names))
+	for _, n := range names {
+		p, ok := byName[n]
+		if !ok {
+			return nil, fmt.Errorf("所选包不在发布索引中: %s", n)
+		}
+		sel = append(sel, p)
+	}
+	sort.SliceStable(sel, func(i, j int) bool { return order[sel[i].Kind] < order[sel[j].Kind] })
+
+	cache := filepath.Join(a.dataDir, "lawdata-cache")
+	emit := func(s string) {
+		log.Printf("法条数据: %s", s)
+		if a.ctx != nil {
+			wailsRuntime.EventsEmit(a.ctx, "lawdata:progress", s)
+		}
+	}
+	for _, p := range sel {
+		url := lawinstall.PackageURL(idx, p, indexURL)
+		if url == "" {
+			return nil, fmt.Errorf("包 %s 无法解析下载地址", p.Name)
+		}
+		dest := filepath.Join(cache, p.Name)
+		emit(fmt.Sprintf("下载 %s（%s）…", p.Name, humanBytes(p.Size)))
+		err := lawinstall.DownloadFile(ctx, url, dest, p.SHA256, func(done, total int64) {
+			if total > 0 {
+				emit(fmt.Sprintf("下载 %s：%d%%（%s / %s）",
+					p.Name, done*100/total, humanBytes(done), humanBytes(total)))
+			} else {
+				emit(fmt.Sprintf("下载 %s：%s…", p.Name, humanBytes(done)))
+			}
+		})
+		if err != nil {
+			return nil, err
+		}
+		_ = a.auditLog.Log(a.settings.Profile.Active, "LAW_DATA_DOWNLOADED", p.Name, "sha256 校验通过")
+		if _, err := a.LoadLawData(dest); err != nil {
+			return nil, err
+		}
+		_ = os.Remove(dest) // 安装成功即清缓存
+	}
+	return a.LawDataStatus(), nil
+}
+
+// humanBytes 人类可读字节数。
+func humanBytes(n int64) string {
+	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1fGB", float64(n)/(1<<30))
+	case n >= 1<<20:
+		return fmt.Sprintf("%.0fMB", float64(n)/(1<<20))
+	default:
+		return fmt.Sprintf("%dB", n)
+	}
 }
 
 // shutdown 关闭资源。

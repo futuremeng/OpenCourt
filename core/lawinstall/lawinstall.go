@@ -11,6 +11,7 @@ package lawinstall
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -410,6 +411,7 @@ type DataStatus struct {
 	Articles       int64  `json:"articles"`
 	EvidenceOK     bool   `json:"evidence_ok"`
 	ManifestSigned bool   `json:"manifest_signed"`
+	CorpusDate     string `json:"corpus_date"` // manifest generated_at（YYYYMMDD 化）
 }
 
 // Status 汇总语料概况。db 打不开（损坏/占用的极端情形）不报错，
@@ -433,7 +435,33 @@ func Status(dataDir string) DataStatus {
 	}
 	_, err := os.Stat(filepath.Join(dataDir, "manifest", "manifest.sig"))
 	st.ManifestSigned = err == nil
+	st.CorpusDate = corpusDate(dataDir)
 	return st
+}
+
+// corpusDate 本地语料版本日期：manifest.json 的 generated_at 取数字部分
+// （YYYY-MM-DD…→YYYYMMDD），供与发布索引的包日期比较是否有更新。
+func corpusDate(dataDir string) string {
+	body, err := os.ReadFile(filepath.Join(dataDir, "manifest", "manifest.json"))
+	if err != nil {
+		return ""
+	}
+	var m struct {
+		GeneratedAt string `json:"generated_at"`
+	}
+	if json.Unmarshal(body, &m) != nil {
+		return ""
+	}
+	var digits strings.Builder
+	for _, r := range m.GeneratedAt {
+		if r >= '0' && r <= '9' {
+			digits.WriteRune(r)
+		}
+		if len(digits.String()) >= 8 {
+			return digits.String()
+		}
+	}
+	return ""
 }
 
 // dirHasFiles 目录存在且至少一个条目。

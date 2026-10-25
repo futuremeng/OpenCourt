@@ -111,9 +111,62 @@ onMounted(async () => {
 const lawStatus = ref<any | null>(null);
 const lawMsgs = ref<string[]>([]);
 const lawBusy = ref(false);
+const lawPkgs = ref<any[]>([]);
+const lawChecked = ref<Record<string, boolean>>({});
+const lawIndexInfo = ref("");
+const lawIndexErr = ref("");
 
 async function refreshLawStatus() {
   lawStatus.value = await App.LawDataStatus();
+}
+
+async function checkLawUpdates() {
+  lawIndexErr.value = "";
+  try {
+    const res = await App.CheckLawDataUpdates();
+    if (!res.ok) {
+      lawIndexErr.value = res.error || "无法获取数据包索引";
+      return;
+    }
+    lawIndexInfo.value = res.generated || "";
+    lawPkgs.value = res.packages || [];
+    const checked: Record<string, boolean> = {};
+    for (const p of lawPkgs.value) {
+      checked[p.name] = p.action === "install" || p.action === "update";
+    }
+    lawChecked.value = checked;
+  } catch (e) {
+    lawIndexErr.value = String(e);
+  }
+}
+
+async function downloadSelected() {
+  const names = lawPkgs.value.filter((p) => lawChecked.value[p.name]).map((p) => p.name);
+  if (names.length === 0) {
+    error.value = "请先勾选要下载的数据包";
+    return;
+  }
+  error.value = "";
+  lawBusy.value = true;
+  lawMsgs.value = [];
+  try {
+    lawStatus.value = await App.DownloadAndInstallLawData(names);
+    await checkLawUpdates();
+  } catch (e) {
+    error.value = String(e);
+  } finally {
+    lawBusy.value = false;
+  }
+}
+
+const actionLabel: Record<string, string> = {
+  install: "安装", update: "更新", optional: "可重装", skip: "暂不适用",
+};
+
+function humanSize(n: number): string {
+  if (n >= 1 << 30) return (n / (1 << 30)).toFixed(1) + "GB";
+  if (n >= 1 << 20) return Math.round(n / (1 << 20)) + "MB";
+  return n + "B";
 }
 
 async function loadLawDataZip() {
@@ -154,7 +207,9 @@ onMounted(() => {
   EventsOn("lawdata:progress", (m: any) => {
     lawMsgs.value = [...lawMsgs.value.slice(-8), String(Array.isArray(m) ? m[0] : m)];
   });
-  refreshLawStatus().catch((e) => (error.value = String(e)));
+  refreshLawStatus()
+    .then(() => checkLawUpdates())
+    .catch((e) => (error.value = String(e)));
 });
 </script>
 
@@ -195,10 +250,25 @@ onMounted(() => {
       </div>
       <div class="row">
         <button :disabled="lawBusy" @click="loadLawDataZip">
-          {{ lawBusy ? "加载中…" : (lawStatus && lawStatus.installed ? "加载更新数据包（zip）" : "加载数据包（zip）") }}
+          {{ lawBusy ? "处理中…" : (lawStatus && lawStatus.installed ? "加载更新数据包（zip）" : "加载数据包（zip）") }}
         </button>
         <button :disabled="lawBusy" @click="loadLawDataDir">选择已解压的数据目录</button>
+        <button :disabled="lawBusy" @click="checkLawUpdates">检查可用数据包</button>
       </div>
+      <div v-if="lawPkgs.length" class="law-pkgs">
+        <p class="hint">发布索引（{{ lawIndexInfo }}）——勾选后一键下载安装（自动校验 sha256 与签名）：</p>
+        <label v-for="p in lawPkgs" :key="p.name" class="law-pkg" :class="p.action">
+          <input type="checkbox" v-model="lawChecked[p.name]" :disabled="p.action === 'skip' || lawBusy" />
+          <b>{{ p.name }}</b>
+          <span class="hint">{{ humanSize(p.size) }} · {{ actionLabel[p.action] || p.action }}</span>
+        </label>
+        <div class="row">
+          <button :disabled="lawBusy" class="primary" @click="downloadSelected">
+            {{ lawBusy ? "下载中…" : "下载并安装所选包" }}
+          </button>
+        </div>
+      </div>
+      <p v-if="lawIndexErr" class="hint">{{ lawIndexErr }}（离线或未发布时可继续用手动加载）</p>
       <ul v-if="lawMsgs.length" class="law-progress">
         <li v-for="(m, i) in lawMsgs" :key="i">{{ m }}</li>
       </ul>
@@ -325,6 +395,11 @@ onMounted(() => {
 .law-stats { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 4px; }
 .law-stats .badge { color: #fff; }
 .law-progress { font-size: 12px; color: #374151; padding-left: 18px; margin: 8px 0 0; }
+.law-pkgs { margin-top: 10px; border-top: 1px dashed #e5e7eb; padding-top: 8px; }
+.law-pkg { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 4px 0; }
+.law-pkg.skip { opacity: 0.5; }
+.law-pkg.update b { color: #b45309; }
+button.primary { background: #4338ca; color: #fff; border-color: #4338ca; }
 .disclaimer {
   padding: 12px 24px; font-size: 12px; color: #6b7280;
   border-top: 1px solid #e5e7eb; background: #fff;

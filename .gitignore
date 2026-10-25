@@ -1,5 +1,6 @@
 # 构建产物
 build/bin/
+dist/
 frontend/dist/assets/
 frontend/dist/*.js
 frontend/dist/*.css

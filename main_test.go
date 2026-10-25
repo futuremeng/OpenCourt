@@ -1,6 +1,13 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -152,5 +159,104 @@ func TestLoadLawDataFlow(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(target, "docx", "a.docx")); err == nil {
 		t.Error("全量替换后旧语料（含合并的证据层）应已被新包取代")
+	}
+}
+
+// --- 应用内勾选下载（发布索引 → 下载 → sha256 校验 → 自动安装） ---
+
+// mkZipBytes 造 zip（root/... 结构）并返回 (bytes, sha256hex)。
+func mkZipBytes(t *testing.T, files map[string][]byte) ([]byte, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, body := range files {
+		fw, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fw.Write(body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(buf.Bytes())
+	return buf.Bytes(), hex.EncodeToString(sum[:])
+}
+
+func TestCheckAndDownloadLawData(t *testing.T) {
+	// core 包：真实 SQLite（sdk 可打开）
+	coreDir := mkCoreDir(t)
+	dbBytes, err := os.ReadFile(filepath.Join(coreDir, "db", "openlaw.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	coreZip, coreSHA := mkZipBytes(t, map[string][]byte{"law-data/db/openlaw.db": dbBytes})
+	evZip, evSHA := mkZipBytes(t, map[string][]byte{"law-evidence/docx/a.docx": []byte("e")})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/lawdata-core-x.zip", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(coreZip) })
+	mux.HandleFunc("/lawdata-evidence-x.zip", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(evZip) })
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	// 绝对 url 字段（GitHub 直链规则不适用于本地测试服务器）
+	mux.HandleFunc("/abs-index.json", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"generated": "2026-10-25",
+			"packages": []map[string]any{
+				{"kind": "core", "name": "lawdata-core-x.zip", "date": "20261025", "size": len(coreZip), "sha256": coreSHA, "url": srv.URL + "/lawdata-core-x.zip"},
+				{"kind": "evidence", "name": "lawdata-evidence-x.zip", "date": "20261025", "size": len(evZip), "sha256": evSHA, "url": srv.URL + "/lawdata-evidence-x.zip"},
+			},
+		})
+	})
+
+	a := newTestApp(t)
+	a.settings.OpenLaw.IndexURL = srv.URL + "/abs-index.json"
+
+	// 检查更新：未装 → core=install、evidence=skip（须先装 core）
+	res := a.CheckLawDataUpdates()
+	if res["ok"] != true {
+		t.Fatalf("检查更新失败: %+v", res)
+	}
+	pkgs := res["packages"].([]map[string]any)
+	actions := map[string]string{}
+	for _, p := range pkgs {
+		actions[p["name"].(string)] = p["action"].(string)
+	}
+	if actions["lawdata-core-x.zip"] != "install" || actions["lawdata-evidence-x.zip"] != "skip" {
+		t.Errorf("action 判定不符: %+v", actions)
+	}
+
+	// 勾选下载（乱序传入 → 自动 core 先装）→ 下载校验 → 安装 + 合并
+	st, err := a.DownloadAndInstallLawData([]string{"lawdata-evidence-x.zip", "lawdata-core-x.zip"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st["installed"] != true || a.lawSource == nil {
+		t.Errorf("下载后应已安装: %+v", st)
+	}
+	target := a.settings.OpenLaw.DataDir
+	if _, err := os.Stat(filepath.Join(target, "docx", "a.docx")); err != nil {
+		t.Error("evidence 应已自动合并:", err)
+	}
+	// 缓存清理
+	cacheFiles, _ := os.ReadDir(filepath.Join(a.dataDir, "lawdata-cache"))
+	if len(cacheFiles) != 0 {
+		t.Errorf("安装成功后应清空下载缓存: %d 个残留", len(cacheFiles))
+	}
+
+	// sha256 不符 → 拒绝安装（篡改/传输损坏防护）
+	mux.HandleFunc("/bad-index.json", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"packages": []map[string]any{
+				{"kind": "core", "name": "lawdata-core-x.zip", "date": "20261025", "size": len(coreZip), "sha256": "deadbeef", "url": srv.URL + "/lawdata-core-x.zip"},
+			},
+		})
+	})
+	a2 := newTestApp(t)
+	a2.settings.OpenLaw.IndexURL = srv.URL + "/bad-index.json"
+	if _, err := a2.DownloadAndInstallLawData([]string{"lawdata-core-x.zip"}); err == nil {
+		t.Error("sha256 不符应拒绝")
 	}
 }

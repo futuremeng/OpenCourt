@@ -10,9 +10,13 @@ export function AppInfo():Promise<Record<string, any>>;
 
 export function BuildTimeline():Promise<Array<neutral.TimelineItem>>;
 
+export function CheckLawDataUpdates():Promise<Record<string, any>>;
+
 export function CheckOutput(arg1:string):Promise<Array<gate.Violation>>;
 
 export function CreateFact(arg1:string,arg2:string,arg3:number,arg4:string,arg5:boolean):Promise<domain.Fact>;
+
+export function DownloadAndInstallLawData(arg1:Array<string>):Promise<Record<string, any>>;
 
 export function IngestDocument(arg1:string):Promise<storage.DocumentInfo>;
 

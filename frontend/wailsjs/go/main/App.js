@@ -10,12 +10,20 @@ export function BuildTimeline() {
   return window['go']['main']['App']['BuildTimeline']();
 }
 
+export function CheckLawDataUpdates() {
+  return window['go']['main']['App']['CheckLawDataUpdates']();
+}
+
 export function CheckOutput(arg1) {
   return window['go']['main']['App']['CheckOutput'](arg1);
 }
 
 export function CreateFact(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['CreateFact'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function DownloadAndInstallLawData(arg1) {
+  return window['go']['main']['App']['DownloadAndInstallLawData'](arg1);
 }
 
 export function IngestDocument(arg1) {

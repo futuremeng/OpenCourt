@@ -39,7 +39,8 @@ type Settings struct {
 	// OpenLaw 法条源（M4 对接）：OpenLaw 数据目录（db/ pdf/ md/ provenance/
 	// manifest/）。空 = 未配置法条源，应用降级运行（框架不内置法条数据）。
 	OpenLaw struct {
-		DataDir string `yaml:"data_dir"`
+		DataDir  string `yaml:"data_dir"`
+		IndexURL string `yaml:"index_url"` // 数据包发布索引（应用内勾选下载）
 	} `yaml:"openlaw"`
 	DataDir string `yaml:"data_dir"`
 }
@@ -58,6 +59,9 @@ func Default() *Settings {
 	s.Retrieve.TopK = 5
 	s.Security.RedactLevel = "high"
 	s.Security.Telemetry = false
+	// 数据包发布索引默认源：OpenLaw 仓库 GitHub Releases 的 index.json
+	// （发布流程由 scripts/package-lawdata.sh 生成并上传；镜像用 index_url 覆盖）。
+	s.OpenLaw.IndexURL = "https://github.com/futuremeng/OpenLaw/releases/latest/download/index.json"
 	return s
 }
 
@@ -137,6 +141,9 @@ func (s *Settings) applyEnv() {
 	}
 	if v, ok := get("OPENLAW_DATA_DIR"); ok {
 		s.OpenLaw.DataDir = v
+	}
+	if v, ok := get("OPENLAW_INDEX_URL"); ok {
+		s.OpenLaw.IndexURL = v
 	}
 	if v, ok := get("RETRIEVE_VECTOR_DIM"); ok {
 		if n, err := strconv.Atoi(v); err == nil {

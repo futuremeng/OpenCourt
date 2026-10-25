@@ -29,13 +29,19 @@ if [ ! -f "${LAW_DATA}/manifest/manifest.json" ]; then
 fi
 
 SRC_ABS="$(cd "$LAW_DATA" && pwd)"
-pack() { # pack <out.zip> <zip根名> <源目录> [zip -x 排除...]
-  local out="$1" root="$2" src="$3"; shift 3
+PACKAGES=""
+pack() { # pack <kind> <out.zip> <zip根名> <源目录> [zip -x 排除...]
+  local kind="$1" out="$2" root="$3" src="$4"; shift 4
   local stage; stage="$(mktemp -d)"
   ln -s "$src" "$stage/$root"   # zip 默认跟随目录符号链接 → 根名可控
   ( cd "$stage" && zip -qr "$OLDPWD/$out" "$root" "$@" )
   rm -rf "$stage"
   shasum -a 256 "$out" > "$out.sha256"
+  local sha size
+  sha="$(cut -d' ' -f1 < "$out.sha256")"
+  size="$(stat -f%z "$out" 2>/dev/null || stat -c%s "$out")"
+  local entry="{\"kind\":\"$kind\",\"name\":\"$(basename "$out")\",\"date\":\"$DATE\",\"size\":$size,\"sha256\":\"$sha\"}"
+  if [ -n "$PACKAGES" ]; then PACKAGES="$PACKAGES,$entry"; else PACKAGES="$entry"; fi
   echo "完成: $out ($(du -h "$out" | cut -f1))"
 }
 
@@ -43,17 +49,23 @@ CORE="dist/lawdata-core-${DATE}.zip"
 EVID="dist/lawdata-evidence-${DATE}.zip"
 rm -f "$CORE" "$CORE.sha256" "$EVID" "$EVID.sha256"
 
-pack "$CORE" law-data "$SRC_ABS" \
+pack core "$CORE" law-data "$SRC_ABS" \
   -x 'law-data/logs/*' -x 'law-data/incoming/*' \
   -x 'law-data/docx/*' -x 'law-data/md/*' -x 'law-data/pdf/*' -x 'law-data/provenance/*'
-pack "$EVID" law-evidence "$SRC_ABS" \
+pack evidence "$EVID" law-evidence "$SRC_ABS" \
   -x 'law-evidence/db/*' -x 'law-evidence/logs/*' -x 'law-evidence/incoming/*' -x 'law-evidence/manifest/*'
 
 if [ -n "$FULL" ]; then
   FULLPKG="dist/lawdata-full-${DATE}.zip"
   rm -f "$FULLPKG" "$FULLPKG.sha256"
-  pack "$FULLPKG" law-data "$SRC_ABS" -x 'law-data/logs/*' -x 'law-data/incoming/*'
+  pack full "$FULLPKG" law-data "$SRC_ABS" -x 'law-data/logs/*' -x 'law-data/incoming/*'
 fi
 
+# 发布索引：OpenCourt「法条数据」面板应用内勾选下载的数据源。
+# 上传到 GitHub Release（asset 名保持 index.json，与 zip 同 Release），
+# 客户端默认索引 URL = …/releases/latest/download/index.json。
+printf '{"generated":"%s","packages":[%s]}\n' "$(date +%Y-%m-%d)" "$PACKAGES" > dist/index.json
+
 echo "校验:"; cat "$CORE.sha256" "$EVID.sha256"
+echo "索引: dist/index.json（随包上传到同一 GitHub Release）"
 echo "发布页需公示 sha256 与 manifest 签名（Ed25519，见 OpenLaw docs/deploy.md）。"
