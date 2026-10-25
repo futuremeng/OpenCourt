@@ -48,7 +48,9 @@ type App struct {
 	store    *storage.Store
 	auditLog *audit.Logger
 	model    plugins.ModelAdapter
-	ingest   *ingest.Registry
+	// lawSource OpenLaw 法条源（M4 对接）：nil = 未配置，法条检索降级不可用。
+	lawSource plugins.LawSourcePlugin
+	ingest    *ingest.Registry
 }
 
 // appDataDir 返回本机应用数据目录（默认 ~/Library/Application Support/OpenCourt 等），
@@ -124,10 +126,27 @@ func (a *App) startup(ctx context.Context) {
 		settings.Model.Enabled,
 	)
 	a.ingest = ingest.NewRegistry()
+
+	// OpenLaw 法条源（M4 对接）：进程内 sdk，禁止直连数据库；未配置 → nil 降级。
+	// 打开失败不阻断启动（法条检索不可用 + 审计留痕），其余功能不受影响。
+	src, err := plugins.NewOpenLawSource(settings.OpenLaw.DataDir)
+	if err != nil {
+		log.Printf("OpenLaw 法条源初始化失败（法条检索不可用）: %v", err)
+		_ = a.auditLog.Log(settings.Profile.Active, "LAW_SOURCE_FAIL", "openlaw", err.Error())
+	}
+	a.lawSource = src
+	if src != nil {
+		_ = a.auditLog.Log(settings.Profile.Active, "LAW_SOURCE_OK", "openlaw", src.Name())
+	}
 }
 
 // shutdown 关闭资源。
 func (a *App) shutdown(ctx context.Context) {
+	if a.lawSource != nil {
+		if c, ok := a.lawSource.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+	}
 	if a.store != nil {
 		a.store.Close()
 	}

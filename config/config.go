@@ -36,6 +36,11 @@ type Settings struct {
 		RedactLevel string `yaml:"redact_level"` // low / medium / high
 		Telemetry   bool   `yaml:"telemetry_enabled"`
 	} `yaml:"security"`
+	// OpenLaw 法条源（M4 对接）：OpenLaw 数据目录（db/ pdf/ md/ provenance/
+	// manifest/）。空 = 未配置法条源，应用降级运行（框架不内置法条数据）。
+	OpenLaw struct {
+		DataDir string `yaml:"data_dir"`
+	} `yaml:"openlaw"`
 	DataDir string `yaml:"data_dir"`
 }
 
@@ -129,6 +134,9 @@ func (s *Settings) applyEnv() {
 	}
 	if v, ok := get("MODEL_ENABLED"); ok {
 		s.Model.Enabled = parseBool(v)
+	}
+	if v, ok := get("OPENLAW_DATA_DIR"); ok {
+		s.OpenLaw.DataDir = v
 	}
 	if v, ok := get("RETRIEVE_VECTOR_DIM"); ok {
 		if n, err := strconv.Atoi(v); err == nil {

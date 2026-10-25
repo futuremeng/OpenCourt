@@ -28,4 +28,10 @@ security:
   redact_level: high     # low / medium / high
   telemetry_enabled: false  # 默认关闭任何形式的数据上报，开启需二次确认
 
+openlaw:
+  # OpenLaw 法条源（M4 对接）：指向 OpenLaw 数据目录（含 db/ pdf/ md/
+  # provenance/ manifest/）。留空 = 未配置，法条检索降级不可用。
+  # 开发期示例：/Users/<you>/github/futuremeng/OpenLaw/data
+  data_dir: ""
+
 data_dir: data
