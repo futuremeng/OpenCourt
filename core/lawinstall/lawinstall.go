@@ -50,6 +50,91 @@ func FindDownloaded(downloadsDir string) string {
 	return ""
 }
 
+// FindEvidence 证据层包（law-evidence-*.zip 解压产物）的发现：Downloads
+// 直接子目录中名字以 law-evidence 开头、含 docx/ md/ provenance/ 之一者。
+func FindEvidence(downloadsDir string) string {
+	entries, err := os.ReadDir(downloadsDir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "law-evidence") {
+			continue
+		}
+		p := filepath.Join(downloadsDir, e.Name())
+		for _, layer := range []string{"docx", "md", "provenance"} {
+			if st, err := os.Stat(filepath.Join(p, layer)); err == nil && st.IsDir() {
+				return p
+			}
+		}
+	}
+	return ""
+}
+
+// MergeEvidence 把证据层包内容（docx/ md/ provenance/）合并进已安装数据
+// 目录：仅补缺失文件（同名跳过——manifest 哈希一致性由读取链路持续校验），
+// 幂等可重跑。合并后 GetArticle 断链解除（前提是文件与 manifest 一致）。
+func MergeEvidence(evidenceDir, dataDir string, progress func(string)) error {
+	if !isLawData(dataDir) {
+		return fmt.Errorf("目标数据目录不合法: %s", dataDir)
+	}
+	report := func(s string) {
+		if progress != nil {
+			progress(s)
+		}
+	}
+	merged := 0
+	for _, layer := range []string{"docx", "md", "provenance"} {
+		src := filepath.Join(evidenceDir, layer)
+		if st, err := os.Stat(src); err != nil || !st.IsDir() {
+			continue
+		}
+		n, err := mergeTree(src, filepath.Join(dataDir, layer))
+		if err != nil {
+			return fmt.Errorf("证据层合并失败（%s）: %w", layer, err)
+		}
+		merged += n
+		report(fmt.Sprintf("合并 %s/：%d 个文件", layer, n))
+	}
+	if merged == 0 {
+		report("证据层已是最新，无需合并")
+	} else {
+		report(fmt.Sprintf("证据层合并完成（新增 %d 个文件）", merged))
+	}
+	return nil
+}
+
+// mergeTree 递归合并复制：已存在的文件跳过（不覆盖本机数据）。
+func mergeTree(src, dst string) (int, error) {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return 0, err
+	}
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, e := range entries {
+		s, d := filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())
+		if e.IsDir() {
+			m, err := mergeTree(s, d)
+			n += m
+			if err != nil {
+				return n, err
+			}
+			continue
+		}
+		if _, err := os.Stat(d); err == nil {
+			continue // 已有文件不覆盖
+		}
+		if err := copyFile(s, d); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
 // isLawData OpenLaw 数据目录判据：db/openlaw.db 存在（防误把普通目录当语料）。
 func isLawData(dir string) bool {
 	st, err := os.Stat(filepath.Join(dir, "db", "openlaw.db"))

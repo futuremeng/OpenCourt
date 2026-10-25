@@ -1,27 +1,35 @@
 # 安装说明（OpenCourt + 法条语料）
 
-需要下载两个文件（分开下载，升级程序不必重下语料）：
+需要下载的文件（分开下载，升级程序不必重下语料）：
 
 | 文件 | 大小 | 说明 |
 |---|---|---|
 | `OpenCourt-<版本>-darwin-<架构>.dmg` | ~15MB | 应用本体 |
-| `lawdata-<日期>.zip` | ~3G | 离线法条语料库（含防篡改签名清单） |
+| `lawdata-core-<日期>.zip` | ~700MB | 法条检索库 + 防篡改签名清单（装上即用） |
+| `lawdata-evidence-<日期>.zip` | ~1.3G | 原文证据层（推荐后补：溯源校验用） |
+
+只有核心包时检索、阅读全部可用；法条详情会显示「链完整性：未验证」——
+这是防篡改机制在如实报告证据层未就位，补装证据层包即恢复完整溯源。
 
 ## 安装（三步）
 
 1. 打开 dmg，把 **OpenCourt.app 拖到「应用程序」**（或任意位置）。
-2. 双击 **lawdata-<日期>.zip** 解压（默认解压到「下载」文件夹，得到 `law-data` 文件夹，**放那里不用动**）。
+2. 双击 **lawdata-core-<日期>.zip** 解压（默认解压到「下载」文件夹，得到 `law-data` 文件夹，**放那里不用动**）。
 3. 双击 **OpenCourt.app** 启动：首次会自动发现下载文件夹里的语料并安装到本机
    （约 1~2 分钟，有进度日志），完成后即可使用，**无需任何配置**。
+
+**补装证据层**：双击 **lawdata-evidence-<日期>.zip** 解压到「下载」（得到
+`law-evidence` 文件夹），下次启动 OpenCourt 自动合并，溯源链即补全。
 
 > macOS 提示「无法验证开发者」：右键 app →「打开」→「打开」。
 > （正式对外分发版会完成签名与公证，无此提示。）
 
 ## 校验下载完整性（可选）
 
-发布页公示 `lawdata-<日期>.zip.sha256`。终端执行：
+发布页公示两个包的 `.sha256`。终端执行：
 ```bash
-shasum -a 256 -c lawdata-<日期>.zip.sha256
+shasum -a 256 -c lawdata-core-<日期>.zip.sha256
+shasum -a 256 -c lawdata-evidence-<日期>.zip.sha256
 ```
 语料内部另带 Ed25519 签名清单，应用读取时会持续校验——任何渠道
 （网盘/镜像/断点续传）获得的语料被篡改都会被发现并如实标注。
@@ -29,8 +37,8 @@ shasum -a 256 -c lawdata-<日期>.zip.sha256
 ## 已装过语料的机器
 
 语料只安装一次；程序升级（新 dmg）直接替换 app 即可，语料不动。
-想更换新版语料：删除本机
-`~/Library/Application Support/OpenCourt/law-data/`，再下载新 lawdata zip 重复上面步骤。
+语料升级：下载新的 core/evidence 包解压到「下载」，删除本机
+`~/Library/Application Support/OpenCourt/law-data/` 后启动即自动重装。
 
 ## 高级配置（可跳过）
 

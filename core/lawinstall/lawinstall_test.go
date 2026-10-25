@@ -71,6 +71,49 @@ func TestFindDownloaded(t *testing.T) {
 	}
 }
 
+func TestFindEvidenceAndMerge(t *testing.T) {
+	dl := t.TempDir()
+	ev := filepath.Join(dl, "law-evidence")
+	for _, layer := range []string{"docx", "md", "provenance"} {
+		if err := os.MkdirAll(filepath.Join(ev, layer), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(ev, layer, "f1"), []byte("evidence"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := FindEvidence(dl); got != ev {
+		t.Errorf("law-evidence 应命中, got %q", got)
+	}
+
+	// 合并进已安装数据目录
+	data := t.TempDir()
+	mkLawData(t, data)
+	if err := MergeEvidence(ev, data, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, layer := range []string{"docx", "md", "provenance"} {
+		if _, err := os.Stat(filepath.Join(data, layer, "f1")); err != nil {
+			t.Errorf("%s/f1 应已合并: %v", layer, err)
+		}
+	}
+	// 幂等 + 不覆盖本机同名文件
+	if err := os.WriteFile(filepath.Join(data, "docx", "f1"), []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := MergeEvidence(ev, data, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(filepath.Join(data, "docx", "f1"))
+	if string(got) != "mine" {
+		t.Error("合并不得覆盖本机已有文件")
+	}
+	// 目标非法 → 报错
+	if err := MergeEvidence(ev, filepath.Join(t.TempDir(), "none"), nil); err == nil {
+		t.Error("目标非数据目录应报错")
+	}
+}
+
 func TestInstallCopyAndIdempotent(t *testing.T) {
 	src := t.TempDir()
 	mkLawData(t, src)

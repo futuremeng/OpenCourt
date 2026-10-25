@@ -136,8 +136,22 @@ func (a *App) startup(ctx context.Context) {
 		if bundled := lawinstall.FindBundled(exe); bundled != "" {
 			settings.OpenLaw.DataDir = a.ensureLawData(settings, bundled)
 		} else if home, err := os.UserHomeDir(); err == nil {
-			if dl := lawinstall.FindDownloaded(filepath.Join(home, "Downloads")); dl != "" {
+			downloads := filepath.Join(home, "Downloads")
+			if dl := lawinstall.FindDownloaded(downloads); dl != "" {
 				settings.OpenLaw.DataDir = a.ensureLawData(settings, dl)
+			}
+			// 证据层包（docx/md/provenance）：核心包已就位时自动合并，
+			// 合并后溯源链补全（UNVERIFIED → 完整 trace）
+			if ev := lawinstall.FindEvidence(downloads); ev != "" &&
+				settings.OpenLaw.DataDir != "" && dirExists(settings.OpenLaw.DataDir) {
+				if err := lawinstall.MergeEvidence(ev, settings.OpenLaw.DataDir, func(s string) {
+					log.Printf("法条证据层: %s", s)
+				}); err != nil {
+					log.Printf("法条证据层合并失败: %v", err)
+					_ = a.auditLog.Log(settings.Profile.Active, "LAW_EVIDENCE_FAIL", "lawinstall", err.Error())
+				} else {
+					_ = a.auditLog.Log(settings.Profile.Active, "LAW_EVIDENCE_MERGED", "lawinstall", ev)
+				}
 			}
 		}
 	}
