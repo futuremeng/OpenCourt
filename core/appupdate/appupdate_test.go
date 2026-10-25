@@ -50,6 +50,25 @@ func TestPickAssets(t *testing.T) {
 	if d2, _ := PickAssets(rel, "darwin", "riscv"); d2 != nil {
 		t.Error("无匹配平台应返回 nil")
 	}
+
+	// 旧发布形态：universal dmg 作为回退
+	relU := &Release{Assets: []Asset{
+		{Name: "OpenCourt-0.2.0-darwin-universal.dmg"},
+		{Name: "OpenCourt-0.2.0-darwin-universal.dmg.sha256"},
+	}}
+	du, su := PickAssets(relU, "darwin", "arm64")
+	if du == nil || su == nil || du.Name != "OpenCourt-0.2.0-darwin-universal.dmg" {
+		t.Errorf("应回退到 universal 包: %+v / %+v", du, su)
+	}
+	// 精确平台包优先于 universal
+	relB := &Release{Assets: []Asset{
+		{Name: "OpenCourt-0.2.0-darwin-universal.dmg"},
+		{Name: "OpenCourt-0.2.0-darwin-arm64.dmg"},
+	}}
+	db, _ := PickAssets(relB, "darwin", "arm64")
+	if db == nil || db.Name != "OpenCourt-0.2.0-darwin-arm64.dmg" {
+		t.Errorf("精确平台包应优先: %+v", db)
+	}
 }
 
 func TestUpdaterScript(t *testing.T) {

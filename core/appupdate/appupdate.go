@@ -113,12 +113,19 @@ func parseVer(s string) ver {
 }
 
 // PickAssets 挑选当前平台的 dmg 与其 .sha256 资产
-// （命名约定 OpenCourt-<ver>-<goos>-<goarch>.dmg）。找不到返回 nil。
+// （命名约定 OpenCourt-<ver>-<goos>-<goarch>.dmg；
+// 兼容旧发布形态 -<goos>-universal.dmg）。找不到返回 nil。
 func PickAssets(rel *Release, goos, goarch string) (dmg, sha *Asset) {
-	suffix := "-" + goos + "-" + goarch + ".dmg"
-	for i, as := range rel.Assets {
-		if strings.HasSuffix(as.Name, suffix) && dmg == nil {
-			dmg = &rel.Assets[i]
+	suffixes := []string{"-" + goos + "-" + goarch + ".dmg", "-" + goos + "-universal.dmg"}
+	for _, suffix := range suffixes {
+		for i, as := range rel.Assets {
+			if strings.HasSuffix(as.Name, suffix) {
+				dmg = &rel.Assets[i]
+				break
+			}
+		}
+		if dmg != nil {
+			break
 		}
 	}
 	if dmg == nil {

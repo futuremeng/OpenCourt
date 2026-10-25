@@ -13,13 +13,22 @@ scripts/package-lawdata.sh            # 语料分层包：lawdata-core-<日期>.
 分开理由：程序与语料更新节奏不同——程序修 bug 频繁发版（15MB 重下无负担），
 语料 ~3G 大而慢（支持断点续传、多应用复用、网盘/镜像分发）。
 
+**程序自更新**：package-release.sh 产出 `OpenCourt-<ver>-darwin-universal.dmg`
+及同名 `.sha256`，两者一起上传到 OpenCourt 的 GitHub Release 并打 tag
+（如 `v0.2.0`，semver 须大于内置 `version`）。用户端启动即静默检查
+`api.github.com/repos/futuremeng/OpenCourt/releases/latest`，发现新版显示
+横幅；一键「下载并更新」= 下载 dmg → sha256 强校验（缺 `.sha256` 资产直接
+拒绝）→ 分离脚本替换 .app 并重启（失败自动回滚旧版）。镜像源：
+`app.update_api` / `UPDATE_API`。自更新仅 macOS 应用包形态（开发模式
+`go run` 会明确拒绝）。
+
 **应用内下载（主路径）**：package-lawdata.sh 同时生成 `dist/index.json`
 （包名/日期/大小/sha256）。把 zip 与 index.json 上传到 OpenLaw 同一
 GitHub Release（gh release upload … --clobber），用户端「法条数据」面板
 即可勾选下载：软件自动拉索引 → 下载 → sha256 校验 → 安装/合并/导入，
 进度实时显示。默认索引：
 `https://github.com/futuremeng/OpenLaw/releases/latest/download/index.json`
-（`openlaw.index_url` / `OPENCOURT_OPENLAW_INDEX_URL` 可指向镜像）。
+（`openlaw.index_url` / `OPENLAW_INDEX_URL` 可指向镜像）。
 
 用户流程（零配置）：装 dmg → 启动 OpenCourt → 首屏「法条数据」勾选下载；
 或手动双击 zip 解压（落 Downloads 即可）→ 启动自动发现安装到

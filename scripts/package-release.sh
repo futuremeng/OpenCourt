@@ -8,11 +8,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VER="$(grep -o 'const version = "[^"]*"' main.go | cut -d'"' -f2)"
-ARCH="$(uname -m)"
-OUT="dist/OpenCourt-${VER}-darwin-${ARCH}.dmg"
+OUT="dist/OpenCourt-${VER}-darwin-universal.dmg"
 
 export PATH="$PATH:$(go env GOPATH)/bin"
-wails build -clean
+wails build -clean -universal
 
 STAGE="dist/stage-${VER}"
 rm -rf "$STAGE"
