@@ -1,7 +1,7 @@
 # OpenCourt Makefile
 # 国内网络建议: export GOPROXY=https://goproxy.cn,direct
 
-WAILS_VERSION := v2.11.0
+WAILS_VERSION := v2.17.0
 
 .PHONY: setup dev build test lint fmt clean
 
