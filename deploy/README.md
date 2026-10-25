@@ -15,6 +15,28 @@ make build-all      # darwin universal / linux / windows
 
 签名与公证（macOS）：`wails build -codesign "Developer ID: ..."`，发布版应完成 notarization。
 
+## 配置与法条数据（桌面分发）
+
+配置加载顺序（`loadSettings`）：
+
+1. `<应用数据目录>/settings.yaml`——正式位置（macOS 为
+   `~/Library/Application Support/OpenCourt/settings.yaml`），双击 .app 启动也可读
+2. `config/settings.yaml`（相对工作目录）——开发模式
+3. 都没有 → 默认配置（`OPENCOURT_*` 环境变量覆盖始终生效）
+
+首次桌面使用：把 `config/settings.example.yaml` 复制到应用数据目录为
+`settings.yaml`，按需填写 `openlaw.data_dir`（指向 OpenLaw 数据目录，
+含 `db/ pdf/ docx/ md/ provenance/`，约 3.3G，需单独拷贝分发，不随 .app 走）。
+也可不改文件、仅设环境变量 `OPENCOURT_OPENLAW_DATA_DIR`。
+
+立场（profiles）已内置进二进制，双击启动不依赖仓库目录；工作目录下
+`profiles/` 存在时优先（允许自定义立场覆盖内置）。
+
+> 开发期 `go.mod` 以 `replace` 指向本地 OpenLaw 仓库；正式分发前给
+> OpenLaw 打 tag 并移除 replace。法条详情若显示 `UNVERIFIED`，是
+> OpenLaw 数据目录尚未生成 manifest（防篡改闸口），先在 OpenLaw 侧
+> 运行 `openlaw-check -build-manifest`。
+
 ## 机构服务器模式（可选）
 
 法院/律所等机构如需服务器集中部署（对应开发文档第九章），沿用容器策略：

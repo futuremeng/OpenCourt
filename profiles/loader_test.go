@@ -51,3 +51,16 @@ func TestInvalidRole(t *testing.T) {
 		t.Error("非法角色应报错")
 	}
 }
+
+// TestEmbeddedFallback 磁盘缺目录（双击 .app 工作目录非仓库）→ 内置兜底。
+func TestEmbeddedFallback(t *testing.T) {
+	for _, role := range []string{"court", "plaintiff", "defendant", "party"} {
+		p, err := Load(t.TempDir(), role)
+		if err != nil {
+			t.Fatalf("内置兜底失败 %s: %v", role, err)
+		}
+		if p.Role != role {
+			t.Errorf("内置 %s Role 异常: %+v", role, p)
+		}
+	}
+}

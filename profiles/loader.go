@@ -4,12 +4,19 @@
 package profiles
 
 import (
+	"embed"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
+
+// embedded 内置四立场（随二进制分发）：双击 .app 启动（工作目录非仓库）
+// 时兜底；磁盘 profiles/ 目录优先（允许用户自定义立场覆盖内置）。
+//
+//go:embed court/profile.yaml plaintiff/profile.yaml defendant/profile.yaml party/profile.yaml
+var embedded embed.FS
 
 // Profile 一份立场配置（开发文档 5.6 配置表）。
 type Profile struct {
@@ -55,7 +62,10 @@ func Load(dir, role string) (Profile, error) {
 	path := filepath.Join(dir, role, "profile.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Profile{}, fmt.Errorf("加载 Profile 失败: %w", err)
+		// 磁盘缺 → 内置兜底（桌面分发双击可用），仍缺才报错
+		if data, err = embedded.ReadFile(role + "/profile.yaml"); err != nil {
+			return Profile{}, fmt.Errorf("加载 Profile 失败: %w", err)
+		}
 	}
 	var p Profile
 	if err := yaml.Unmarshal(data, &p); err != nil {

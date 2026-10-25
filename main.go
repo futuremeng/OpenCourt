@@ -86,7 +86,7 @@ func (a *App) startup(ctx context.Context) {
 	if err := config.LoadDotEnv(".env"); err != nil {
 		log.Printf(".env 加载失败: %v", err)
 	}
-	settings, err := config.Load("config/settings.yaml")
+	settings, err := loadSettings(dataDir)
 	if err != nil {
 		log.Printf("配置加载失败，使用默认配置: %v", err)
 		settings = config.Default()
@@ -138,6 +138,28 @@ func (a *App) startup(ctx context.Context) {
 	if src != nil {
 		_ = a.auditLog.Log(settings.Profile.Active, "LAW_SOURCE_OK", "openlaw", src.Name())
 	}
+}
+
+// loadSettings 配置加载顺序（桌面分发）：
+//  1. <应用数据目录>/settings.yaml —— 正式位置：双击 .app 启动（工作目录不定）也可读
+//  2. config/settings.yaml（相对工作目录）—— 开发模式
+//  3. 都没有 → 默认配置（OPENCOURT_* 环境变量覆盖仍生效）
+//
+// 首个候选解析失败不中断：记录后回退下一候选（与「配置坏不挡启动」一致）。
+func loadSettings(appDir string) (*config.Settings, error) {
+	for _, p := range []string{filepath.Join(appDir, "settings.yaml"), "config/settings.yaml"} {
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		s, err := config.Load(p)
+		if err != nil {
+			log.Printf("配置文件解析失败（尝试下一来源）: %s: %v", p, err)
+			continue
+		}
+		log.Printf("配置来源: %s", p)
+		return s, nil
+	}
+	return config.Load("") // 不存在 → 默认 + 环境变量覆盖
 }
 
 // shutdown 关闭资源。
