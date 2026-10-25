@@ -42,6 +42,10 @@ type Settings struct {
 		DataDir  string `yaml:"data_dir"`
 		IndexURL string `yaml:"index_url"` // 数据包发布索引（应用内勾选下载）
 	} `yaml:"openlaw"`
+	// App 程序自身更新（GitHub Releases latest API；空 = 关闭自动检查）。
+	App struct {
+		UpdateAPI string `yaml:"update_api"`
+	} `yaml:"app"`
 	DataDir string `yaml:"data_dir"`
 }
 
@@ -62,6 +66,7 @@ func Default() *Settings {
 	// 数据包发布索引默认源：OpenLaw 仓库 GitHub Releases 的 index.json
 	// （发布流程由 scripts/package-lawdata.sh 生成并上传；镜像用 index_url 覆盖）。
 	s.OpenLaw.IndexURL = "https://github.com/futuremeng/OpenLaw/releases/latest/download/index.json"
+	s.App.UpdateAPI = "https://api.github.com/repos/futuremeng/OpenCourt/releases/latest"
 	return s
 }
 
@@ -144,6 +149,9 @@ func (s *Settings) applyEnv() {
 	}
 	if v, ok := get("OPENLAW_INDEX_URL"); ok {
 		s.OpenLaw.IndexURL = v
+	}
+	if v, ok := get("UPDATE_API"); ok {
+		s.App.UpdateAPI = v
 	}
 	if v, ok := get("RETRIEVE_VECTOR_DIM"); ok {
 		if n, err := strconv.Atoi(v); err == nil {

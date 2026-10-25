@@ -211,6 +211,41 @@ onMounted(() => {
     .then(() => checkLawUpdates())
     .catch((e) => (error.value = String(e)));
 });
+
+// --- 程序自身更新（横幅 + 一键下载安装重启） ---
+const appUpdate = ref<any | null>(null);
+const appUpdating = ref(false);
+const appUpdateProg = ref<string[]>([]);
+const showUpdateNotes = ref(false);
+
+async function checkAppUpdate() {
+  try {
+    const r = await App.CheckAppUpdate();
+    if (r.ok && r.available) appUpdate.value = r;
+  } catch {
+    /* 离线等情况静默跳过 */
+  }
+}
+
+async function doAppUpdate() {
+  if (!appUpdate.value) return;
+  if (!confirm(`下载并安装 ${appUpdate.value.latest}？下载完成后应用将自动退出并完成替换重启。`)) return;
+  appUpdating.value = true;
+  appUpdateProg.value = [];
+  try {
+    await App.InstallAppUpdate(); // 成功即退出重启
+  } catch (e) {
+    appUpdateProg.value = [...appUpdateProg.value, "更新失败: " + String(e)];
+    appUpdating.value = false;
+  }
+}
+
+onMounted(() => {
+  EventsOn("appupdate:progress", (m: any) => {
+    appUpdateProg.value = [...appUpdateProg.value.slice(-6), String(Array.isArray(m) ? m[0] : m)];
+  });
+  checkAppUpdate();
+});
 </script>
 
 <template>
@@ -228,6 +263,21 @@ onMounted(() => {
       <span class="badge">脱敏级别: {{ info.redactLevel }}</span>
     </div>
   </header>
+
+  <!-- 程序更新横幅（发现新版才显示） -->
+  <div v-if="appUpdate && appUpdate.available" class="update-banner">
+    <div class="ub-row">
+      <span class="ub-title">新版本 {{ appUpdate.latest }}</span>
+      <span class="muted">当前 {{ appUpdate.current }}<template v-if="appUpdate.package"> · {{ appUpdate.package }}（{{ humanSize(appUpdate.size || 0) }}）</template></span>
+      <span class="spacer"></span>
+      <button class="btn sm" @click="showUpdateNotes = !showUpdateNotes">更新说明</button>
+      <button class="btn primary sm" :disabled="appUpdating" @click="doAppUpdate">{{ appUpdating ? '下载中…' : '下载并更新' }}</button>
+    </div>
+    <pre v-if="showUpdateNotes" class="ub-notes">{{ appUpdate.notes || '（无说明）' }}</pre>
+    <ul v-if="appUpdateProg.length" class="law-prog">
+      <li v-for="(l, i) in appUpdateProg" :key="i">{{ l }}</li>
+    </ul>
+  </div>
 
   <main class="layout">
     <section class="panel wide lawdata">
@@ -370,6 +420,10 @@ onMounted(() => {
 .badge.ok { background: #065f46; }
 .badge.warn { background: #92400e; }
 .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px 24px; }
+.update-banner { margin: 12px 24px 0; border: 1px solid #bcd4f5; background: #eef5ff; border-radius: 10px; padding: 10px 14px; }
+.ub-row { display: flex; align-items: center; gap: 10px; }
+.ub-title { font-weight: 600; color: #1a5fb4; }
+.ub-notes { margin: 8px 0 0; padding: 8px 10px; background: #fff; border-radius: 6px; font-size: 12px; white-space: pre-wrap; }
 .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
 .panel.wide { grid-column: 1 / -1; }
 .panel h2 { margin: 0 0 8px; font-size: 15px; }

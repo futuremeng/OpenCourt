@@ -24,6 +24,8 @@ mkdir -p dist
 rm -f "$OUT"
 hdiutil create -volname "OpenCourt ${VER}" -srcfolder "$STAGE" -ov -format UDZO "$OUT" >/dev/null
 rm -rf "$STAGE"
-echo "完成: $OUT"
+# 自更新依赖同名 .sha256 资产（缺失则客户端拒绝无校验安装）
+shasum -a 256 "$OUT" > "$OUT.sha256"
+echo "完成: $OUT (+.sha256)"
 echo "语料包: scripts/package-lawdata.sh（独立下载分发）"
 echo "分发提示: 正式对外分发需 codesign + notarize（deploy/README.md）。"

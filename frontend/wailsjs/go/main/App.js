@@ -10,6 +10,10 @@ export function BuildTimeline() {
   return window['go']['main']['App']['BuildTimeline']();
 }
 
+export function CheckAppUpdate() {
+  return window['go']['main']['App']['CheckAppUpdate']();
+}
+
 export function CheckLawDataUpdates() {
   return window['go']['main']['App']['CheckLawDataUpdates']();
 }
@@ -28,6 +32,10 @@ export function DownloadAndInstallLawData(arg1) {
 
 export function IngestDocument(arg1) {
   return window['go']['main']['App']['IngestDocument'](arg1);
+}
+
+export function InstallAppUpdate() {
+  return window['go']['main']['App']['InstallAppUpdate']();
 }
 
 export function LawDataStatus() {
