@@ -4,7 +4,10 @@
 
 ```bash
 scripts/package-release.sh            # 程序包：轻量 dmg（~15MB，仅 app）
-scripts/package-lawdata.sh            # 语料包：lawdata-<日期>.zip + .sha256
+scripts/package-lawdata.sh            # 语料分层包：lawdata-core-<日期>.zip（db+manifest，
+                                      # 装上即检索）+ lawdata-evidence-<日期>.zip
+                                      # （docx/md/provenance，启动自动合并补全溯源）；
+                                      # 各附 .sha256；`-full` 另产出单包全量（离线机）
 ```
 
 分开理由：程序与语料更新节奏不同——程序修 bug 频繁发版（15MB 重下无负担），
