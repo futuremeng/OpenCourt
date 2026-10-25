@@ -63,6 +63,24 @@
       "env": {
         "GOPROXY": "https://goproxy.cn,direct"
       }
+    },
+    {
+      // 打包形态调试（.app）：wails build -debug 产出带调试符号（__DWARF）+ DevTools 的
+      // 应用包，Delve 直接执行 .app 内二进制——仅 .app 形态生效的功能可断点验证：
+      // 自更新（InstallAppUpdate 对非 .app 明确拒绝，dev 模式测不到）、dmg 安装形态、
+      // 语料自动发现的 bundle 路径逻辑等。断点照常打在 Go 源码上。
+      // 注意：自更新走到「启动 updater 脚本 + Quit」一步会真的替换本实例并重启；
+      // 只想观察决策分支就在 exec.Command/Quit 前下断点。
+      "name": "6. 调试打包形态 .app (wails build -debug + Delve 直执)",
+      "type": "go",
+      "request": "launch",
+      "mode": "exec",
+      "program": "${workspaceFolder}/build/bin/OpenCourt.app/Contents/MacOS/OpenCourt",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "wails-build-debug",
+      "env": {
+        "GOPROXY": "https://goproxy.cn,direct"
+      }
     }
   ]
 }

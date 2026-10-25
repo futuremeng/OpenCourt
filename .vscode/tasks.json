@@ -78,6 +78,20 @@
       "problemMatcher": []
     },
     {
+      // 打包形态调试支撑：产出带调试符号的 .app（配置 6 的 preLaunchTask）。
+      "label": "wails-build-debug",
+      "type": "shell",
+      "command": "wails build -debug",
+      "options": {
+        "env": {
+          "PATH": "${env:PATH}:${env:HOME}/go/bin",
+          "GOPROXY": "https://goproxy.cn,direct"
+        }
+      },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
       "label": "go-test-current-file",
       "type": "shell",
       "command": "go test -v ${fileDirname}",
