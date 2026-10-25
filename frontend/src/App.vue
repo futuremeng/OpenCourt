@@ -2,6 +2,7 @@
 import { onMounted, ref } from "vue";
 import * as App from "../wailsjs/go/main/App";
 import type { AppInfo, Fact } from "../wailsjs/go/main/App";
+import { EventsOn } from "../wailsjs/runtime/runtime";
 import FactBoard from "./components/FactBoard.vue";
 
 const info = ref<AppInfo | null>(null);
@@ -105,6 +106,56 @@ onMounted(async () => {
     error.value = String(e);
   }
 });
+
+// --- 法条数据管理（语料安装 / 证据层补装 / 增量更新包） ---
+const lawStatus = ref<any | null>(null);
+const lawMsgs = ref<string[]>([]);
+const lawBusy = ref(false);
+
+async function refreshLawStatus() {
+  lawStatus.value = await App.LawDataStatus();
+}
+
+async function loadLawDataZip() {
+  error.value = "";
+  try {
+    const path = await App.PickLawDataPackage();
+    if (!path) return;
+    await doLoadLawData(path);
+  } catch (e) {
+    error.value = String(e);
+  }
+}
+
+async function loadLawDataDir() {
+  error.value = "";
+  try {
+    const path = await App.PickLawDataDir();
+    if (!path) return;
+    await doLoadLawData(path);
+  } catch (e) {
+    error.value = String(e);
+  }
+}
+
+async function doLoadLawData(path: string) {
+  lawBusy.value = true;
+  lawMsgs.value = [`已选择: ${path}`];
+  try {
+    lawStatus.value = await App.LoadLawData(path);
+  } catch (e) {
+    error.value = String(e);
+  } finally {
+    lawBusy.value = false;
+  }
+}
+
+onMounted(() => {
+  EventsOn("lawdata:progress", (m: any) => {
+    lawMsgs.value = [...lawMsgs.value.slice(-8), String(Array.isArray(m) ? m[0] : m)];
+  });
+  refreshLawStatus().catch((e) => (error.value = String(e)));
+});
 </script>
 
 <template>
@@ -124,6 +175,35 @@ onMounted(async () => {
   </header>
 
   <main class="layout">
+    <section class="panel wide lawdata">
+      <h2>法条数据</h2>
+      <div v-if="lawStatus && !lawStatus.installed" class="law-notice">
+        尚未安装离线法条库。可从发布页下载 <b>lawdata-core</b> 数据包（解压到「下载」即会自动安装），
+        或直接选择已下载的数据包加载：
+      </div>
+      <div v-else-if="lawStatus" class="law-stats">
+        <span class="badge ok">已安装</span>
+        <span class="badge">{{ lawStatus.docs }} 部文档</span>
+        <span class="badge">{{ lawStatus.articles }} 条法条</span>
+        <span class="badge" :class="lawStatus.evidence_ok ? 'ok' : 'warn'">
+          证据层 {{ lawStatus.evidence_ok ? "完整" : "缺失（详情将显示未验证）" }}
+        </span>
+        <span class="badge" :class="lawStatus.manifest_signed ? 'ok' : 'warn'">
+          签名清单 {{ lawStatus.manifest_signed ? "已签名" : "无（无法验证真伪）" }}
+        </span>
+        <span class="hint" style="width:100%">语料目录: {{ lawStatus.data_dir }}</span>
+      </div>
+      <div class="row">
+        <button :disabled="lawBusy" @click="loadLawDataZip">
+          {{ lawBusy ? "加载中…" : (lawStatus && lawStatus.installed ? "加载更新数据包（zip）" : "加载数据包（zip）") }}
+        </button>
+        <button :disabled="lawBusy" @click="loadLawDataDir">选择已解压的数据目录</button>
+      </div>
+      <ul v-if="lawMsgs.length" class="law-progress">
+        <li v-for="(m, i) in lawMsgs" :key="i">{{ m }}</li>
+      </ul>
+    </section>
+
     <section class="panel">
       <h2>录入事实</h2>
       <p class="hint">初始状态由状态机判定：有引用→单源未补强；对方来源→对方主张；无来源→无依据。</p>
@@ -238,6 +318,13 @@ onMounted(async () => {
 .tdate { display: inline-block; min-width: 90px; color: #4338ca; font-weight: 600; }
 .tstate { color: #6b7280; font-size: 12px; margin-left: 6px; }
 .blindspots { font-size: 13px; padding-left: 18px; }
+.lawdata .law-notice {
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+  padding: 8px 12px; font-size: 13px; margin-bottom: 4px;
+}
+.law-stats { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 4px; }
+.law-stats .badge { color: #fff; }
+.law-progress { font-size: 12px; color: #374151; padding-left: 18px; margin: 8px 0 0; }
 .disclaimer {
   padding: 12px 24px; font-size: 12px; color: #6b7280;
   border-top: 1px solid #e5e7eb; background: #fff;

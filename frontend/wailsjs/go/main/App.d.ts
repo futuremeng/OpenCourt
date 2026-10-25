@@ -16,13 +16,21 @@ export function CreateFact(arg1:string,arg2:string,arg3:number,arg4:string,arg5:
 
 export function IngestDocument(arg1:string):Promise<storage.DocumentInfo>;
 
+export function LawDataStatus():Promise<Record<string, any>>;
+
 export function ListConflicts():Promise<Array<domain.Conflict>>;
 
 export function ListDocuments():Promise<Array<storage.DocumentInfo>>;
 
 export function ListFacts():Promise<Array<domain.Fact>>;
 
+export function LoadLawData(arg1:string):Promise<Record<string, any>>;
+
 export function PickDocumentFile():Promise<string>;
+
+export function PickLawDataDir():Promise<string>;
+
+export function PickLawDataPackage():Promise<string>;
 
 export function RedactText(arg1:string,arg2:Array<string>):Promise<redact.Result>;
 

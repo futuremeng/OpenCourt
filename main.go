@@ -32,6 +32,9 @@ import (
 	"github.com/futuremeng/OpenCourt/neutral"
 	"github.com/futuremeng/OpenCourt/plugins"
 	"github.com/futuremeng/OpenCourt/profiles"
+
+	"github.com/futuremeng/OpenLaw/pack"
+	"github.com/futuremeng/OpenLaw/store"
 )
 
 //go:embed all:frontend/dist
@@ -155,15 +158,33 @@ func (a *App) startup(ctx context.Context) {
 			}
 		}
 	}
-	src, err := plugins.NewOpenLawSource(settings.OpenLaw.DataDir)
+	a.openLawSource()
+}
+
+// openLawSource 按当前设置打开法条源（启动时与数据包加载后复用）。
+// 打开失败不阻断（法条检索不可用 + 审计留痕），其余功能不受影响。
+func (a *App) openLawSource() {
+	a.closeLawSource()
+	src, err := plugins.NewOpenLawSource(a.settings.OpenLaw.DataDir)
 	if err != nil {
 		log.Printf("OpenLaw 法条源初始化失败（法条检索不可用）: %v", err)
-		_ = a.auditLog.Log(settings.Profile.Active, "LAW_SOURCE_FAIL", "openlaw", err.Error())
+		_ = a.auditLog.Log(a.settings.Profile.Active, "LAW_SOURCE_FAIL", "openlaw", err.Error())
 	}
 	a.lawSource = src
 	if src != nil {
-		_ = a.auditLog.Log(settings.Profile.Active, "LAW_SOURCE_OK", "openlaw", src.Name())
+		_ = a.auditLog.Log(a.settings.Profile.Active, "LAW_SOURCE_OK", "openlaw", src.Name())
 	}
+}
+
+// closeLawSource 关闭法条源句柄（替换语料前必须释放 SQLite 文件锁）。
+func (a *App) closeLawSource() {
+	if a.lawSource == nil {
+		return
+	}
+	if c, ok := a.lawSource.(interface{ Close() error }); ok {
+		_ = c.Close()
+	}
+	a.lawSource = nil
 }
 
 // loadSettings 配置加载顺序（桌面分发）：
@@ -210,6 +231,128 @@ func (a *App) ensureLawData(settings *config.Settings, source string) string {
 func dirExists(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && st.IsDir()
+}
+
+// --- 法条数据管理（数据包加载与更新，前端「法条数据」面板） ---
+
+// LawDataStatus 语料概况：是否已装、文档/条文计数、证据层与签名 manifest
+// 状态。前端据此在首屏提示「加载数据包」或「加载更新包」。
+func (a *App) LawDataStatus() map[string]any {
+	st := lawinstall.Status(a.settings.OpenLaw.DataDir)
+	return map[string]any{
+		"installed":       st.Installed,
+		"data_dir":        st.DataDir,
+		"docs":            st.Docs,
+		"articles":        st.Articles,
+		"evidence_ok":     st.EvidenceOK,
+		"manifest_signed": st.ManifestSigned,
+	}
+}
+
+// PickLawDataPackage 弹出文件选择框：语料/更新包 zip。
+func (a *App) PickLawDataPackage() (string, error) {
+	return a.pickLawDataPath("选择法条数据包（core/evidence/更新包 zip）", "*.zip")
+}
+
+// PickLawDataDir 弹出目录选择框：已解压的数据目录。
+func (a *App) PickLawDataDir() (string, error) {
+	return a.pickLawDataPath("选择法条数据目录（已解压的 law-data / law-evidence / 更新包）", "")
+}
+
+func (a *App) pickLawDataPath(title, pattern string) (string, error) {
+	if pattern == "" {
+		return wailsRuntime.OpenDirectoryDialog(a.ctx, wailsRuntime.OpenDialogOptions{Title: title})
+	}
+	return wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title:   title,
+		Filters: []wailsRuntime.FileFilter{{DisplayName: "数据包 (zip)", Pattern: pattern}},
+	})
+}
+
+// LoadLawData 加载数据包（zip 或目录），自动识别类型并执行：
+//   - core / full：首次安装，或全量替换现有语料（更新语义；失败回滚旧语料）
+//   - evidence   ：合并证据层（只补缺失，溯源链补全）
+//   - update     ：openlaw-pack 增量包——签名/哈希校验通过后逐条导入，
+//     校验失败拒绝导入并保留旧数据（6.4 增量包契约）
+//
+// 全程通过 "lawdata:progress" 事件向前端报告进度；结果审计留痕。
+func (a *App) LoadLawData(path string) (map[string]any, error) {
+	if path == "" {
+		return nil, fmt.Errorf("未选择数据包路径")
+	}
+	role := a.settings.Profile.Active
+	report := func(s string) {
+		log.Printf("法条数据: %s", s)
+		if a.ctx != nil {
+			wailsRuntime.EventsEmit(a.ctx, "lawdata:progress", s)
+		}
+	}
+	fail := func(err error) (map[string]any, error) {
+		log.Printf("法条数据加载失败: %v", err)
+		_ = a.auditLog.Log(role, "LAW_DATA_LOAD_FAIL", path, err.Error())
+		return nil, err
+	}
+
+	src, tmp, err := lawinstall.NormalizeSource(path)
+	if tmp != "" {
+		defer os.RemoveAll(tmp)
+	}
+	if err != nil {
+		return fail(err)
+	}
+	kind := lawinstall.Classify(src)
+	if kind == "" {
+		return fail(fmt.Errorf("无法识别的数据包（需为 core/evidence/更新包）: %s", filepath.Base(path)))
+	}
+	target := a.settings.OpenLaw.DataDir
+	if target == "" {
+		target = filepath.Join(a.dataDir, "law-data")
+	}
+	report(fmt.Sprintf("识别为 %s 包: %s", kind, filepath.Base(path)))
+
+	switch kind {
+	case "core", "full":
+		a.closeLawSource() // 释放旧 SQLite 句柄再换目录
+		if lawinstall.Installed(target) {
+			if err := lawinstall.Replace(src, target, report); err != nil {
+				return fail(err)
+			}
+			_ = a.auditLog.Log(role, "LAW_DATA_REPLACED", target, path)
+		} else {
+			if err := lawinstall.Install(src, target, report); err != nil {
+				return fail(err)
+			}
+			_ = a.auditLog.Log(role, "LAW_DATA_INSTALLED", target, path)
+		}
+		a.settings.OpenLaw.DataDir = target
+	case "evidence":
+		if !lawinstall.Installed(target) {
+			return fail(fmt.Errorf("尚未安装语料：请先加载 core 数据包，再补装证据层"))
+		}
+		if err := lawinstall.MergeEvidence(src, target, report); err != nil {
+			return fail(err)
+		}
+		_ = a.auditLog.Log(role, "LAW_EVIDENCE_MERGED", target, path)
+	case "update":
+		if !lawinstall.Installed(target) {
+			return fail(fmt.Errorf("尚未安装语料：增量更新包需要基础语料先就位"))
+		}
+		a.closeLawSource() // 导入前释放句柄，避免 SQLite 写冲突
+		db, err := store.Open(filepath.Join(target, "db", "openlaw.db"))
+		if err != nil {
+			return fail(fmt.Errorf("打开语料库失败: %w", err))
+		}
+		res, err := pack.Import(db, target, src)
+		db.Close()
+		if err != nil {
+			return fail(err)
+		}
+		_ = a.auditLog.Log(role, "LAW_PACK_IMPORTED", target, fmt.Sprintf("%d 条文档", len(res)))
+		report(fmt.Sprintf("增量导入完成：新增 %d 条文档", len(res)))
+	}
+
+	a.openLawSource() // 语料已变，重开法条源
+	return a.LawDataStatus(), nil
 }
 
 // shutdown 关闭资源。

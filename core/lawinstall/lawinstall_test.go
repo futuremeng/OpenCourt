@@ -1,9 +1,12 @@
 package lawinstall
 
 import (
+	"archive/zip"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/futuremeng/OpenLaw/store"
 )
 
 // mkLawData 造一个最小合法数据目录（db/openlaw.db + 一个文件 + logs/）。
@@ -141,5 +144,160 @@ func TestInstallCopyAndIdempotent(t *testing.T) {
 	// 半途失败不留 .installing 残骸：目标非法 + 源非法 → 报错
 	if err := Install(filepath.Join(t.TempDir(), "none"), filepath.Join(t.TempDir(), "x"), nil); err == nil {
 		t.Error("源缺 db 应报错")
+	}
+}
+
+// --- 数据包显式加载：识别 / zip / 替换 / 状态 ---
+
+func makeZip(t *testing.T, path string, files map[string]string) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	w := zip.NewWriter(f)
+	for name, body := range files {
+		fw, err := w.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fw.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClassify(t *testing.T) {
+	core := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(core, "db"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(core, "db", "openlaw.db"), []byte("db"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := Classify(core); got != "core" {
+		t.Errorf("core: got %q", got)
+	}
+
+	full := t.TempDir()
+	mkLawData(t, full)
+	if got := Classify(full); got != "full" {
+		t.Errorf("full: got %q", got)
+	}
+
+	ev := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(ev, "md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ev, "md", "a.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := Classify(ev); got != "evidence" {
+		t.Errorf("evidence: got %q", got)
+	}
+
+	up := t.TempDir()
+	if err := os.WriteFile(filepath.Join(up, "changes.csv"), []byte("action,doc_id\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := Classify(up); got != "update" {
+		t.Errorf("update: got %q", got)
+	}
+
+	if got := Classify(t.TempDir()); got != "" {
+		t.Errorf("空目录应不可识别: got %q", got)
+	}
+}
+
+func TestNormalizeSourceZip(t *testing.T) {
+	zipPath := filepath.Join(t.TempDir(), "lawdata-core.zip")
+	makeZip(t, zipPath, map[string]string{
+		"law-data/db/openlaw.db": "db",
+		"__MACOSX/junk":          "x",
+	})
+	src, tmp, err := NormalizeSource(zipPath)
+	if tmp != "" {
+		defer os.RemoveAll(tmp)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(src) != "law-data" {
+		t.Errorf("应进入唯一根目录 law-data, got %s", src)
+	}
+	if got := Classify(src); got != "core" {
+		t.Errorf("zip 内容应识别为 core: got %q", got)
+	}
+}
+
+func TestExtractZipSlip(t *testing.T) {
+	zipPath := filepath.Join(t.TempDir(), "evil.zip")
+	makeZip(t, zipPath, map[string]string{"../escape.txt": "evil"})
+	if err := ExtractZip(zipPath, t.TempDir()); err == nil {
+		t.Error("zip-slip 条目应被拒绝")
+	}
+}
+
+func TestReplaceAtomic(t *testing.T) {
+	target := t.TempDir()
+	mkLawData(t, target)
+	if err := os.WriteFile(filepath.Join(target, "db", "marker"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := t.TempDir()
+	mkLawData(t, src)
+	if err := os.WriteFile(filepath.Join(src, "db", "marker"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Replace(src, target, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(filepath.Join(target, "db", "marker"))
+	if string(got) != "new" {
+		t.Errorf("替换后应为新语料, got %q", got)
+	}
+	if _, err := os.Stat(target + ".old"); !os.IsNotExist(err) {
+		t.Error("替换成功不应留下 .old")
+	}
+	// 源非法 → 旧语料原样保留
+	if err := Replace(filepath.Join(t.TempDir(), "none"), target, nil); err == nil {
+		t.Error("源非法应报错")
+	}
+	got, _ = os.ReadFile(filepath.Join(target, "db", "marker"))
+	if string(got) != "new" {
+		t.Error("失败替换不得破坏现有语料")
+	}
+}
+
+func TestStatus(t *testing.T) {
+	st := Status(t.TempDir())
+	if st.Installed {
+		t.Error("空目录应未安装")
+	}
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "db"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(filepath.Join(dir, "db", "openlaw.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("INSERT INTO document (doc_id, file_name, file_path, file_size, sha256, hash_computed_at, confirm_status) VALUES ('d1','d1.docx','docx/d1.docx',1,'aa','2026-01-01','confirmed')"); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	if err := os.MkdirAll(filepath.Join(dir, "provenance"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "provenance", "p.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st = Status(dir)
+	if !st.Installed || st.Docs != 1 || !st.EvidenceOK || st.ManifestSigned {
+		t.Errorf("状态汇总不符: %+v", st)
 	}
 }

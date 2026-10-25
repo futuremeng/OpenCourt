@@ -22,6 +22,10 @@ export function IngestDocument(arg1) {
   return window['go']['main']['App']['IngestDocument'](arg1);
 }
 
+export function LawDataStatus() {
+  return window['go']['main']['App']['LawDataStatus']();
+}
+
 export function ListConflicts() {
   return window['go']['main']['App']['ListConflicts']();
 }
@@ -34,8 +38,20 @@ export function ListFacts() {
   return window['go']['main']['App']['ListFacts']();
 }
 
+export function LoadLawData(arg1) {
+  return window['go']['main']['App']['LoadLawData'](arg1);
+}
+
 export function PickDocumentFile() {
   return window['go']['main']['App']['PickDocumentFile']();
+}
+
+export function PickLawDataDir() {
+  return window['go']['main']['App']['PickLawDataDir']();
+}
+
+export function PickLawDataPackage() {
+  return window['go']['main']['App']['PickLawDataPackage']();
 }
 
 export function RedactText(arg1, arg2) {
