@@ -1,6 +1,22 @@
 # 部署
 
-## 桌面端（主分发形态）
+## 普通用户（推荐形态：一键安装包）
+
+```bash
+scripts/package-release.sh            # 默认打 ../OpenLaw/data 语料
+scripts/package-release.sh /path/to/law-data
+```
+
+产出 `dist/OpenCourt-<ver>-darwin-<arch>.dmg`：卷内含 `OpenCourt.app + law-data/`。
+用户拿到后：打开 dmg → 双击 OpenCourt（或把 app 与 law-data 一起拖到本机）→
+首次启动自动把法条数据安装到 `~/Library/Application Support/OpenCourt/law-data/`
+（一次性、幂等，审计留痕 `LAW_DATA_INSTALLED`）→ 直接用，零配置。
+
+前置：发布版数据目录应已生成 manifest 签名（OpenLaw `docs/deploy.md` §5），
+否则用户端法条详情显示 UNVERIFIED；脚本会检查并警告。
+对外分发需 codesign + notarize（见下）。
+
+## 桌面端（开发者构建）
 
 ```bash
 make build          # 当前平台安装包

@@ -25,6 +25,7 @@ import (
 	"github.com/futuremeng/OpenCourt/core/domain"
 	"github.com/futuremeng/OpenCourt/core/gate"
 	"github.com/futuremeng/OpenCourt/core/ingest"
+	"github.com/futuremeng/OpenCourt/core/lawinstall"
 	"github.com/futuremeng/OpenCourt/core/redact"
 	"github.com/futuremeng/OpenCourt/core/statemachine"
 	"github.com/futuremeng/OpenCourt/core/storage"
@@ -129,6 +130,24 @@ func (a *App) startup(ctx context.Context) {
 
 	// OpenLaw 法条源（M4 对接）：进程内 sdk，禁止直连数据库；未配置 → nil 降级。
 	// 打开失败不阻断启动（法条检索不可用 + 审计留痕），其余功能不受影响。
+	// 桌面分发：未配置（或配置路径失效）且分发包内带 law-data（dmg 卷内）→
+	// 首次启动自动安装到本机应用数据目录（一次性、幂等；SQLite 需本地读写）。
+	if exe, err := os.Executable(); err == nil {
+		if bundled := lawinstall.FindBundled(exe); bundled != "" {
+			if settings.OpenLaw.DataDir == "" || !dirExists(settings.OpenLaw.DataDir) {
+				target := filepath.Join(dataDir, "law-data")
+				if err := lawinstall.Install(bundled, target, func(s string) {
+					log.Printf("法条数据安装: %s", s)
+				}); err != nil {
+					log.Printf("法条数据安装失败: %v", err)
+					_ = a.auditLog.Log(settings.Profile.Active, "LAW_DATA_INSTALL_FAIL", "lawinstall", err.Error())
+				} else {
+					settings.OpenLaw.DataDir = target
+					_ = a.auditLog.Log(settings.Profile.Active, "LAW_DATA_INSTALLED", "lawinstall", target)
+				}
+			}
+		}
+	}
 	src, err := plugins.NewOpenLawSource(settings.OpenLaw.DataDir)
 	if err != nil {
 		log.Printf("OpenLaw 法条源初始化失败（法条检索不可用）: %v", err)
@@ -160,6 +179,12 @@ func loadSettings(appDir string) (*config.Settings, error) {
 		return s, nil
 	}
 	return config.Load("") // 不存在 → 默认 + 环境变量覆盖
+}
+
+// dirExists 目录存在判据（配置路径有效性检查）。
+func dirExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.IsDir()
 }
 
 // shutdown 关闭资源。
