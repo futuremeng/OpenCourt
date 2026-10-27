@@ -65,15 +65,17 @@ type GovListEntry struct {
 
 // GovListOptions 浏览任务参数。
 type GovListOptions struct {
-	Cat      string        // 分类过滤器（部门规章/地方政府规章；空 = 混合清单全收）
-	MaxPages int           // 单会话翻页上限（默认 50，硬上限 200）
-	Delay    time.Duration // 翻页间隔（默认 2.5s，下限 2s）
+	Cat       string        // 分类过滤器（部门规章/地方政府规章；空 = 混合清单全收）
+	MaxPages  int           // 单会话翻页上限（默认 50，硬上限 200）
+	Delay     time.Duration // 翻页间隔（默认 2.5s，下限 2s）
+	StartPage int           // 起始页（默认 1；>1 用官方「跳转」控件到达，跨会话续接用）
 }
 
 // GovListReport 浏览任务结果（OutPath 由调用方写盘后填充）。
 type GovListReport struct {
 	StartURL  string         `json:"start_url"`
 	Cat       string         `json:"cat"`
+	StartPage int            `json:"start_page"`
 	Pages     int            `json:"pages"`
 	Entries   []GovListEntry `json:"entries"`
 	StoppedAt string         `json:"stopped_at"` // done / max_pages / empty_page / no_next
@@ -108,6 +110,24 @@ const b = document.querySelector('button.turnPage.next-page');
 if (!b || b.disabled) return 'no_next';
 b.click();
 return 'clicked';`
+
+// govListJumpJSFmt 官方「跳转」控件（输入页码 + 点「确定」，页面自身 JS 生效）
+// ——等价人工输入页码跳页，用于跨会话续接；%d 只接受编排层生成的整数页码。
+const govListJumpJSFmt = `
+const inp = document.querySelector('input.jumpText');
+if (!inp) return 'no_input';
+inp.value = '%d';
+inp.dispatchEvent(new Event('input', {bubbles: true}));
+const btns = Array.from(document.querySelectorAll('button.jump-button'));
+const ok = btns.find(b => (b.textContent || '').includes('确定'));
+if (!ok) return 'no_btn';
+ok.click();
+return 'jumped';`
+
+// govListSelPageJS 读取官方分页控件当前选中页码（跳转结果核验）。
+const govListSelPageJS = `
+const sel = document.querySelector('li.sel-page');
+return sel ? sel.textContent.trim() : '';`
 
 // govListRawEntry evaluate 回传的页面条目（未过滤）。
 type govListRawEntry struct {
@@ -208,6 +228,40 @@ func clickNextPage(ctx context.Context, b plugins.BrowserPlugin, pageID int) (bo
 	return strings.Contains(raw, "clicked"), nil
 }
 
+// jumpToPage 用官方「跳转」控件到达指定页（等价人工输入页码 + 点确定），并以
+// 分页控件选中页码核验生效（SPA 生效滞后重试 ≤govListReadyTries 次）。
+// 核验不过（页码越界/控件改版）直接报错——绝不在错误页上采集。
+func jumpToPage(ctx context.Context, b plugins.BrowserPlugin, pageID, page int) error {
+	raw, err := b.Evaluate(ctx, pageID, fmt.Sprintf(govListJumpJSFmt, page))
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(raw, "jumped") {
+		if len(raw) > 80 {
+			raw = raw[:80]
+		}
+		return fmt.Errorf("官方跳转控件不可用: %s", raw)
+	}
+	want := fmt.Sprintf("%d", page)
+	for tries := 0; tries < govListReadyTries; tries++ {
+		if tries > 0 {
+			select {
+			case <-time.After(govListReadyPause):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		raw, err := b.Evaluate(ctx, pageID, govListSelPageJS)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(raw) == want {
+			return nil
+		}
+	}
+	return fmt.Errorf("跳转后页码核验失败（期望第 %d 页）", page)
+}
+
 // RunGovListBrowse 执行规章库清单浏览：打开官方列表页（混合清单）→ 逐页抽取
 // 条目（cat 按发布机关逐条推断）→ 官方分页按钮翻页（限速）→ 直到无下一页/达上限。
 // 返回的清单字段与 OpenLaw openlaw-govcn -source gzk 的 list.json 直接兼容。
@@ -248,6 +302,9 @@ func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 	if opts.Delay < govListMinDelay {
 		opts.Delay = govListDefaultDelay
 	}
+	if opts.StartPage < 1 {
+		opts.StartPage = 1
+	}
 
 	page, err := b.Open(ctx, GovListStartURL)
 	if err != nil {
@@ -255,7 +312,12 @@ func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 	}
 	defer func() { _ = b.ClosePage(context.WithoutCancel(ctx), page.PageID) }()
 
-	rep := GovListReport{StartURL: GovListStartURL, Cat: opts.Cat, StoppedAt: "done"}
+	rep := GovListReport{StartURL: GovListStartURL, Cat: opts.Cat, StartPage: opts.StartPage, StoppedAt: "done"}
+	if opts.StartPage > 1 {
+		if err := jumpToPage(ctx, b, page.PageID, opts.StartPage); err != nil {
+			return rep, fmt.Errorf("跳转到第 %d 页失败: %w", opts.StartPage, err)
+		}
+	}
 	seen := map[string]bool{}
 
 	for pageno := 1; pageno <= opts.MaxPages; pageno++ {

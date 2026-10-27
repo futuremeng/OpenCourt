@@ -273,6 +273,7 @@ async function runWebResearch() {
 const assistUrl = ref("");
 const govCat = ref("");
 const govPages = ref(20);
+const govStart = ref(1);
 const govBusy = ref(false);
 const govResult = ref<any | null>(null);
 const govErr = ref("");
@@ -280,7 +281,7 @@ const govErr = ref("");
 async function runGovListBrowse() {
   govErr.value = ""; govResult.value = null; govBusy.value = true;
   try {
-    govResult.value = await App.BrowseGovList(govCat.value, govPages.value);
+    govResult.value = await App.BrowseGovList(govCat.value, govPages.value, govStart.value);
   } catch (e) {
     govErr.value = String(e);
   } finally {
@@ -564,6 +565,7 @@ async function awaitHuman() {
           <option value="部门规章">仅部门规章</option>
           <option value="地方政府规章">仅地方政府规章</option>
         </select>
+        <input v-model.number="govStart" type="number" min="1" style="width:70px" title="起始页（跨会话续接：上次停在第 N 页，这里填 N+1）" />
         <input v-model.number="govPages" type="number" min="1" max="200" style="width:90px" title="单会话翻页上限（≤200）" />
         <button class="primary" :disabled="govBusy" @click="runGovListBrowse">{{ govBusy ? "浏览中…" : "开始浏览" }}</button>
       </div>

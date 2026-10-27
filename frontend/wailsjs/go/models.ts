@@ -163,6 +163,7 @@ export namespace neutral {
 	export class GovListReport {
 	    start_url: string;
 	    cat: string;
+	    start_page: number;
 	    pages: number;
 	    entries: GovListEntry[];
 	    stopped_at: string;
@@ -176,6 +177,7 @@ export namespace neutral {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.start_url = source["start_url"];
 	        this.cat = source["cat"];
+	        this.start_page = source["start_page"];
 	        this.pages = source["pages"];
 	        this.entries = this.convertValues(source["entries"], GovListEntry);
 	        this.stopped_at = source["stopped_at"];

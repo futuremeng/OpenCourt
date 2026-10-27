@@ -17,6 +17,7 @@ type govListStub struct {
 	nextSeq  []string // 每次翻页脚本回传（clicked / no_next）
 	page     int      // 当前页（0 基）
 	nextCall int
+	jumps    int // 官方跳转控件点击次数
 	opens    []string
 	execs    int // act 执行次数（新编排不应再有 act 翻页）
 	disabled bool
@@ -51,6 +52,30 @@ func (s *govListStub) Evaluate(ctx context.Context, pageID int, code string) (st
 			return out, nil
 		}
 		return "no_next", nil
+	}
+	if strings.Contains(code, "jumpText") {
+		i := strings.Index(code, "inp.value = '")
+		if i < 0 {
+			return "no_input", nil
+		}
+		rest := code[i+13:]
+		j := strings.Index(rest, "'")
+		if j < 0 {
+			return "no_input", nil
+		}
+		n := 0
+		for _, c := range rest[:j] {
+			if c < '0' || c > '9' {
+				break
+			}
+			n = n*10 + int(c-'0')
+		}
+		s.jumps++
+		s.page = n - 1 // 跳转生效（0 基）
+		return "jumped", nil
+	}
+	if strings.Contains(code, "sel-page") {
+		return fmt.Sprintf("%d", s.page+1), nil
 	}
 	if s.page < len(s.pages) {
 		return s.pages[s.page], nil
@@ -129,6 +154,37 @@ func TestRunGovListBrowseFlow(t *testing.T) {
 	}
 	if s.execs != 0 {
 		t.Errorf("翻页不得走 act 写通道（应纯 DOM click 官方按钮）: %d", s.execs)
+	}
+}
+
+func TestRunGovListBrowseStartPage(t *testing.T) {
+	pages := make([]string, 6)
+	for i := range pages {
+		pages[i] = fmt.Sprintf(`[{"title":"t%d","url":"https://www.gov.cn/a/content_%d.htm","puborg":"教育部"}]`, i, i)
+	}
+	s := &govListStub{pages: pages, nextSeq: []string{"clicked"}}
+	rep, err := RunGovListBrowse(context.Background(), s, GovListOptions{
+		StartPage: 3, MaxPages: 2, Delay: time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.jumps != 1 {
+		t.Errorf("必须经官方跳转控件到达起始页: jumps=%d", s.jumps)
+	}
+	if len(rep.Entries) != 2 || rep.Entries[0].Title != "t2" || rep.Entries[1].Title != "t3" {
+		t.Errorf("应从第 3 页开始采集: %+v", rep.Entries)
+	}
+	if rep.StartPage != 3 {
+		t.Errorf("报告应记录起始页: %+v", rep)
+	}
+	// 页码核验不过（stub 恒核验通过，此处验证越界跳转后 extract 空即停）
+	s2 := &govListStub{pages: pages, nextSeq: []string{"clicked"}}
+	rep2, err := RunGovListBrowse(context.Background(), s2, GovListOptions{
+		StartPage: 99, MaxPages: 2, Delay: time.Millisecond,
+	})
+	if err != nil || rep2.StoppedAt != "empty_page" || len(rep2.Entries) != 0 {
+		t.Errorf("越界起始页应空页即停: %+v %v", rep2, err)
 	}
 }
 

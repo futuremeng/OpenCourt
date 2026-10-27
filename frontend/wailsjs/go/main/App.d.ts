@@ -11,7 +11,7 @@ export function AppInfo():Promise<Record<string, any>>;
 
 export function BrowserAwaitHuman():Promise<plugins.HumanHelpStatus>;
 
-export function BrowseGovList(arg1:string,arg2:number):Promise<neutral.GovListReport>;
+export function BrowseGovList(arg1:string,arg2:number,arg3:number):Promise<neutral.GovListReport>;
 
 export function BrowserExecuteAction(arg1:string,arg2:Array<string>):Promise<plugins.ActionReceipt>;
 

@@ -219,9 +219,14 @@ type BrowserPlugin interface {
 - SPA 就绪重试：翻页/首屏异步渲染滞后时只重读 DOM（零额外网络请求），最多 4 次
 - 硬护栏：翻页间隔下限 2s（默认 2.5s）、单会话 ≤200 页、未知分类过滤值拒绝、
   插件未启用直接报错不降级；evaluate 仅两段固定脚本（抽取/翻页），非自由代码
-- `main.go`：`BrowseGovList(cat, maxPages)` 绑定（cat 为可选过滤：空 = 混合全收）；
-  产物写 `appData/incoming/govgz/list_agent_<ts>.json`；审计 `BROWSER_GOVLIST(_FAIL)`
-  （页数/条数/停止原因/清单 sha256）
+- `main.go`：`BrowseGovList(cat, maxPages, startPage)` 绑定（cat 为可选过滤：空 = 混合全收；
+  startPage 跨会话续接）；产物写 `appData/incoming/govgz/list_agent_<ts>.json`；
+  审计 `BROWSER_GOVLIST(_FAIL)`（页数/起始页/条数/停止原因/清单 sha256）
+- **跨会话续接（全库约 1000 页 > 单会话 200 页硬上限）**：起始页经官方「跳转」控件
+  （`input.jumpText` + 「确定」按钮）到达，并以分页控件选中页码核验——等价人工输入
+  页码；核验不过直接报错，绝不在错误页上采集。CLI 批量入口 `cmd/govlistcollect`
+  （与应用面板同一代码路径与护栏）+ `scripts/govcollect.sh`（1/201/401/601/801 五会话
+  串行，会话间冷却 30s）
 - 合规边界：这与「用户自己浏览并点导出」等价——只走主站 robots 允许的官方 UI；
   绝不程序化访问 sousuo/sousuoht 检索域，绝不触碰 Athena RSA 鉴权；
   清单之后由 OpenLaw 侧详情页合规抓取 + 人工确认闸口完成入库

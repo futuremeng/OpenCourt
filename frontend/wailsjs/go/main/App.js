@@ -10,8 +10,8 @@ export function BrowserAwaitHuman() {
   return window['go']['main']['App']['BrowserAwaitHuman']();
 }
 
-export function BrowseGovList(arg1, arg2) {
-  return window['go']['main']['App']['BrowseGovList'](arg1, arg2);
+export function BrowseGovList(arg1, arg2, arg3) {
+  return window['go']['main']['App']['BrowseGovList'](arg1, arg2, arg3);
 }
 
 export function BrowserExecuteAction(arg1, arg2) {
