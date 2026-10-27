@@ -230,3 +230,21 @@ func TestRunGovListBrowseGuardrails(t *testing.T) {
 		t.Errorf("跳页间隔必须 >= %v（真实人工间隔）", govListMinDelay)
 	}
 }
+
+// TestParseGovListExtractHTTP 真机实测教训（2026-10-27）：官方清单 docurl 大量
+// 为 http:// 形态（主站 301 到 https）——协议必须 http/https 双收，否则整页
+// 条目被滤光、满页误判成空页（曾致全库只收到 1970/约 7000 条）；主机仍锁
+// .gov.cn 域名族，非 gov.cn 的 http 链接照样过滤。
+func TestParseGovListExtractHTTP(t *testing.T) {
+	raw := `[{"title":"甲办法","url":"http://www.gov.cn/zhengce/2021-06/25/content_5723612.htm","puborg":"教育部"},
+	 {"title":"乙规定","url":"http://www.beijing.gov.cn/zhengce/x/doc_1.html","puborg":"北京市人民政府"},
+	 {"title":"丙噪声","url":"http://evil.example/content_2.htm","puborg":"X"},
+	 {"title":"丁噪声","url":"javascript:alert(1)","puborg":"X"}]`
+	got := ParseGovListExtract(raw)
+	if len(got) != 2 {
+		t.Fatalf("http 的 .gov.cn 条目应保留、非 gov.cn 应过滤: %+v", got)
+	}
+	if got[0].Cat != "部门规章" || got[1].Cat != "地方政府规章" {
+		t.Errorf("cat 推断错误: %+v %+v", got[0], got[1])
+	}
+}

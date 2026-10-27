@@ -23,7 +23,7 @@
 //   - 只允许打开固定起点 URL（规章库官方列表页）；
 //   - evaluate 脚本只读 DOM 或操作官方跳转控件（无 fetch/XHR/导航构造）；
 //   - 礼貌限速：跳页间隔下限 2s（默认 2.5s），单会话页数上限 200；
-//   - 条目 URL 硬校验（https + .gov.cn 域名族 + .htm/.html/.shtml），噪声链接丢弃；
+//   - 条目 URL 硬校验（http/https + .gov.cn 域名族 + .htm/.html/.shtml），噪声链接丢弃；
 //   - SPA 就绪重试只重读 DOM（零额外网络请求）；
 //   - 全程审计由调用方（main.go）落 BROWSER_GOVLIST 事件。
 package neutral
@@ -43,9 +43,12 @@ import (
 // GovListStartURL 国家规章库官方列表页（唯一允许的浏览起点）。
 const GovListStartURL = "https://www.gov.cn/zhengce/xxgk/gjgzk/index.htm"
 
-// govListEntryURLRe 条目详情页硬校验：https + .gov.cn 域名族（主站与地方政府
-// 网站均在内）+ .htm/.html/.shtml 结尾；导航/资源链接一律过滤。
-var govListEntryURLRe = regexp.MustCompile(`^https://(?:[A-Za-z0-9-]+\.)*gov\.cn/[^\s"']+\.s?html?$`)
+// govListEntryURLRe 条目详情页硬校验：http/https + .gov.cn 域名族（主站与地方
+// 政府网站均在内）+ .htm/.html/.shtml 结尾；导航/资源链接一律过滤。
+// 真机实测（2026-10-27）：官方清单 docurl 大量为 http:// 形态（主站 301 到
+// https）——只收 https 会把整页 7 条全滤光、把满页误判成空页（曾致全库只收到
+// 1970/约 7000 条），故协议 http/https 双收；主机仍锁 .gov.cn 族。
+var govListEntryURLRe = regexp.MustCompile(`^https?://(?:[A-Za-z0-9-]+\.)*gov\.cn/[^\s"']+\.s?html?$`)
 
 // 限速与规模护栏。
 const (
