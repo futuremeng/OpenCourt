@@ -208,30 +208,34 @@ type BrowserPlugin interface {
 把 BrowserOS 对接用于 OpenLaw 语料管线的**清单层**（详见 OpenLaw `docs/sources-govcn.md`）：
 
 - `neutral/govlistassist.go`：`RunGovListBrowse` 人在环代理浏览——打开官方列表页
-  （起点 URL 白名单，唯一常量）→ `evaluate` 只读 DOM 抽取条目（无 fetch/XHR/导航）→
-  官方「下一页」分页按钮 DOM click 翻页（等价人工点击，页面自身 JS 取数）→
+  （起点 URL 白名单，唯一常量）→ **每页经官方「跳转」控件**（`input.jumpText` 填页码 +
+  「确定」按钮，等价人工输入页码跳页；页面自身 JS 取数）到达目标页并**核验分页控件
+  选中页码** → `evaluate` 只读 DOM 抽取条目（无 fetch/XHR/导航）→
   URL 硬校验（https + `.gov.cn` 域名族 + `.htm/.html/.shtml`）+ 去重 → 产出与 OpenLaw
   `openlaw-govcn -source gzk` 完全兼容的 `list.json`
 - 真机核实形态（neo 0.0.80）：默认列表即**混合清单**（部门规章+地方政府规章，共约
   1000 页）；分类按发布机关**逐条推断**（puborg 含「人民政府」→ 地方政府规章，与
   OpenLaw `gvgzResolveLevel` 同规则）；地方政府规章详情页直链地方政府网站（同
   `.gov.cn` 域名族）——清单如实记录，OpenLaw 侧主机策略决定抓取范围
-- SPA 就绪重试：翻页/首屏异步渲染滞后时只重读 DOM（零额外网络请求），最多 4 次
-- 硬护栏：翻页间隔下限 2s（默认 2.5s）、单会话 ≤200 页、未知分类过滤值拒绝、
-  插件未启用直接报错不降级；evaluate 仅两段固定脚本（抽取/翻页），非自由代码
+- **弃用顺序点「下一页」**：真机实测顺序翻页只覆盖首页窗口前 ~97 页（其后按钮返回
+  空壳渲染），而跳转控件可达全部约 1000 页——跳转控件是唯一可靠且等价人工的路径；
+  页码核验不过 = 越过末页（`end_of_list` 正常结束），绝不在错误页上采集
+- SPA 就绪重试：渲染滞后时先只重读 DOM（零额外网络请求，≤5 次），仍空则经官方跳转
+  控件**重刷当前页**（等价人工刷新，≤2 次）；连续 3 页真空才停止（`empty_page`）——
+  真机实测偶发空壳渲染会导致早停漏采
+- 硬护栏：跳页间隔下限 2s（默认 2.5s）、单会话 ≤200 页、未知分类过滤值拒绝、
+  插件未启用直接报错不降级；evaluate 仅两段固定脚本（抽取/跳转），非自由代码
 - `main.go`：`BrowseGovList(cat, maxPages, startPage)` 绑定（cat 为可选过滤：空 = 混合全收；
   startPage 跨会话续接）；产物写 `appData/incoming/govgz/list_agent_<ts>.json`；
   审计 `BROWSER_GOVLIST(_FAIL)`（页数/起始页/条数/停止原因/清单 sha256）
-- **跨会话续接（全库约 1000 页 > 单会话 200 页硬上限）**：起始页经官方「跳转」控件
-  （`input.jumpText` + 「确定」按钮）到达，并以分页控件选中页码核验——等价人工输入
-  页码；核验不过直接报错，绝不在错误页上采集。CLI 批量入口 `cmd/govlistcollect`
-  （与应用面板同一代码路径与护栏）+ `scripts/govcollect.sh`（1/201/401/601/801 五会话
-  串行，会话间冷却 30s）
+- **跨会话续接（全库约 1000 页 > 单会话 200 页硬上限）**：`startPage` 指定起始页，
+  CLI 批量入口 `cmd/govlistcollect`（与应用面板同一代码路径与护栏）+
+  `scripts/govcollect.sh`（1/201/401/601/801 五会话串行，会话间冷却 30s）
 - 合规边界：这与「用户自己浏览并点导出」等价——只走主站 robots 允许的官方 UI；
   绝不程序化访问 sousuo/sousuoht 检索域，绝不触碰 Athena RSA 鉴权；
   清单之后由 OpenLaw 侧详情页合规抓取 + 人工确认闸口完成入库
-- 测试：`neutral/govlistassist_test.go`（多页翻页/去重/分类过滤/护栏/翻页间隔
-  ≥2s 断言）；`plugins/browseros_live_test.go` 增加 `TestLiveGovListBrowse`
-  （双开关显式启用：`OPENCOURT_BROWSEROS_ENDPOINT` + `OPENCOURT_GOVLIST_LIVE=1`；
-  真机已通过：2 页 13 条混合清单，cat 逐条推断正确）
+- 测试：`neutral/govlistassist_test.go`（跳转驱动多页/去重/分类过滤/起始页续接/
+  越界 `end_of_list`/护栏/跳页间隔 ≥2s 虚拟时钟断言）；`plugins/browseros_live_test.go`
+  增加 `TestLiveGovListBrowse`（双开关显式启用：`OPENCOURT_BROWSEROS_ENDPOINT` +
+  `OPENCOURT_GOVLIST_LIVE=1`）
 

@@ -106,14 +106,6 @@ document.querySelectorAll('div.depart_m').forEach((item) => {
 });
 return JSON.stringify(out);`
 
-// govListNextJS 官方分页按钮点击（等价人工点击「下一页」；页面自身 JS 取数，
-// 不构造任何请求）。按钮不存在或已禁用 → 返回 no_next。
-const govListNextJS = `
-const b = document.querySelector('button.turnPage.next-page');
-if (!b || b.disabled) return 'no_next';
-b.click();
-return 'clicked';`
-
 // govListJumpJSFmt 官方「跳转」控件（输入页码 + 点「确定」，页面自身 JS 生效）
 // ——等价人工输入页码跳页，用于跨会话续接；%d 只接受编排层生成的整数页码。
 const govListJumpJSFmt = `
@@ -234,15 +226,6 @@ func extractReady(ctx context.Context, b plugins.BrowserPlugin, pageID, curPage 
 	return last, nil
 }
 
-// clickNextPage 点击官方「下一页」分页按钮（DOM click，等价人工点击）。
-func clickNextPage(ctx context.Context, b plugins.BrowserPlugin, pageID int) (bool, error) {
-	raw, err := b.Evaluate(ctx, pageID, govListNextJS)
-	if err != nil {
-		return false, err
-	}
-	return strings.Contains(raw, "clicked"), nil
-}
-
 // jumpToPage 用官方「跳转」控件到达指定页（等价人工输入页码 + 点确定），并以
 // 分页控件选中页码核验生效（SPA 生效滞后重试 ≤govListReadyTries 次）。
 // 核验不过（页码越界/控件改版）直接报错——绝不在错误页上采集。
@@ -328,24 +311,41 @@ func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 	defer func() { _ = b.ClosePage(context.WithoutCancel(ctx), page.PageID) }()
 
 	rep := GovListReport{StartURL: GovListStartURL, Cat: opts.Cat, StartPage: opts.StartPage, StoppedAt: "done"}
-	if opts.StartPage > 1 {
-		if err := jumpToPage(ctx, b, page.PageID, opts.StartPage); err != nil {
-			return rep, fmt.Errorf("跳转到第 %d 页失败: %w", opts.StartPage, err)
-		}
-	}
 	seen := map[string]bool{}
 	emptyStreak := 0
 
+	// 跳转驱动采集：每页都经官方「跳转」控件到达目标页码（等价人工输入页码 +
+	// 点确定；页面自身 JS 取数）并核验选中页码。真机实测：顺序点「下一页」只
+	// 覆盖首页窗口前 ~97 页（其后按钮返回空壳），而跳转控件可达全部约 1000 页
+	// ——故弃用顺序翻页。页码核验不过 = 页码越界（超过末页）→ 正常结束。
 	for pageno := 1; pageno <= opts.MaxPages; pageno++ {
 		curPage := opts.StartPage + pageno - 1
+		if pageno > 1 {
+			// 限速 = 人工连续跳页的真实间隔（虚拟时钟仅跳过墙钟等待）
+			if pauseCh == nil {
+				select {
+				case <-time.After(opts.Delay):
+				case <-ctx.Done():
+					return rep, ctx.Err()
+				}
+			} else {
+				sleep(opts.Delay)
+				if ctx.Err() != nil {
+					return rep, ctx.Err()
+				}
+			}
+		}
+		if err := jumpToPage(ctx, b, page.PageID, curPage); err != nil {
+			rep.StoppedAt = "end_of_list"
+			return rep, nil
+		}
 		entries, err := extractReady(ctx, b, page.PageID, curPage, seen, clock, pauseCh, pauseDur)
 		if err != nil {
 			return rep, fmt.Errorf("第 %d 页抽取失败: %w", pageno, err)
 		}
 		if len(entries) == 0 {
 			// DOM 重读 + 官方跳转重刷后仍空。连续 govListEmptyStop 页才认定真空页
-			// 停止（真机实测偶发空壳渲染会连续误报）；未到阈值则官方翻页继续，
-			// 疑似假空页跳过的条目由合并工具的缺段检测补采。
+			// 停止（真机实测偶发空壳渲染会连续误报）。
 			emptyStreak++
 			rep.Pages = pageno
 			if emptyStreak >= govListEmptyStop {
@@ -368,28 +368,6 @@ func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 		}
 		if pageno == opts.MaxPages {
 			rep.StoppedAt = "max_pages"
-			return rep, nil
-		}
-		if pauseCh == nil {
-			select {
-			case <-time.After(opts.Delay):
-			case <-ctx.Done():
-				return rep, ctx.Err()
-			}
-		} else {
-			// 翻页间隔 = 对官方分页按钮的真实点击间隔（虚拟时钟仅跳过墙钟等待，
-			// 绝不跳过点击本身）
-			sleep(opts.Delay)
-			if ctx.Err() != nil {
-				return rep, ctx.Err()
-			}
-		}
-		ok, err := clickNextPage(ctx, b, page.PageID)
-		if err != nil {
-			return rep, fmt.Errorf("翻页失败: %w", err)
-		}
-		if !ok {
-			rep.StoppedAt = "no_next"
 			return rep, nil
 		}
 	}
