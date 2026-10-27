@@ -158,3 +158,68 @@ type BrowserPlugin interface {
 - 文档：https://docs.browseros.com （neo MCP：/neo/mcp/manual；人类版 MCP：/browseros/features/use-with-claude-code）
 - 官方 skill：https://raw.githubusercontent.com/browseros-ai/BrowserOS/main/skills/browseros-neo/SKILL.md
 - 目标平台：https://zxfw.court.gov.cn/ （JS 渲染 SPA，须真浏览器 + 登录态）
+
+## 10. P0/P1 已实施（2026-10-25）+ 本机实测记录
+
+已落地代码：
+
+- `plugins/mcp_client.go`：最小 MCP Streamable HTTP 客户端（initialize/tools/list/tools/call；SSE 与 JSON 双形态；`Mcp-Session-Id` 会话）——零新增依赖
+- `plugins/browser_browseros.go`：BrowserOS neo 只读插件（`Open/ReadPage/SearchPage/ClosePage`；默认禁用；失败给指引不降级；剥离 `UNTRUSTED_PAGE_CONTENT` 防注入包裹并提取 origin）
+- `plugins/plugins.go`：`BrowserPlugin` 接口
+- `neutral/browserassist.go`：查阅管道（抓取 → 强制脱敏 → 「单源未补强」事实，Citation=`web:URL@抓取时间#快照哈希`）
+- `main.go`：`ResearchWebPage(url, names)` 绑定 + `BROWSER_RESEARCH*`/`REDACT` 审计
+- `config`：`browseros.endpoint/enabled`（默认禁用）+ `OPENCOURT_BROWSEROS_ENDPOINT/ENABLED`
+- 测试：`plugins/mcp_client_test.go`、`plugins/browser_browseros_test.go`、`neutral/browserassist_test.go`、`tests/compliance`（联网内容未脱敏不得进模型；未启用必须报错）
+
+实测细节（BrowserOS neo 0.0.80，本机）：
+
+- 端点：**9200 被本机 Elasticsearch 占用，neo 实际监听 `127.0.0.1:9211/mcp`**——印证「端口不可硬编码，必须配置注入」
+- 握手：`initialize`（SSE 响应 + `mcp-session-id` 头）→ `notifications/initialized`（202）→ `tools/list`（25 个工具）→ `tools/call`
+- 关键 schema：`tabs{action:"new",url}` → 文本 `opened page <N>`；`read{page,format:"markdown"}`；`grep{page,pattern,over:"content"}`；`name_session{name,category,summary}`；`request_human_help{reason,kind,...}`（P2 用）
+- 页面内容一律包裹 `[UNTRUSTED_PAGE_CONTENT nonce=… origin=URL] … [END_…]`——防提示注入，包裹外还有 "Tip:" 会话提示需丢弃
+- 真机联调：`OPENCOURT_BROWSEROS_ENDPOINT=http://127.0.0.1:<port>/mcp go test -tags live ./plugins -run Live -v` → PASS（打开/读取/grep/关闭 example.com）
+
+
+
+### P2 辅助操作（2026-10-25 已实施）
+
+- `core/gate/action.go`：动作红线（代码级强制，插件 Execute 处不可绕过）——
+  点击类拦截 提交/确认立案/支付/签名/发送/删除；填写类拦截 密码/验证码/短信/签名/人脸
+- 插件两段式：`Snapshot`（interactive 模式，[ref=eN] 句柄）→ `ProposeFill/ProposeClick`
+  （产候选 + gate 预筛，Allowed=false 原样上报 UI）→ 用户逐条确认 → `ExecuteAction`
+  （三重硬约束：必须来自 Propose 登记 / gate 放行复核 / 一次性消费；连接重置后候选全部作废）
+- `HandToHuman/AwaitHuman`：登录/验证码/实名/最终提交交人接管（request_human_help/await_human_help）
+- `neutral/filingassist.go`：快照表单解析（ExtractFormFields）+ 值映射（BuildFillPlan，
+  弱态事实带 FactState 供 UI 标黄）+ `PlanPage` 一键生成候选计划
+- `main.go`：`BrowserOpenPage/BrowserPlanFill/BrowserExecuteAction/BrowserHandToHuman/BrowserAwaitHuman`
+  绑定；审计事件 `BROWSER_OPEN/PLAN/PLAN_FAIL/EXECUTE/EXECUTE_FAIL/ACTION_BLOCKED/HUMAN/HUMAN_WAIT`；
+  执行回执 diff 属页面内容，返回 UI 前强制脱敏
+- 纪律：真机联调测试只测只读面（快照），绝不在真实站点执行写操作
+
+### 前端面板（2026-10-25 已实施）
+
+- 顶栏新增 `BrowserOS 已启用/禁用` 徽章（AppInfo.browserEnabled）；未启用时面板内给出完整启用指引（不回退其他抓取）
+- 「网络查阅」：URL + 当事人姓名 → 脱敏后正文、快照哈希、脱敏计数、引用坐标（web:URL@时间#哈希）、弱态事实状态
+- 「立案表单辅助」：打开页面 → 字段=值（`?` 尾缀标弱态）→ 生成候选计划 → 候选清单（红线拦截项红底展示规则与原因；弱态标黄）→ 逐条「确认执行」→ 回执（已脱敏）；交人接管（登录/验证码/实名/最终提交）与等待接管结果
+
+### 国家规章库清单浏览（2026-10-26 已实施）
+
+把 BrowserOS 对接用于 OpenLaw 语料管线的**清单层**（详见 OpenLaw `docs/sources-govcn.md`）：
+
+- `neutral/govlistassist.go`：`RunGovListBrowse` 人在环代理浏览——打开官方列表页
+  （起点 URL 白名单，唯一常量）→ 可选切分类页签 → `evaluate` 只读 DOM 抽取条目
+  （无 fetch/XHR/导航）→ 官方「下一页」两段式点击翻页（Propose→gate→Execute）→
+  URL 硬校验（https + www.gov.cn + `content_<id>`）+ 去重 → 产出与 OpenLaw
+  `openlaw-govcn -source gzk` 完全兼容的 `list.json`
+- 硬护栏：翻页间隔下限 2s（默认 2.5s）、单会话 ≤200 页、未知分类拒绝、
+  插件未启用直接报错不降级；每次点击过 `gate.CheckBrowserAction`
+- `main.go`：`BrowseGovList(cat, maxPages)` 绑定；产物写
+  `appData/incoming/govgz/list_agent_<ts>.json`；审计 `BROWSER_GOVLIST(_FAIL)`
+  （页数/条数/停止原因/清单 sha256）
+- 合规边界：这与「用户自己浏览并点导出」等价——只走主站 robots 允许的官方 UI；
+  绝不程序化访问 sousuo/sousuoht 检索域，绝不触碰 Athena RSA 鉴权；
+  清单之后由 OpenLaw 侧详情页合规抓取 + 人工确认闸口完成入库
+- 测试：`neutral/govlistassist_test.go`（多页翻页/去重/护栏）；
+  `plugins/browseros_live_test.go` 增加 `TestLiveGovListBrowse`
+  （双开关显式启用：`OPENCOURT_BROWSEROS_ENDPOINT` + `OPENCOURT_GOVLIST_LIVE=1`）
+

@@ -40,3 +40,24 @@ func TestLoadDotEnv(t *testing.T) {
 		t.Error("文件不存在应静默返回")
 	}
 }
+
+// TestBrowserOSDefaultsAndEnv 浏览器辅助默认禁用；OPENCOURT_BROWSEROS_* 可覆盖。
+func TestBrowserOSDefaultsAndEnv(t *testing.T) {
+	s := Default()
+	if s.BrowserOS.Enabled || s.BrowserOS.Endpoint != "" {
+		t.Fatal("默认必须禁用且未配置端点（默认离线）")
+	}
+	_ = os.Setenv("OPENCOURT_BROWSEROS_ENDPOINT", "http://127.0.0.1:9211/mcp")
+	_ = os.Setenv("OPENCOURT_BROWSEROS_ENABLED", "true")
+	defer func() {
+		_ = os.Unsetenv("OPENCOURT_BROWSEROS_ENDPOINT")
+		_ = os.Unsetenv("OPENCOURT_BROWSEROS_ENABLED")
+	}()
+	s, err := Load("__not_exists__.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.BrowserOS.Enabled || s.BrowserOS.Endpoint != "http://127.0.0.1:9211/mcp" {
+		t.Fatalf("环境变量覆盖失败: %+v", s.BrowserOS)
+	}
+}

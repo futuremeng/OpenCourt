@@ -42,6 +42,13 @@ type Settings struct {
 		DataDir  string `yaml:"data_dir"`
 		IndexURL string `yaml:"index_url"` // 数据包发布索引（应用内勾选下载）
 	} `yaml:"openlaw"`
+	// BrowserOS 浏览器辅助（外部可选组件，默认禁用；AGPL-3.0，本仓库不分发）：
+	// 指向用户自装 BrowserOS neo 的 MCP 端点（本机回环，端口随其构建变化，
+	// 从浏览器内 MCP 页复制）。空 = 未配置，联网查阅功能整体不可用（默认离线）。
+	BrowserOS struct {
+		Endpoint string `yaml:"endpoint"`
+		Enabled  bool   `yaml:"enabled"`
+	} `yaml:"browseros"`
 	// App 程序自身更新（GitHub Releases latest API；空 = 关闭自动检查）。
 	App struct {
 		UpdateAPI string `yaml:"update_api"`
@@ -146,6 +153,12 @@ func (s *Settings) applyEnv() {
 	}
 	if v, ok := get("OPENLAW_DATA_DIR"); ok {
 		s.OpenLaw.DataDir = v
+	}
+	if v, ok := get("BROWSEROS_ENDPOINT"); ok {
+		s.BrowserOS.Endpoint = v
+	}
+	if v, ok := get("BROWSEROS_ENABLED"); ok {
+		s.BrowserOS.Enabled = parseBool(v)
 	}
 	if v, ok := get("OPENLAW_INDEX_URL"); ok {
 		s.OpenLaw.IndexURL = v

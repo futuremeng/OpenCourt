@@ -9,6 +9,10 @@
 - **代码许可证统一为 Apache-2.0**（OpenCourt 由 MIT 变更，与 OpenLaw 一致；新增明示专利授权条款）；语料数据另行许可：官方文本公有领域 + 本项目汇编产物 CC BY 4.0 + 欧盟部分保留 © European Union 署名（OpenLaw `DATA-LICENSE.md`，随每个语料包分发副本；`index.json` 附 license 字段）；新增第三方依赖许可清单（dmg 内附副本）；DISCLAIMER 第 5 条对齐「官方语料包单独发布」的新分发模式
 
 ### 新增
+- **国家规章库清单浏览（人在环代理浏览）**：内置智能体经 BrowserOS neo 驱动用户真实浏览器浏览 `www.gov.cn/zhengce/xxgk/gjgzk/` 官方列表页并导出 OpenLaw 兼容清单——`neutral/govlistassist.go`（起点 URL 白名单、evaluate 只读 DOM 抽取、官方「下一页」两段式点击翻页、翻页间隔下限 2s、单会话 ≤200 页、URL 硬校验去重）；插件面新增 `Evaluate`（只读数据抽取，防注入包裹剥离）；`BrowseGovList(cat, maxPages)` Wails 绑定，产物写 `appData/incoming/govgz/list_agent_<ts>.json`，审计 `BROWSER_GOVLIST`；合规边界与「用户自己浏览+导出」等价（绝不程序化访问 sousuo/sousuoht 检索域与 Athena 鉴权），清单交 OpenLaw `openlaw-govcn -source gzk` 走详情页合规抓取+人工确认。真机联调 `TestLiveGovListBrowse`（双开关显式启用）
+- **网上立案辅助操作（P2 两段式）**：`core/gate/action.go` 动作红线代码级强制（提交/支付/签名/发送类点击与密码/验证码/人脸类字段一律拦截，Execute 处不可绕过）；插件 `Snapshot/ProposeFill/ProposeClick/ExecuteAction`（候选必须来自 Propose 登记、gate 复核、一次性消费；断线重连后候选全部作废）+ `HandToHuman/AwaitHuman` 交人接管；`neutral/filingassist.go` 快照表单解析与填写计划（弱态事实标黄）；Wails 绑定与全链路审计（执行回执返回 UI 前强制脱敏）
+- **前端「网络查阅与立案辅助」面板**：BrowserOS 启用状态徽章与启用指引；网络查阅结果展示（脱敏正文/快照哈希/引用坐标/弱态状态/脱敏计数）；两段式表单辅助 UI（候选清单含红线拦截项红底原因、弱态值黄标、逐条确认执行、交人接管）
+- **网络资料查阅（BrowserOS 辅助，P0/P1）**：对接用户自装的 BrowserOS neo（外部可选组件，AGPL-3.0，本仓库不分发；经本机回环 MCP Streamable HTTP 驱动，OpenCourt 仍无监听端口）。`plugins/mcp_client.go` 最小 MCP 客户端（零新增依赖）；`plugins/browser_browseros.go` 只读插件（打开/读取/grep/关闭，默认禁用，连接失败给指引绝不降级抓取，剥离防注入包裹）；`neutral/browserassist.go` 查阅管道：抓取 → 强制脱敏 → 「单源未补强」事实入库（引用=`web:URL@时间#快照哈希`，联网源永不可进强态）；配置 `browseros.endpoint/enabled` + `OPENCOURT_BROWSEROS_*`；真机联调测试（`go test -tags live`）与合规测试（未脱敏不得进模型、未启用必须报错）。设计见 docs/browseros-integration.md
 - **法条数据应用内分发**：首屏「法条数据」面板——在线拉取发布索引（GitHub Release `index.json`），勾选下载 core/evidence/update 数据包（下载即 sha256 校验）；亦支持手动选择 zip/目录；core 原子替换带回滚，evidence 只补缺不覆盖
 - **程序自更新（macOS）**：启动静默检查 GitHub Release（semver 比较），首屏横幅提示新版本与更新说明；一键「下载并更新」——下载 dmg + 强制 `.sha256` 资产校验（缺失即拒绝安装），分离脚本完成「等待退出 → 挂载 → 替换 .app（失败回滚）→ 重启」；`app.update_api` 可配置镜像源
 - **文档接入（core/ingest）**：文本型 PDF 逐页文本层解析（纯 Go）；OCR 适配接口——扫描件/图片强制经 OCR，引擎未配置时明确拒绝，绝不静默入库

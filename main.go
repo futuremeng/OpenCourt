@@ -7,8 +7,10 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -60,7 +62,10 @@ type App struct {
 	model    plugins.ModelAdapter
 	// lawSource OpenLaw 法条源（M4 对接）：nil = 未配置，法条检索降级不可用。
 	lawSource plugins.LawSourcePlugin
-	ingest    *ingest.Registry
+	// browser 浏览器辅助插件（BrowserOS neo，外部组件默认禁用）：
+	// 未启用时联网查阅调用直接报错，绝不降级到其他抓取方式。
+	browser plugins.BrowserPlugin
+	ingest  *ingest.Registry
 }
 
 // appDataDir 返回本机应用数据目录（默认 ~/Library/Application Support/OpenCourt 等），
@@ -165,6 +170,13 @@ func (a *App) startup(ctx context.Context) {
 		}
 	}
 	a.openLawSource()
+
+	// 浏览器辅助（BrowserOS neo，外部可选组件）：默认禁用；启用仅指向
+	// 本机回环 MCP 端点，不新增任何监听端口（出站连接，桌面安全模型不变）。
+	a.browser = plugins.NewBrowserOSPlugin(settings.BrowserOS.Endpoint, settings.BrowserOS.Enabled)
+	if a.browser.Enabled() {
+		_ = a.auditLog.Log(settings.Profile.Active, "BROWSER_SOURCE_OK", "browseros", a.browser.Name())
+	}
 }
 
 // openLawSource 按当前设置打开法条源（启动时与数据包加载后复用）。
@@ -621,14 +633,15 @@ func newID(prefix string) string {
 // AppInfo 返回应用与当前 Profile 概况（前端首屏展示）。
 func (a *App) AppInfo() map[string]any {
 	return map[string]any{
-		"version":       version,
-		"profile":       a.profile.Name,
-		"role":          a.profile.Role,
-		"dataDir":       a.dataDir,
-		"redactLevel":   a.settings.Security.RedactLevel,
-		"telemetry":     a.settings.Security.Telemetry,
-		"modelEnabled":  a.settings.Model.Enabled,
-		"disabledTools": a.profile.DisabledTools,
+		"version":        version,
+		"profile":        a.profile.Name,
+		"role":           a.profile.Role,
+		"dataDir":        a.dataDir,
+		"redactLevel":    a.settings.Security.RedactLevel,
+		"telemetry":      a.settings.Security.Telemetry,
+		"modelEnabled":   a.settings.Model.Enabled,
+		"browserEnabled": a.browser != nil && a.browser.Enabled(),
+		"disabledTools":  a.profile.DisabledTools,
 	}
 }
 
@@ -778,6 +791,156 @@ func (a *App) RunReader(docID string) (neutral.ReaderReport, error) {
 		fmt.Sprintf("模型 %s：候选入库 %d 条，回原文失败拒绝 %d 条，要素 %d 个",
 			report.ModelName, len(report.Accepted), len(report.Rejected), len(report.Elements)))
 	return report, nil
+}
+
+// --- 网络资料查阅（BrowserOS 辅助，默认禁用；docs/browseros-integration.md） ---
+
+// ResearchWebPage 网络查阅：BrowserOS 抓取 → 强制脱敏 → 「单源未补强」事实
+// 入库（Citation 含 URL/抓取时间/快照哈希）。返回文本已脱敏；原始页面内容
+// 不回流模型。names 为已知当事人姓名（一致替换用）。
+func (a *App) ResearchWebPage(url string, names []string) (neutral.ResearchResult, error) {
+	if url == "" {
+		return neutral.ResearchResult{}, fmt.Errorf("未提供 URL")
+	}
+	res, err := neutral.RunResearch(a.ctx, a.browser, names, url)
+	if err != nil {
+		_ = a.auditLog.Log(a.profile.Role, "BROWSER_RESEARCH_FAIL", url, err.Error())
+		return neutral.ResearchResult{}, err
+	}
+	if err := a.store.CreateFact(res.Fact); err != nil {
+		return neutral.ResearchResult{}, err
+	}
+	for _, act := range res.RedactActions {
+		_ = a.auditLog.Log(a.profile.Role, "REDACT", act.RuleID, act.Strategy)
+	}
+	_ = a.auditLog.Log(a.profile.Role, "BROWSER_RESEARCH", url,
+		fmt.Sprintf("快照哈希 %s；脱敏 %d 项；事实 %s 初始状态 %s（联网源至多单源未补强）",
+			res.ContentSHA[:12], len(res.RedactActions), res.Fact.FactID, res.Fact.State.DisplayName()))
+	return res, nil
+}
+
+// --- 网上立案辅助（两段式，设计见 docs/browseros-integration.md 第 6 节）---
+
+// BrowserOpenPage 在用户 BrowserOS 中打开页面（辅助模式；不抓回整页内容）。
+func (a *App) BrowserOpenPage(url string) (plugins.BrowserPage, error) {
+	if url == "" {
+		return plugins.BrowserPage{}, fmt.Errorf("未提供 URL")
+	}
+	if a.browser == nil || !a.browser.Enabled() {
+		return plugins.BrowserPage{}, fmt.Errorf("浏览器辅助插件未启用：%s", plugins.BrowserOSGuidance)
+	}
+	page, err := a.browser.Open(a.ctx, url)
+	if err != nil {
+		_ = a.auditLog.Log(a.profile.Role, "BROWSER_OPEN_FAIL", url, err.Error())
+		return plugins.BrowserPage{}, err
+	}
+	_ = a.auditLog.Log(a.profile.Role, "BROWSER_OPEN", url, fmt.Sprintf("page=%d", page.PageID))
+	return page, nil
+}
+
+// BrowserPlanFill 生成当前页填写计划（候选，不执行）：可交互快照 → 表单解析
+// → 值映射 → gate 红线预筛。UI 必须逐条展示全部候选——含被红线拦截项
+// （Allowed=false，附原因）与弱态事实字段（FactState 标黄），
+// 经用户逐条确认后方可 BrowserExecuteAction。
+func (a *App) BrowserPlanFill(pageID int, values map[string]string, factStates map[string]string) ([]plugins.ActionCandidate, error) {
+	cands, elements, err := neutral.PlanPage(a.ctx, a.browser, pageID, values, factStates)
+	if err != nil {
+		_ = a.auditLog.Log(a.profile.Role, "BROWSER_PLAN_FAIL", fmt.Sprintf("page=%d", pageID), err.Error())
+		return nil, err
+	}
+	blocked := 0
+	for _, c := range cands {
+		if !c.Allowed {
+			blocked++
+			_ = a.auditLog.Log(a.profile.Role, "BROWSER_ACTION_BLOCKED", c.ActionID,
+				fmt.Sprintf("%s: %s", c.Rule, c.Reason))
+		}
+	}
+	_ = a.auditLog.Log(a.profile.Role, "BROWSER_PLAN", fmt.Sprintf("page=%d", pageID),
+		fmt.Sprintf("元素 %d 个；候选 %d 项；红线拦截 %d 项", len(elements), len(cands), blocked))
+	return cands, nil
+}
+
+// BrowserExecuteAction 执行单个「已经 Propose 且经用户确认」的候选动作。
+// 插件侧三重硬约束（必须来自 Propose / gate 放行 / 一次性消费）；
+// 回执 diff 为页面内容，返回 UI 前强制脱敏。
+func (a *App) BrowserExecuteAction(actionID string, names []string) (plugins.ActionReceipt, error) {
+	if a.browser == nil || !a.browser.Enabled() {
+		return plugins.ActionReceipt{}, fmt.Errorf("浏览器辅助插件未启用：%s", plugins.BrowserOSGuidance)
+	}
+	rec, err := a.browser.ExecuteAction(a.ctx, actionID)
+	if err != nil {
+		_ = a.auditLog.Log(a.profile.Role, "BROWSER_EXECUTE_FAIL", actionID, err.Error())
+		return plugins.ActionReceipt{}, err
+	}
+	sum := sha256.Sum256([]byte(rec.Diff))
+	red := redact.New(names)
+	redRes := red.RedactText(rec.Diff)
+	rec.Diff = redRes.Text
+	for _, act := range redRes.Actions {
+		_ = a.auditLog.Log(a.profile.Role, "REDACT", act.RuleID, act.Strategy)
+	}
+	_ = a.auditLog.Log(a.profile.Role, "BROWSER_EXECUTE", actionID,
+		fmt.Sprintf("回执哈希 %s；脱敏 %d 项", hex.EncodeToString(sum[:])[:12], len(redRes.Actions)))
+	return rec, nil
+}
+
+// BrowserHandToHuman 登录/验证码/实名/最终提交等环节交还给人接管——
+// 这些环节工具永不代做（红线，见 docs/browseros-integration.md 5.3）。
+func (a *App) BrowserHandToHuman(pageID int, kind, reason string) (plugins.HumanHelpStatus, error) {
+	st, err := a.browser.HandToHuman(a.ctx, pageID, kind, reason, "")
+	if err != nil {
+		_ = a.auditLog.Log(a.profile.Role, "BROWSER_HUMAN_FAIL", fmt.Sprintf("page=%d", pageID), err.Error())
+		return st, err
+	}
+	_ = a.auditLog.Log(a.profile.Role, "BROWSER_HUMAN", fmt.Sprintf("page=%d", pageID), st.Status)
+	return st, nil
+}
+
+// BrowserAwaitHuman 等待人接管结果（resolved 后才允许继续辅助操作）。
+func (a *App) BrowserAwaitHuman() (plugins.HumanHelpStatus, error) {
+	st, err := a.browser.AwaitHuman(a.ctx)
+	_ = a.auditLog.Log(a.profile.Role, "BROWSER_HUMAN_WAIT", "-", st.Status)
+	return st, err
+}
+
+// --- 国家规章库清单浏览（人在环代理浏览，neutral/govlistassist.go）---
+
+// BrowseGovList 用用户自己的 BrowserOS neo 浏览国家规章库官方列表页并导出清单
+// （cat = 部门规章/地方政府规章/空；maxPages 单会话上限）。清单是人工浏览的
+// 代理等价物：只走官方 UI 翻页（限速 ≥2s、红线审计），绝不触碰检索 API/鉴权。
+// 产物写 appData/incoming/govgz/list_agent_<ts>.json，交 OpenLaw
+// openlaw-govcn -source gzk -list <此文件> 走详情页合规抓取 + 人工确认闸口。
+func (a *App) BrowseGovList(cat string, maxPages int) (neutral.GovListReport, error) {
+	dir, err := appDataDir()
+	if err != nil {
+		return neutral.GovListReport{}, err
+	}
+	rep, err := neutral.RunGovListBrowse(a.ctx, a.browser, neutral.GovListOptions{
+		Cat: cat, MaxPages: maxPages,
+	})
+	if err != nil {
+		_ = a.auditLog.Log(a.profile.Role, "BROWSER_GOVLIST_FAIL", cat, err.Error())
+		return rep, err
+	}
+	outDir := filepath.Join(dir, "incoming", "govgz")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return rep, err
+	}
+	out := filepath.Join(outDir, "list_agent_"+time.Now().UTC().Format("20060102T150405")+".json")
+	b, err := json.MarshalIndent(rep.Entries, "", "  ")
+	if err != nil {
+		return rep, err
+	}
+	if err := os.WriteFile(out, b, 0o644); err != nil {
+		return rep, err
+	}
+	rep.OutPath = out
+	sum := sha256.Sum256(b)
+	_ = a.auditLog.Log(a.profile.Role, "BROWSER_GOVLIST", cat,
+		fmt.Sprintf("浏览 %d 页得 %d 条（%s）→ %s sha256=%s；待 openlaw-govcn -source gzk 抓取+人工确认",
+			rep.Pages, len(rep.Entries), rep.StoppedAt, out, hex.EncodeToString(sum[:])[:12]))
+	return rep, nil
 }
 
 // BuildTimeline 构建案件时间线（按时间要素锚定，无锚点排末尾，不虚构日期）。

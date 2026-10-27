@@ -47,6 +47,8 @@ profiles/  adversary/        ← 立场层 / 对抗推演层（按角色加载�
 - **阅卷 Agent**（`neutral/reader`）：模型只产候选事实，核验器逐条回原文定位仲裁；定位失败即拒绝入库并记审计；时间/金额要素由正则确定性抽取
 - **时间线 / 要件匹配 / 盲区**（`neutral`）：按时间要素锚定排序（不虚构日期）；弱态事实不得覆盖要件；盲区只输出「无法判断 + 补证方向」
 - **OpenAI 兼容模型适配**（`plugins/model_openai.go`）：默认禁用、Key 仅经环境变量注入、请求强制附加「禁止用于模型训练」标识头
+- **网络资料查阅（BrowserOS 辅助）**（`plugins/browser_browseros.go` + `neutral/browserassist.go`）：默认禁用；经本机回环 MCP 驱动用户自装的 BrowserOS neo；抓回内容强制脱敏后才进模型，一律以「单源未补强」事实入库（引用含 URL/时间/快照哈希），联网源永不进强态；详见 `docs/browseros-integration.md`
+- **网上立案辅助（两段式）**（`core/gate/action.go` + `neutral/filingassist.go`）：表单填写一律「候选 → 用户逐条确认 → 执行」；提交/支付/签名与密码/验证码/人脸环节红线代码级强制不代做，登录与最终提交交人接管；执行回执返回 UI 前强制脱敏
 
 ## 快速开始
 

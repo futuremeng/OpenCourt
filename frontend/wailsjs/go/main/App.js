@@ -6,6 +6,30 @@ export function AppInfo() {
   return window['go']['main']['App']['AppInfo']();
 }
 
+export function BrowserAwaitHuman() {
+  return window['go']['main']['App']['BrowserAwaitHuman']();
+}
+
+export function BrowseGovList(arg1, arg2) {
+  return window['go']['main']['App']['BrowseGovList'](arg1, arg2);
+}
+
+export function BrowserExecuteAction(arg1, arg2) {
+  return window['go']['main']['App']['BrowserExecuteAction'](arg1, arg2);
+}
+
+export function BrowserHandToHuman(arg1, arg2, arg3) {
+  return window['go']['main']['App']['BrowserHandToHuman'](arg1, arg2, arg3);
+}
+
+export function BrowserOpenPage(arg1) {
+  return window['go']['main']['App']['BrowserOpenPage'](arg1);
+}
+
+export function BrowserPlanFill(arg1, arg2, arg3) {
+  return window['go']['main']['App']['BrowserPlanFill'](arg1, arg2, arg3);
+}
+
 export function BuildTimeline() {
   return window['go']['main']['App']['BuildTimeline']();
 }
@@ -72,6 +96,10 @@ export function PickLawDataPackage() {
 
 export function RedactText(arg1, arg2) {
   return window['go']['main']['App']['RedactText'](arg1, arg2);
+}
+
+export function ResearchWebPage(arg1, arg2) {
+  return window['go']['main']['App']['ResearchWebPage'](arg1, arg2);
 }
 
 export function RunAggregate() {

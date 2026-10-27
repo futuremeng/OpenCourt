@@ -42,3 +42,8 @@ OpenLaw SDK（github.com/futuremeng/OpenLaw）：Apache-2.0。
 语料数据的许可另见 OpenLaw DATA-LICENSE.md（随每个 lawdata 包分发副本）：
 法条官方文本为公有领域；本项目汇编产物 CC BY 4.0；欧盟文本保留
 © European Union 署名。
+
+外部可选组件（不随本程序分发、无代码链接，仅经本机回环 MCP 协议调用）：
+  BrowserOS neo（https://github.com/browseros-ai/BrowserOS）  AGPL-3.0
+  —— 由用户自行安装；因走独立进程 + 标准协议交互，AGPL 不延及 OpenCourt
+  源码；OpenCourt 默认禁用该对接，且不分发任何 BrowserOS 产物。

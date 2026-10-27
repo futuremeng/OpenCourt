@@ -20,6 +20,7 @@ import (
 	"github.com/futuremeng/OpenCourt/core/statemachine"
 	"github.com/futuremeng/OpenCourt/core/storage"
 	"github.com/futuremeng/OpenCourt/neutral"
+	"github.com/futuremeng/OpenCourt/plugins"
 )
 
 // 溯源测试：模型注入一个卷宗中不存在的事实并尝试引用，门禁必须拦截。
@@ -174,5 +175,74 @@ func TestPhase2ReaderPipeline(t *testing.T) {
 	blind := neutral.GenerateBlindspots(match)
 	if len(blind) != 2 || !strings.Contains(blind[0].Supplement, "补证方向") {
 		t.Errorf("盲区输出错误: %+v", blind)
+	}
+}
+
+// --- 网络查阅（BrowserOS 辅助）合规约束 ---
+
+// webStub 网络查阅测试桩：模拟浏览器插件返回含 PII 的原始页面。
+type webStub struct{ enabled bool }
+
+func (s webStub) Name() string  { return "stub" }
+func (s webStub) Enabled() bool { return s.enabled }
+func (s webStub) Open(ctx context.Context, url string) (plugins.BrowserPage, error) {
+	if !s.enabled {
+		return plugins.BrowserPage{}, errors.New("插件未启用")
+	}
+	return plugins.BrowserPage{PageID: 1, URL: url}, nil
+}
+func (s webStub) ReadPage(ctx context.Context, pageID int) (plugins.BrowserPageContent, error) {
+	md := "原告王五（身份证 110101199003078888）向上海市浦东新区人民法院提起诉讼。"
+	return plugins.BrowserPageContent{URL: "https://court.example/filing", Markdown: md, ContentSHA: "x"}, nil
+}
+func (s webStub) SearchPage(ctx context.Context, pageID int, q string) ([]string, error) {
+	return nil, nil
+}
+func (s webStub) ClosePage(ctx context.Context, pageID int) error { return nil }
+func (s webStub) Snapshot(ctx context.Context, pageID int) (string, error) {
+	return "", errors.New("stub 不支持")
+}
+func (s webStub) Evaluate(ctx context.Context, pageID int, code string) (string, error) {
+	return "", errors.New("stub 不支持")
+}
+func (s webStub) ProposeFill(ctx context.Context, pageID int, fields []plugins.FormFieldSpec) ([]plugins.ActionCandidate, error) {
+	return nil, errors.New("stub 不支持")
+}
+func (s webStub) ProposeClick(ctx context.Context, pageID int, ref, label string) (plugins.ActionCandidate, error) {
+	return plugins.ActionCandidate{}, errors.New("stub 不支持")
+}
+func (s webStub) ExecuteAction(ctx context.Context, actionID string) (plugins.ActionReceipt, error) {
+	return plugins.ActionReceipt{}, errors.New("stub 不支持")
+}
+func (s webStub) HandToHuman(ctx context.Context, pageID int, kind, reason, resumeHint string) (plugins.HumanHelpStatus, error) {
+	return plugins.HumanHelpStatus{}, errors.New("stub 不支持")
+}
+func (s webStub) AwaitHuman(ctx context.Context) (plugins.HumanHelpStatus, error) {
+	return plugins.HumanHelpStatus{}, errors.New("stub 不支持")
+}
+
+// 脱敏测试（网络源）：网页抓回的敏感信息，进入模型/UI 前必须已脱敏。
+func TestWebContentRedactedBeforeModel(t *testing.T) {
+	res, err := neutral.RunResearch(context.Background(), webStub{enabled: true}, []string{"王五"}, "https://court.example/filing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, leak := range []string{"王五", "110101199003078888"} {
+		if strings.Contains(res.Text, leak) {
+			t.Fatalf("联网内容未经脱敏流入模型入口: %s", leak)
+		}
+	}
+	if res.Fact.State != domain.StateSingleSource {
+		t.Fatalf("联网事实必须为弱态（单源未补强），实际 %s", res.Fact.State)
+	}
+}
+
+// 默认离线测试：浏览器插件未启用时网络查阅必须直接报错，绝不降级抓取。
+func TestWebResearchDisabledByDefault(t *testing.T) {
+	if _, err := neutral.RunResearch(context.Background(), webStub{enabled: false}, nil, "https://x"); err == nil {
+		t.Fatal("未启用必须报错")
+	}
+	if _, err := neutral.RunResearch(context.Background(), nil, nil, "https://x"); err == nil {
+		t.Fatal("未配置必须报错")
 	}
 }

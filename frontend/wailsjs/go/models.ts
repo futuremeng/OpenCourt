@@ -139,6 +139,67 @@ export namespace gate {
 }
 
 export namespace neutral {
+
+	export class GovListEntry {
+	    title: string;
+	    url: string;
+	    cat?: string;
+	    puborg?: string;
+	    pcode?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new GovListEntry(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.title = source["title"];
+	        this.url = source["url"];
+	        this.cat = source["cat"];
+	        this.puborg = source["puborg"];
+	        this.pcode = source["pcode"];
+	    }
+	}
+	export class GovListReport {
+	    start_url: string;
+	    cat: string;
+	    pages: number;
+	    entries: GovListEntry[];
+	    stopped_at: string;
+	    out_path?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new GovListReport(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.start_url = source["start_url"];
+	        this.cat = source["cat"];
+	        this.pages = source["pages"];
+	        this.entries = this.convertValues(source["entries"], GovListEntry);
+	        this.stopped_at = source["stopped_at"];
+	        this.out_path = source["out_path"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	export class Blindspot {
 	    question: string;
@@ -226,6 +287,47 @@ export namespace neutral {
 		    return a;
 		}
 	}
+	export class ResearchResult {
+	    url: string;
+	    // Go type: time
+	    fetched_at: any;
+	    content_sha256: string;
+	    text: string;
+	    fact: domain.Fact;
+	    redact_actions: redact.Action[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ResearchResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.fetched_at = this.convertValues(source["fetched_at"], null);
+	        this.content_sha256 = source["content_sha256"];
+	        this.text = source["text"];
+	        this.fact = this.convertValues(source["fact"], domain.Fact);
+	        this.redact_actions = this.convertValues(source["redact_actions"], redact.Action);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class TimelineItem {
 	    Date: string;
 	    Fact: domain.Fact;
@@ -257,6 +359,83 @@ export namespace neutral {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace plugins {
+	
+	export class ActionCandidate {
+	    action_id: string;
+	    page_id: number;
+	    kind: string;
+	    ref: string;
+	    label: string;
+	    value?: string;
+	    allowed: boolean;
+	    rule?: string;
+	    reason?: string;
+	    fact_state?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionCandidate(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.action_id = source["action_id"];
+	        this.page_id = source["page_id"];
+	        this.kind = source["kind"];
+	        this.ref = source["ref"];
+	        this.label = source["label"];
+	        this.value = source["value"];
+	        this.allowed = source["allowed"];
+	        this.rule = source["rule"];
+	        this.reason = source["reason"];
+	        this.fact_state = source["fact_state"];
+	    }
+	}
+	export class ActionReceipt {
+	    action_id: string;
+	    diff: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionReceipt(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.action_id = source["action_id"];
+	        this.diff = source["diff"];
+	    }
+	}
+	export class BrowserPage {
+	    page_id: number;
+	    url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BrowserPage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.page_id = source["page_id"];
+	        this.url = source["url"];
+	    }
+	}
+	export class HumanHelpStatus {
+	    status: string;
+	    request_id?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HumanHelpStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.request_id = source["request_id"];
+	    }
 	}
 
 }
