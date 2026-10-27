@@ -41,7 +41,7 @@ func (s *govListStub) Snapshot(ctx context.Context, pageID int) (string, error) 
 }
 func (s *govListStub) Evaluate(ctx context.Context, pageID int, code string) (string, error) {
 	s.sawCode = code
-	if strings.Contains(code, "jumpText") {
+	if strings.Contains(code, "inp.value") {
 		i := strings.Index(code, "inp.value = '")
 		if i < 0 {
 			return "no_input", nil
@@ -64,6 +64,9 @@ func (s *govListStub) Evaluate(ctx context.Context, pageID int, code string) (st
 		}
 		s.page = n - 1 // 跳转生效（0 基）
 		return "jumped", nil
+	}
+	if strings.Contains(code, "jumpText") {
+		return "ready", nil // 控件就绪探测
 	}
 	if strings.Contains(code, "sel-page") {
 		return fmt.Sprintf("%d", s.page+1), nil
@@ -124,8 +127,8 @@ func TestRunGovListBrowseFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep.StoppedAt != "empty_page" || rep.Pages != 5 || s.jumps < 5 {
-		t.Errorf("应跳转驱动、连续 3 空页后停: %+v jumps=%d", rep, s.jumps)
+	if rep.StoppedAt != "empty_page" || rep.Pages != govListEmptyStop+2 || s.jumps < rep.Pages {
+		t.Errorf("应跳转驱动、连续 %d 空页后停: %+v jumps=%d", govListEmptyStop, rep, s.jumps)
 	}
 	if len(rep.Entries) != 2 {
 		t.Fatalf("应按 URL 去重得 2 条: %d", len(rep.Entries))

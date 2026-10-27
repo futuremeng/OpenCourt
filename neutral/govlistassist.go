@@ -12,15 +12,17 @@
 //   - 默认列表即「部门规章 + 地方政府规章」混合清单（共约 1000 页），无独立分类页签；
 //     分类按发布机关逐条推断（puborg 含「人民政府」→ 地方政府规章，否则 → 部门规章，
 //     与 OpenLaw govgzResolveLevel 同规则）；
-//   - 分页 = 对官方分页按钮 button.turnPage.next-page 的 DOM 点击（页面自身 JS
-//     取下一页）——等价人工点击，绝不构造检索请求、绝不访问 sousuo/sousuoht；
+//   - 分页 = 每页经官方「跳转」控件（input.jumpText 填页码 + 「确定」按钮）到达
+//     并核验选中页码——等价人工输入页码跳页（真机实测：顺序点「下一页」只覆盖
+//     首页窗口前 ~97 页，跳转控件可达全部约 1000 页）；绝不构造检索请求、绝不访问
+//     sousuo/sousuoht；
 //   - 地方政府规章详情页直链地方政府网站（同 .gov.cn 域名族）：清单如实记录，
 //     由 OpenLaw 侧主机策略决定抓取范围（报告可见），清单层不擅自丢弃。
 //
 // 硬护栏（代码级，不是提示词）：
 //   - 只允许打开固定起点 URL（规章库官方列表页）；
-//   - evaluate 脚本只读 DOM 或对官方分页按钮 click()（无 fetch/XHR/导航构造）；
-//   - 礼貌限速：翻页间隔下限 2s（默认 2.5s），单会话页数上限 200；
+//   - evaluate 脚本只读 DOM 或操作官方跳转控件（无 fetch/XHR/导航构造）；
+//   - 礼貌限速：跳页间隔下限 2s（默认 2.5s），单会话页数上限 200；
 //   - 条目 URL 硬校验（https + .gov.cn 域名族 + .htm/.html/.shtml），噪声链接丢弃；
 //   - SPA 就绪重试只重读 DOM（零额外网络请求）；
 //   - 全程审计由调用方（main.go）落 BROWSER_GOVLIST 事件。
@@ -29,6 +31,7 @@ package neutral
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -50,11 +53,12 @@ const (
 	govListMaxPages     = 200
 	govListMinDelay     = 2 * time.Second
 	govListDefaultDelay = 2500 * time.Millisecond
-	govListReadyTries   = 5 // SPA 就绪重试（只重读 DOM）
+	govListReadyTries   = 3 // SPA 就绪重试（只重读 DOM）
 	govListReadyPause   = 1500 * time.Millisecond
-	govListReloadTries  = 2 // 空页时官方跳转重刷重试（等价人工刷新）
-	govListEmptyStop    = 3 // 连续真空页达到此数才停止（防偶发空壳误停）
-	govListJumpTries    = 6 // 跳转页码核验重试
+	govListReloadTries  = 1  // 空页时官方跳转重刷重试（等价人工刷新）
+	govListEmptyStop    = 10 // 连续真空页达到此数才停止（真机实测清单存在 >3 页的真实数据缺口段）
+	govListJumpTries    = 6  // 跳转页码核验重试
+	govListOpenTries    = 10 // 打开列表页后控件就绪等待
 )
 
 // GovListEntry 规章库清单条目（字段与 OpenLaw govgz list.json 完全一致）。
@@ -123,6 +127,19 @@ return 'jumped';`
 const govListSelPageJS = `
 const sel = document.querySelector('li.sel-page');
 return sel ? sel.textContent.trim() : '';`
+
+// govListControlReadyJS 官方跳转控件就绪探测（SPA 首屏渲染完成前控件不存在）。
+const govListControlReadyJS = `
+return document.querySelector('input.jumpText') ? 'ready' : 'wait';`
+
+// jumpUnverifiedError 跳转已点击但页码核验不过（页码越界/控件改版）——
+// 与「控件不存在」（页面未就绪/改版）区分：前者 = 越过末页正常结束，
+// 后者 = 页面异常必须报错，绝不静默当末页。
+type jumpUnverifiedError struct{ page int }
+
+func (e *jumpUnverifiedError) Error() string {
+	return fmt.Sprintf("跳转后页码核验失败（期望第 %d 页）", e.page)
+}
 
 // govListRawEntry evaluate 回传的页面条目（未过滤）。
 type govListRawEntry struct {
@@ -257,7 +274,29 @@ func jumpToPage(ctx context.Context, b plugins.BrowserPlugin, pageID, page int) 
 			return nil
 		}
 	}
-	return fmt.Errorf("跳转后页码核验失败（期望第 %d 页）", page)
+	return &jumpUnverifiedError{page: page}
+}
+
+// waitListControlReady 等待官方跳转控件渲染就绪（SPA 首屏异步渲染，
+// 只重读 DOM，零额外网络请求）。
+func waitListControlReady(ctx context.Context, b plugins.BrowserPlugin, pageID int) error {
+	for tries := 0; tries < govListOpenTries; tries++ {
+		if tries > 0 {
+			select {
+			case <-time.After(govListReadyPause):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		raw, err := b.Evaluate(ctx, pageID, govListControlReadyJS)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(raw, "ready") {
+			return nil
+		}
+	}
+	return fmt.Errorf("列表页跳转控件未就绪（页面改版或渲染失败）")
 }
 
 // RunGovListBrowse 执行规章库清单浏览：打开官方列表页（混合清单）→ 逐页抽取
@@ -309,6 +348,9 @@ func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 		return GovListReport{}, fmt.Errorf("打开规章库列表页失败: %w", err)
 	}
 	defer func() { _ = b.ClosePage(context.WithoutCancel(ctx), page.PageID) }()
+	if err := waitListControlReady(ctx, b, page.PageID); err != nil {
+		return GovListReport{}, err
+	}
 
 	rep := GovListReport{StartURL: GovListStartURL, Cat: opts.Cat, StartPage: opts.StartPage, StoppedAt: "done"}
 	seen := map[string]bool{}
@@ -336,8 +378,12 @@ func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 			}
 		}
 		if err := jumpToPage(ctx, b, page.PageID, curPage); err != nil {
-			rep.StoppedAt = "end_of_list"
-			return rep, nil
+			var uv *jumpUnverifiedError
+			if errors.As(err, &uv) {
+				rep.StoppedAt = "end_of_list" // 页码越界 = 越过末页，正常结束
+				return rep, nil
+			}
+			return rep, fmt.Errorf("第 %d 页跳转失败: %w", pageno, err)
 		}
 		entries, err := extractReady(ctx, b, page.PageID, curPage, seen, clock, pauseCh, pauseDur)
 		if err != nil {
