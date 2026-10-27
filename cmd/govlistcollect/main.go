@@ -57,15 +57,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "浏览失败（已浏览 %d 页）: %v\n", rep.Pages, err)
 		os.Exit(1)
 	}
-	if len(rep.Entries) == 0 && rep.StoppedAt != "end_of_list" {
+	if len(rep.Entries) == 0 {
+		if rep.StoppedAt == "end_of_list" {
+			fmt.Printf("会话结束：起始页越界（越过末页），0 条\n")
+			return // 正常空会话，不中断批次
+		}
 		fmt.Fprintf(os.Stderr, "未收集到条目（%s）\n", rep.StoppedAt)
 		os.Exit(1)
 	}
-	fmt.Printf("会话结束：浏览 %d 页（%s），0 条\n", rep.Pages, rep.StoppedAt)
-	if rep.StoppedAt == "end_of_list" {
-		return // 起始页越界 = 已越过末页，正常空会话
-	}
-	os.Exit(1)
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
