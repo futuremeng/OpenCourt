@@ -134,14 +134,14 @@ func TestRunGovListBrowseFlow(t *testing.T) {
 	           {"title":"乙办法","url":"https://www.changdu.gov.cn/x/abc.shtml","puborg":"昌都市人民政府"}]`
 	s := &govListStub{
 		pages:   []string{page1, page2},
-		nextSeq: []string{"clicked", "clicked"}, // 第 2 次翻页后 page=2 越界 → 抽取空 → 停
+		nextSeq: []string{"clicked", "clicked", "clicked", "clicked"}, // 空页需连续 3 页才认定真空
 	}
 	rep, err := RunGovListBrowse(context.Background(), s, GovListOptions{Delay: time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep.StoppedAt != "empty_page" || rep.Pages != 3 {
-		t.Errorf("应在空页停: %+v", rep)
+	if rep.StoppedAt != "empty_page" || rep.Pages != 5 {
+		t.Errorf("应连续 3 空页后停: %+v", rep)
 	}
 	if len(rep.Entries) != 2 {
 		t.Fatalf("应按 URL 去重得 2 条: %d", len(rep.Entries))
@@ -178,13 +178,13 @@ func TestRunGovListBrowseStartPage(t *testing.T) {
 	if rep.StartPage != 3 {
 		t.Errorf("报告应记录起始页: %+v", rep)
 	}
-	// 页码核验不过（stub 恒核验通过，此处验证越界跳转后 extract 空即停）
-	s2 := &govListStub{pages: pages, nextSeq: []string{"clicked"}}
+	// 页码核验不过（stub 恒核验通过，此处验证越界跳转后连续空页即停）
+	s2 := &govListStub{pages: pages, nextSeq: []string{"clicked", "clicked", "clicked"}}
 	rep2, err := RunGovListBrowse(context.Background(), s2, GovListOptions{
-		StartPage: 99, MaxPages: 2, Delay: time.Millisecond,
+		StartPage: 99, MaxPages: 9, Delay: time.Millisecond,
 	})
 	if err != nil || rep2.StoppedAt != "empty_page" || len(rep2.Entries) != 0 {
-		t.Errorf("越界起始页应空页即停: %+v %v", rep2, err)
+		t.Errorf("越界起始页应连续空页即停: %+v %v", rep2, err)
 	}
 }
 
@@ -215,11 +215,12 @@ func TestRunGovListBrowseGuardrails(t *testing.T) {
 	if _, err := RunGovListBrowse(context.Background(), s2, GovListOptions{Cat: "规范性文件"}); err == nil {
 		t.Error("未知分类必须拒绝")
 	}
-	// 空清单页：SPA 就绪重试（只重读 DOM）后即停，绝不翻页点击。
-	s3 := &govListStub{pages: []string{"[]"}}
+	// 空清单页：SPA 就绪重试（只重读 DOM）+ 官方跳转重刷后，连续 3 空页即停，
+	// 空页间只走官方翻页点击（不伪造数据）。
+	s3 := &govListStub{pages: []string{"[]"}, nextSeq: []string{"clicked", "clicked", "clicked"}}
 	rep, err := RunGovListBrowse(context.Background(), s3, GovListOptions{MaxPages: 9999, Delay: time.Millisecond})
-	if err != nil || rep.StoppedAt != "empty_page" || rep.Pages != 1 || s3.nextCall != 0 {
-		t.Errorf("空页应即停不翻页: %+v %v", rep, err)
+	if err != nil || rep.StoppedAt != "empty_page" || rep.Pages != govListEmptyStop || s3.nextCall != govListEmptyStop-1 {
+		t.Errorf("连续 %d 空页应即停: %+v %v", govListEmptyStop, rep, err)
 	}
 	// MaxPages 钳制：200 页上限。用虚拟时钟加速墙钟等待，但断言每一次翻页
 	// 间隔都 >= 2s（真实点击间隔语义不因加速而失真）。

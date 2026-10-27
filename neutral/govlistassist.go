@@ -50,8 +50,11 @@ const (
 	govListMaxPages     = 200
 	govListMinDelay     = 2 * time.Second
 	govListDefaultDelay = 2500 * time.Millisecond
-	govListReadyTries   = 4 // SPA 就绪重试（只重读 DOM）
+	govListReadyTries   = 5 // SPA 就绪重试（只重读 DOM）
 	govListReadyPause   = 1500 * time.Millisecond
+	govListReloadTries  = 2 // 空页时官方跳转重刷重试（等价人工刷新）
+	govListEmptyStop    = 3 // 连续真空页达到此数才停止（防偶发空壳误停）
+	govListJumpTries    = 6 // 跳转页码核验重试
 )
 
 // GovListEntry 规章库清单条目（字段与 OpenLaw govgz list.json 完全一致）。
@@ -173,47 +176,59 @@ func ParseGovListExtract(raw string) []GovListEntry {
 }
 
 // extractReady 抽取当前页条目。SPA 异步渲染/翻页生效可能滞后——重试只重读
-// DOM（零网络请求，不构成额外访问），最多 govListReadyTries 次。
-// 返回的条目可能全部已见（翻页尚未生效时）。
-func extractReady(ctx context.Context, b plugins.BrowserPlugin, pageID int, seen map[string]bool,
+// DOM（零网络请求，不构成额外访问），最多 govListReadyTries 次；仍为空则用
+// 官方「跳转」控件重刷当前页（等价人工刷新页面，页面自身 JS 重新取数）再试，
+// 最多 govListReloadTries 次（真机实测：偶发空壳渲染持续 >6s，纯 DOM 重读
+// 无效，重刷可恢复）。返回的条目可能全部已见（翻页尚未生效时）。
+func extractReady(ctx context.Context, b plugins.BrowserPlugin, pageID, curPage int, seen map[string]bool,
 	clock *time.Time, pauseCh chan time.Duration, pauseDur time.Duration) ([]GovListEntry, error) {
 	var last []GovListEntry
-	for tries := 0; tries < govListReadyTries; tries++ {
-		if tries > 0 {
-			if pauseCh != nil {
-				select {
-				case pauseCh <- govListReadyPause:
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				}
-				if clock != nil {
-					*clock = clock.Add(pauseDur)
-				}
-			} else {
-				select {
-				case <-time.After(govListReadyPause):
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				}
+	for reload := 0; reload <= govListReloadTries; reload++ {
+		if reload > 0 {
+			if err := jumpToPage(ctx, b, pageID, curPage); err != nil {
+				return nil, err
 			}
 		}
-		raw, err := b.Evaluate(ctx, pageID, govListExtractJS)
-		if err != nil {
-			return nil, err
-		}
-		last = ParseGovListExtract(raw)
-		if len(last) == 0 {
-			continue // 空页或渲染未就绪，重试确认
-		}
-		fresh := false
-		for _, e := range last {
-			if !seen[e.URL] {
-				fresh = true
-				break
+		for tries := 0; tries < govListReadyTries; tries++ {
+			if tries > 0 {
+				if pauseCh != nil {
+					select {
+					case pauseCh <- govListReadyPause:
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					}
+					if clock != nil {
+						*clock = clock.Add(pauseDur)
+					}
+				} else {
+					select {
+					case <-time.After(govListReadyPause):
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					}
+				}
+			}
+			raw, err := b.Evaluate(ctx, pageID, govListExtractJS)
+			if err != nil {
+				return nil, err
+			}
+			last = ParseGovListExtract(raw)
+			if len(last) == 0 {
+				continue // 空页或渲染未就绪，重读确认
+			}
+			fresh := false
+			for _, e := range last {
+				if !seen[e.URL] {
+					fresh = true
+					break
+				}
+			}
+			if fresh {
+				return last, nil // 出现新条目 = 新页已就绪
 			}
 		}
-		if fresh {
-			return last, nil // 出现新条目 = 新页已就绪
+		if len(last) > 0 {
+			return last, nil // 有条目但全已见：交主循环判重，不再重刷
 		}
 	}
 	return last, nil
@@ -243,7 +258,7 @@ func jumpToPage(ctx context.Context, b plugins.BrowserPlugin, pageID, page int) 
 		return fmt.Errorf("官方跳转控件不可用: %s", raw)
 	}
 	want := fmt.Sprintf("%d", page)
-	for tries := 0; tries < govListReadyTries; tries++ {
+	for tries := 0; tries < govListJumpTries; tries++ {
 		if tries > 0 {
 			select {
 			case <-time.After(govListReadyPause):
@@ -319,28 +334,38 @@ func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 		}
 	}
 	seen := map[string]bool{}
+	emptyStreak := 0
 
 	for pageno := 1; pageno <= opts.MaxPages; pageno++ {
-		entries, err := extractReady(ctx, b, page.PageID, seen, clock, pauseCh, pauseDur)
+		curPage := opts.StartPage + pageno - 1
+		entries, err := extractReady(ctx, b, page.PageID, curPage, seen, clock, pauseCh, pauseDur)
 		if err != nil {
 			return rep, fmt.Errorf("第 %d 页抽取失败: %w", pageno, err)
 		}
 		if len(entries) == 0 {
+			// DOM 重读 + 官方跳转重刷后仍空。连续 govListEmptyStop 页才认定真空页
+			// 停止（真机实测偶发空壳渲染会连续误报）；未到阈值则官方翻页继续，
+			// 疑似假空页跳过的条目由合并工具的缺段检测补采。
+			emptyStreak++
 			rep.Pages = pageno
-			rep.StoppedAt = "empty_page"
-			return rep, nil
-		}
-		for _, e := range entries {
-			if seen[e.URL] {
-				continue
+			if emptyStreak >= govListEmptyStop {
+				rep.StoppedAt = "empty_page"
+				return rep, nil
 			}
-			seen[e.URL] = true // 如实记录（含被过滤分类的），过滤只影响输出
-			if opts.Cat != "" && e.Cat != opts.Cat {
-				continue
+		} else {
+			emptyStreak = 0
+			for _, e := range entries {
+				if seen[e.URL] {
+					continue
+				}
+				seen[e.URL] = true // 如实记录（含被过滤分类的），过滤只影响输出
+				if opts.Cat != "" && e.Cat != opts.Cat {
+					continue
+				}
+				rep.Entries = append(rep.Entries, e)
 			}
-			rep.Entries = append(rep.Entries, e)
+			rep.Pages = pageno
 		}
-		rep.Pages = pageno
 		if pageno == opts.MaxPages {
 			rep.StoppedAt = "max_pages"
 			return rep, nil
