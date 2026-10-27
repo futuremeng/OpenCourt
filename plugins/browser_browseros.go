@@ -240,7 +240,12 @@ func (p *BrowserOSPlugin) Evaluate(ctx context.Context, pageID int, code string)
 		return "", err
 	}
 	p.mu.Lock()
-	res, err := p.client.callTool(ctx, "evaluate", map[string]any{"page": pageID, "code": code})
+	res, err := p.client.callTool(ctx, "evaluate", map[string]any{
+		"page": pageID, "code": code,
+		// neo 默认 5000 字节内联上限，超出即截断并落本地文件（远端客户端
+		// 读不到该路径）——清单抽取必须整段回传，显式抬高上限。
+		"maxChars": 100000,
+	})
 	p.mu.Unlock()
 	if err != nil {
 		p.resetReady()

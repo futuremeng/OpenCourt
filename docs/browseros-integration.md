@@ -123,6 +123,7 @@ type BrowserPlugin interface {
 
 ### 5.3 合规红线（写入 gate 层，代码级强制）
 
+- **立案最终提交是绝对红线，严禁自动执行**：无论用户是否在界面上二次确认，`gate.CheckBrowserAction` 一律拦截提交类动作（词表覆盖 zxfw 实测词汇：提交/递交/重新提起/提起申请/确认立案/预览和提交/pay/submit/delete 等）。执行链三重硬约束使红线不可绕过：① 被拦候选**不进入** pending 登记表（持有 actionID 也无法执行）；② `ExecuteAction` 执行时**复查** gate；③ 候选一次性消费。表单提交必须经当事人在平台页面内亲自审核并完成（HandToHuman）。
 - **绝不自动点击「提交/确认立案」**：ExecuteAction 白名单排除提交类控件；提交必须 HandToHuman。
 - **实名与生物认证绝不代理**：登录、人脸、验证码环节 agent 必须挂起等人。
 - **不存储、不读取平台凭据**：登录态只存在于 BrowserOS 本机 profile，OpenCourt 不导出、不复制 cookie。
@@ -202,24 +203,30 @@ type BrowserPlugin interface {
 - 「网络查阅」：URL + 当事人姓名 → 脱敏后正文、快照哈希、脱敏计数、引用坐标（web:URL@时间#哈希）、弱态事实状态
 - 「立案表单辅助」：打开页面 → 字段=值（`?` 尾缀标弱态）→ 生成候选计划 → 候选清单（红线拦截项红底展示规则与原因；弱态标黄）→ 逐条「确认执行」→ 回执（已脱敏）；交人接管（登录/验证码/实名/最终提交）与等待接管结果
 
-### 国家规章库清单浏览（2026-10-26 已实施）
+### 国家规章库清单浏览（2026-10-26 已实施；真机校准同日）
 
 把 BrowserOS 对接用于 OpenLaw 语料管线的**清单层**（详见 OpenLaw `docs/sources-govcn.md`）：
 
 - `neutral/govlistassist.go`：`RunGovListBrowse` 人在环代理浏览——打开官方列表页
-  （起点 URL 白名单，唯一常量）→ 可选切分类页签 → `evaluate` 只读 DOM 抽取条目
-  （无 fetch/XHR/导航）→ 官方「下一页」两段式点击翻页（Propose→gate→Execute）→
-  URL 硬校验（https + www.gov.cn + `content_<id>`）+ 去重 → 产出与 OpenLaw
+  （起点 URL 白名单，唯一常量）→ `evaluate` 只读 DOM 抽取条目（无 fetch/XHR/导航）→
+  官方「下一页」分页按钮 DOM click 翻页（等价人工点击，页面自身 JS 取数）→
+  URL 硬校验（https + `.gov.cn` 域名族 + `.htm/.html/.shtml`）+ 去重 → 产出与 OpenLaw
   `openlaw-govcn -source gzk` 完全兼容的 `list.json`
-- 硬护栏：翻页间隔下限 2s（默认 2.5s）、单会话 ≤200 页、未知分类拒绝、
-  插件未启用直接报错不降级；每次点击过 `gate.CheckBrowserAction`
-- `main.go`：`BrowseGovList(cat, maxPages)` 绑定；产物写
-  `appData/incoming/govgz/list_agent_<ts>.json`；审计 `BROWSER_GOVLIST(_FAIL)`
+- 真机核实形态（neo 0.0.80）：默认列表即**混合清单**（部门规章+地方政府规章，共约
+  1000 页）；分类按发布机关**逐条推断**（puborg 含「人民政府」→ 地方政府规章，与
+  OpenLaw `gvgzResolveLevel` 同规则）；地方政府规章详情页直链地方政府网站（同
+  `.gov.cn` 域名族）——清单如实记录，OpenLaw 侧主机策略决定抓取范围
+- SPA 就绪重试：翻页/首屏异步渲染滞后时只重读 DOM（零额外网络请求），最多 4 次
+- 硬护栏：翻页间隔下限 2s（默认 2.5s）、单会话 ≤200 页、未知分类过滤值拒绝、
+  插件未启用直接报错不降级；evaluate 仅两段固定脚本（抽取/翻页），非自由代码
+- `main.go`：`BrowseGovList(cat, maxPages)` 绑定（cat 为可选过滤：空 = 混合全收）；
+  产物写 `appData/incoming/govgz/list_agent_<ts>.json`；审计 `BROWSER_GOVLIST(_FAIL)`
   （页数/条数/停止原因/清单 sha256）
 - 合规边界：这与「用户自己浏览并点导出」等价——只走主站 robots 允许的官方 UI；
   绝不程序化访问 sousuo/sousuoht 检索域，绝不触碰 Athena RSA 鉴权；
   清单之后由 OpenLaw 侧详情页合规抓取 + 人工确认闸口完成入库
-- 测试：`neutral/govlistassist_test.go`（多页翻页/去重/护栏）；
-  `plugins/browseros_live_test.go` 增加 `TestLiveGovListBrowse`
-  （双开关显式启用：`OPENCOURT_BROWSEROS_ENDPOINT` + `OPENCOURT_GOVLIST_LIVE=1`）
+- 测试：`neutral/govlistassist_test.go`（多页翻页/去重/分类过滤/护栏/翻页间隔
+  ≥2s 断言）；`plugins/browseros_live_test.go` 增加 `TestLiveGovListBrowse`
+  （双开关显式启用：`OPENCOURT_BROWSEROS_ENDPOINT` + `OPENCOURT_GOVLIST_LIVE=1`；
+  真机已通过：2 页 13 条混合清单，cat 逐条推断正确）
 

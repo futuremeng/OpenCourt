@@ -907,7 +907,7 @@ func (a *App) BrowserAwaitHuman() (plugins.HumanHelpStatus, error) {
 // --- 国家规章库清单浏览（人在环代理浏览，neutral/govlistassist.go）---
 
 // BrowseGovList 用用户自己的 BrowserOS neo 浏览国家规章库官方列表页并导出清单
-// （cat = 部门规章/地方政府规章/空；maxPages 单会话上限）。清单是人工浏览的
+// （混合清单；cat = 可选分类过滤 部门规章/地方政府规章/空 = 全收；maxPages 单会话上限）。清单是人工浏览的
 // 代理等价物：只走官方 UI 翻页（限速 ≥2s、红线审计），绝不触碰检索 API/鉴权。
 // 产物写 appData/incoming/govgz/list_agent_<ts>.json，交 OpenLaw
 // openlaw-govcn -source gzk -list <此文件> 走详情页合规抓取 + 人工确认闸口。

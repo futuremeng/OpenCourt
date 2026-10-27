@@ -7,7 +7,10 @@ package gate
 import "regexp"
 
 // reSubmitActions 必须由人亲自执行的最终动作（点击类）。
-var reSubmitActions = regexp.MustCompile(`提\s*交|确认立案|申请立案|确认申请|确认提交|缴纳|支付|签名|签章|发送|删除`)
+// 立案最终提交为绝对红线：无论当事人是否在界面上二次确认，本门一律拦截，
+// 插件 ExecuteAction 永不可执行被本门拦截的候选（两段式确认也不能绕过）。
+// 词表覆盖 zxfw（人民法院在线服务网）实测按钮词汇（docs/zxfw-sitemap.md §6-§7）。
+var reSubmitActions = regexp.MustCompile(`(?i)提\s*交|递交|重新提起|提起申请|确认立案|申请立案|确认申请|正式申请|缴纳|支付|缴费|\bpay\b|\bsubmit\b|\bdelete\b|签名|签章|签署|\bsign\b|发送|\bsend\b|删除|撤回申请`)
 
 // reSensitiveFields 必须由人亲自填写的字段（填写类）：凭据/验证码/签名。
 var reSensitiveFields = regexp.MustCompile(`密码|口令|验证码|校验码|动态码|短信|验证短信|签名|签章|人脸`)

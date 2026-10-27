@@ -271,7 +271,7 @@ async function runWebResearch() {
 }
 
 const assistUrl = ref("");
-const govCat = ref("部门规章");
+const govCat = ref("");
 const govPages = ref(20);
 const govBusy = ref(false);
 const govResult = ref<any | null>(null);
@@ -560,8 +560,9 @@ async function awaitHuman() {
       <h3 style="margin-top:12px">国家规章库清单浏览（人在环代理浏览）</h3>
       <div class="row">
         <select v-model="govCat" style="width:150px">
-          <option value="部门规章">部门规章</option>
-          <option value="地方政府规章">地方政府规章</option>
+          <option value="">全部（混合清单）</option>
+          <option value="部门规章">仅部门规章</option>
+          <option value="地方政府规章">仅地方政府规章</option>
         </select>
         <input v-model.number="govPages" type="number" min="1" max="200" style="width:90px" title="单会话翻页上限（≤200）" />
         <button class="primary" :disabled="govBusy" @click="runGovListBrowse">{{ govBusy ? "浏览中…" : "开始浏览" }}</button>

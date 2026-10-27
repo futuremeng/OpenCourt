@@ -5,10 +5,13 @@
 ## Unreleased（阶段二开发中）
 
 ### 变更
+- **国家规章库清单浏览（真机校准，neo 0.0.80）**：默认列表即混合清单（部门规章+地方政府规章同列，共约 1000 页，无独立分类页签）——分类改为按发布机关**逐条推断**（puborg 含「人民政府」→ 地方政府规章，与 OpenLaw `gvgzResolveLevel` 同规则），`cat` 参数改为可选过滤（空 = 全收）；翻页改为官方分页按钮 `button.turnPage.next-page` DOM click（等价人工点击；快照 ref 在大列表下不可靠，弃用两段式点击路径，evaluate 仍仅两段固定脚本）；URL 硬校验放宽至 `.gov.cn` 域名族（地方政府规章详情页直链地方政府网站——清单如实记录，OpenLaw 主机锁使其在导入报告可见转人工）；新增 SPA 就绪重试（只重读 DOM，零额外网络请求）与翻页间隔 ≥2s 虚拟时钟断言测试；`evaluate` 传 `maxChars=100000`（neo 默认 5000 字节即截断落本地文件，远端读回会丢数据）；`evaluate` code 语义修正为函数体（IIFE 返回 undefined）。真机端到端通过：2 页 13 条混合清单、翻页与 cat 推断正确
+- **立案最终提交绝对红线（代码级强化）**：`core/gate/action.go` 提交类拦截词表扩展至 zxfw 实测词汇（递交/重新提起/提起申请/正式提交/pay/submit/delete 等，英文加词边界）；执行链三重硬约束写入文档——被拦候选不进 pending 登记表、ExecuteAction 复查 gate、一次性消费，两段式确认不可绕过红线（`docs/browseros-integration.md` 5.3）；gate 测试新增 zxfw 提交/非提交用例 12 条
 - **语料许可可见性**：「法条数据」面板显示 manifest 内的机器可读许可声明（无声明时如实提示自行确认来源合法性）；`LawDataStatus` 新增 `license` 字段
 - **代码许可证统一为 Apache-2.0**（OpenCourt 由 MIT 变更，与 OpenLaw 一致；新增明示专利授权条款）；语料数据另行许可：官方文本公有领域 + 本项目汇编产物 CC BY 4.0 + 欧盟部分保留 © European Union 署名（OpenLaw `DATA-LICENSE.md`，随每个语料包分发副本；`index.json` 附 license 字段）；新增第三方依赖许可清单（dmg 内附副本）；DISCLAIMER 第 5 条对齐「官方语料包单独发布」的新分发模式
 
 ### 新增
+- **zxfw 站点地图勘察文档（docs/zxfw-sitemap.md）**：BrowserOS 只读实测人民法院在线服务网——完整路由表（181 条）、网上立案 7 步向导、33 类要素式案由与民间借贷要素式起诉状全字段图、材料清单与必传门控、登录态/会话/倒计时门控等操作纪律；为 filing-assist 映射层提供真实校准基准
 - **国家规章库清单浏览（人在环代理浏览）**：内置智能体经 BrowserOS neo 驱动用户真实浏览器浏览 `www.gov.cn/zhengce/xxgk/gjgzk/` 官方列表页并导出 OpenLaw 兼容清单——`neutral/govlistassist.go`（起点 URL 白名单、evaluate 只读 DOM 抽取、官方「下一页」两段式点击翻页、翻页间隔下限 2s、单会话 ≤200 页、URL 硬校验去重）；插件面新增 `Evaluate`（只读数据抽取，防注入包裹剥离）；`BrowseGovList(cat, maxPages)` Wails 绑定，产物写 `appData/incoming/govgz/list_agent_<ts>.json`，审计 `BROWSER_GOVLIST`；合规边界与「用户自己浏览+导出」等价（绝不程序化访问 sousuo/sousuoht 检索域与 Athena 鉴权），清单交 OpenLaw `openlaw-govcn -source gzk` 走详情页合规抓取+人工确认。真机联调 `TestLiveGovListBrowse`（双开关显式启用）
 - **网上立案辅助操作（P2 两段式）**：`core/gate/action.go` 动作红线代码级强制（提交/支付/签名/发送类点击与密码/验证码/人脸类字段一律拦截，Execute 处不可绕过）；插件 `Snapshot/ProposeFill/ProposeClick/ExecuteAction`（候选必须来自 Propose 登记、gate 复核、一次性消费；断线重连后候选全部作废）+ `HandToHuman/AwaitHuman` 交人接管；`neutral/filingassist.go` 快照表单解析与填写计划（弱态事实标黄）；Wails 绑定与全链路审计（执行回执返回 UI 前强制脱敏）
 - **前端「网络查阅与立案辅助」面板**：BrowserOS 启用状态徽章与启用指引；网络查阅结果展示（脱敏正文/快照哈希/引用坐标/弱态状态/脱敏计数）；两段式表单辅助 UI（候选清单含红线拦截项红底原因、弱态值黄标、逐条确认执行、交人接管）

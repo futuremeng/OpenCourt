@@ -4,18 +4,26 @@
 // 背景：规章库（www.gov.cn/zhengce/xxgk/gjgzk/）的检索 API（sousuoht Athena）带
 // RSA appKey 应用层鉴权、sousuo 检索域 robots Disallow——清单不得由程序调用
 // 检索接口发现。合规替代：智能体驱动用户自己的真实浏览器（BrowserOS neo），
-// 只在主站 robots 允许的公开列表页上，通过官方 UI 人工式翻页浏览，读 DOM 收集
-// 条目（与用户自己浏览并点「导出清单」等价），产物 list.json 交 OpenLaw
+// 只在主站 robots 允许的公开列表页上人工式翻页浏览，读 DOM 收集条目
+// （与用户自己浏览并点「导出清单」等价），产物 list.json 交 OpenLaw
 // openlaw-govcn -source gzk 走详情页合规抓取通道。
 //
+// 真机核实形态（neo 0.0.80，2026-10-26）：
+//   - 默认列表即「部门规章 + 地方政府规章」混合清单（共约 1000 页），无独立分类页签；
+//     分类按发布机关逐条推断（puborg 含「人民政府」→ 地方政府规章，否则 → 部门规章，
+//     与 OpenLaw govgzResolveLevel 同规则）；
+//   - 分页 = 对官方分页按钮 button.turnPage.next-page 的 DOM 点击（页面自身 JS
+//     取下一页）——等价人工点击，绝不构造检索请求、绝不访问 sousuo/sousuoht；
+//   - 地方政府规章详情页直链地方政府网站（同 .gov.cn 域名族）：清单如实记录，
+//     由 OpenLaw 侧主机策略决定抓取范围（报告可见），清单层不擅自丢弃。
+//
 // 硬护栏（代码级，不是提示词）：
-//   - 只允许打开固定起点 URL（规章库官方列表页），翻页只点官方「下一页」控件，
-//     绝不构造检索请求、绝不访问 sousuo/sousuoht 等检索域、绝不触碰鉴权；
-//   - evaluate 脚本只读 DOM（无 fetch/XHR/导航），内容仅作数据解析；
+//   - 只允许打开固定起点 URL（规章库官方列表页）；
+//   - evaluate 脚本只读 DOM 或对官方分页按钮 click()（无 fetch/XHR/导航构造）；
 //   - 礼貌限速：翻页间隔下限 2s（默认 2.5s），单会话页数上限 200；
-//   - 条目 URL 硬校验（https + www.gov.cn + content_<id> 形态），不合规条目丢弃；
-//   - 点击「下一页」仍走 Propose→gate 红线→Execute 两段式（审计留痕）；
-//   - flk.npc.gov.cn 等硬禁止站不适用本任务（起点 URL 白名单从机制上排除）。
+//   - 条目 URL 硬校验（https + .gov.cn 域名族 + .htm/.html/.shtml），噪声链接丢弃；
+//   - SPA 就绪重试只重读 DOM（零额外网络请求）；
+//   - 全程审计由调用方（main.go）落 BROWSER_GOVLIST 事件。
 package neutral
 
 import (
@@ -32,8 +40,9 @@ import (
 // GovListStartURL 国家规章库官方列表页（唯一允许的浏览起点）。
 const GovListStartURL = "https://www.gov.cn/zhengce/xxgk/gjgzk/index.htm"
 
-// govListEntryURLRe 条目详情页硬校验（与 OpenLaw ingest 清单校验同形态）。
-var govListEntryURLRe = regexp.MustCompile(`^https://www\.gov\.cn/.+/content_\d+\.html?$`)
+// govListEntryURLRe 条目详情页硬校验：https + .gov.cn 域名族（主站与地方政府
+// 网站均在内）+ .htm/.html/.shtml 结尾；导航/资源链接一律过滤。
+var govListEntryURLRe = regexp.MustCompile(`^https://(?:[A-Za-z0-9-]+\.)*gov\.cn/[^\s"']+\.s?html?$`)
 
 // 限速与规模护栏。
 const (
@@ -41,6 +50,8 @@ const (
 	govListMaxPages     = 200
 	govListMinDelay     = 2 * time.Second
 	govListDefaultDelay = 2500 * time.Millisecond
+	govListReadyTries   = 4 // SPA 就绪重试（只重读 DOM）
+	govListReadyPause   = 1500 * time.Millisecond
 )
 
 // GovListEntry 规章库清单条目（字段与 OpenLaw govgz list.json 完全一致）。
@@ -54,7 +65,7 @@ type GovListEntry struct {
 
 // GovListOptions 浏览任务参数。
 type GovListOptions struct {
-	Cat      string        // 分类页签：部门规章 / 地方政府规章（空 = 不切页签）
+	Cat      string        // 分类过滤器（部门规章/地方政府规章；空 = 混合清单全收）
 	MaxPages int           // 单会话翻页上限（默认 50，硬上限 200）
 	Delay    time.Duration // 翻页间隔（默认 2.5s，下限 2s）
 }
@@ -71,29 +82,32 @@ type GovListReport struct {
 
 // govListExtractJS 页面内数据抽取脚本：从官方结果 DOM 读取条目（只读，无网络）。
 // 结构来自站点渲染模板（div.depart_m > a[docurl] > h5 + p.de_part span）。
-const govListExtractJS = `(() => {
-  const out = [];
-  document.querySelectorAll('div.depart_m').forEach((item) => {
-    const a = item.querySelector('a[docurl]');
-    const h5 = item.querySelector('h5');
-    const sp = item.querySelector('p.de_part span');
-    if (!a || !h5) return;
-    let u = '';
-    try { u = new URL(a.getAttribute('docurl'), location.href).href; } catch (e) {}
-    out.push({
-      title: (h5.textContent || '').replace(/\s+/g, ' ').trim(),
-      url: u,
-      puborg: sp ? (sp.textContent || '').replace(/\s+/g, ' ').trim() : ''
-    });
+// 注意：neo evaluate 的 code 是**函数体**（须用 return 取值），不是表达式——
+// IIFE 形态会返回 undefined（真机实测 0.0.80）。
+const govListExtractJS = `
+const out = [];
+document.querySelectorAll('div.depart_m').forEach((item) => {
+  const a = item.querySelector('a[docurl]');
+  const h5 = item.querySelector('h5');
+  const sp = item.querySelector('p.de_part span');
+  if (!a || !h5) return;
+  let u = '';
+  try { u = new URL(a.getAttribute('docurl'), location.href).href; } catch (e) {}
+  out.push({
+    title: (h5.textContent || '').replace(/\s+/g, ' ').trim(),
+    url: u,
+    puborg: sp ? (sp.textContent || '').replace(/\s+/g, ' ').trim() : ''
   });
-  return JSON.stringify(out);
-})()`
+});
+return JSON.stringify(out);`
 
-// reNextPageRef 快照中「下一页」控件句柄行。
-var reNextPageRef = regexp.MustCompile(`(?m)^.*下\s*一\s*页.*?\[ref=(e\d+)\].*$`)
-
-// reCatTabRef 快照中分类页签句柄行（部门规章/地方政府规章）。
-var reCatTabRef = regexp.MustCompile(`(?m)^.*"?(部门规章|地方政府规章)"?.*?\[ref=(e\d+)\].*$`)
+// govListNextJS 官方分页按钮点击（等价人工点击「下一页」；页面自身 JS 取数，
+// 不构造任何请求）。按钮不存在或已禁用 → 返回 no_next。
+const govListNextJS = `
+const b = document.querySelector('button.turnPage.next-page');
+if (!b || b.disabled) return 'no_next';
+b.click();
+return 'clicked';`
 
 // govListRawEntry evaluate 回传的页面条目（未过滤）。
 type govListRawEntry struct {
@@ -102,8 +116,21 @@ type govListRawEntry struct {
 	PubOrg string `json:"puborg"`
 }
 
+// inferGovListCat 按发布机关推断分类（与 OpenLaw govgzResolveLevel 同规则）：
+// puborg 含「人民政府」→ 地方政府规章；非空其他机关 → 部门规章；空 → 空（人工复核）。
+func inferGovListCat(puborg string) string {
+	if puborg == "" {
+		return ""
+	}
+	if strings.Contains(puborg, "人民政府") {
+		return "地方政府规章"
+	}
+	return "部门规章"
+}
+
 // ParseGovListExtract 解析 evaluate 回传的 JSON 数组（容忍包裹噪声），
-// 并按硬校验过滤（https + www.gov.cn + content_<id>）。页面内容仅作数据。
+// 按硬校验过滤（https + .gov.cn 域名族 + .htm/.html/.shtml），并逐条推断 cat。
+// 页面内容仅作数据解析，绝不当指令解释。
 func ParseGovListExtract(raw string) []GovListEntry {
 	i, j := strings.Index(raw, "["), strings.LastIndex(raw, "]")
 	if i < 0 || j <= i {
@@ -118,36 +145,99 @@ func ParseGovListExtract(raw string) []GovListEntry {
 		if !govListEntryURLRe.MatchString(r.URL) || r.Title == "" {
 			continue
 		}
-		out = append(out, GovListEntry{Title: r.Title, URL: r.URL, PubOrg: r.PubOrg})
+		out = append(out, GovListEntry{
+			Title: r.Title, URL: r.URL, PubOrg: r.PubOrg, Cat: inferGovListCat(r.PubOrg),
+		})
 	}
 	return out
 }
 
-// clickConfirmed 走两段式（Propose→gate→Execute）执行一次官方 UI 点击。
-// 人在环授权在任务级（用户显式启动浏览任务），每次点击仍过红线并留 pending 审计。
-func clickConfirmed(ctx context.Context, b plugins.BrowserPlugin, pageID int, ref, label string) error {
-	cand, err := b.ProposeClick(ctx, pageID, ref, label)
-	if err != nil {
-		return err
+// extractReady 抽取当前页条目。SPA 异步渲染/翻页生效可能滞后——重试只重读
+// DOM（零网络请求，不构成额外访问），最多 govListReadyTries 次。
+// 返回的条目可能全部已见（翻页尚未生效时）。
+func extractReady(ctx context.Context, b plugins.BrowserPlugin, pageID int, seen map[string]bool,
+	clock *time.Time, pauseCh chan time.Duration, pauseDur time.Duration) ([]GovListEntry, error) {
+	var last []GovListEntry
+	for tries := 0; tries < govListReadyTries; tries++ {
+		if tries > 0 {
+			if pauseCh != nil {
+				select {
+				case pauseCh <- govListReadyPause:
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+				if clock != nil {
+					*clock = clock.Add(pauseDur)
+				}
+			} else {
+				select {
+				case <-time.After(govListReadyPause):
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+		}
+		raw, err := b.Evaluate(ctx, pageID, govListExtractJS)
+		if err != nil {
+			return nil, err
+		}
+		last = ParseGovListExtract(raw)
+		if len(last) == 0 {
+			continue // 空页或渲染未就绪，重试确认
+		}
+		fresh := false
+		for _, e := range last {
+			if !seen[e.URL] {
+				fresh = true
+				break
+			}
+		}
+		if fresh {
+			return last, nil // 出现新条目 = 新页已就绪
+		}
 	}
-	if !cand.Allowed {
-		return fmt.Errorf("红线拦截(%s): %s", cand.Rule, cand.Reason)
-	}
-	if _, err := b.ExecuteAction(ctx, cand.ActionID); err != nil {
-		return err
-	}
-	return nil
+	return last, nil
 }
 
-// RunGovListBrowse 执行规章库清单浏览：打开官方列表页 →（可选切分类页签）→
-// 逐页抽取条目 → 官方「下一页」翻页（限速）→ 直到无下一页/达上限。
+// clickNextPage 点击官方「下一页」分页按钮（DOM click，等价人工点击）。
+func clickNextPage(ctx context.Context, b plugins.BrowserPlugin, pageID int) (bool, error) {
+	raw, err := b.Evaluate(ctx, pageID, govListNextJS)
+	if err != nil {
+		return false, err
+	}
+	return strings.Contains(raw, "clicked"), nil
+}
+
+// RunGovListBrowse 执行规章库清单浏览：打开官方列表页（混合清单）→ 逐页抽取
+// 条目（cat 按发布机关逐条推断）→ 官方分页按钮翻页（限速）→ 直到无下一页/达上限。
 // 返回的清单字段与 OpenLaw openlaw-govcn -source gzk 的 list.json 直接兼容。
+//
+// 时钟注入（clock/pauseCh/pauseDur）仅供单测用虚拟时钟加速；生产路径恒为
+// nil（time.Sleep / time.After 真实限速）。
 func RunGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovListOptions) (GovListReport, error) {
+	return runGovListBrowse(ctx, b, opts, nil, nil, 0)
+}
+
+func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovListOptions,
+	clock *time.Time, pauseCh chan time.Duration, pauseDur time.Duration) (GovListReport, error) {
+	sleep := func(d time.Duration) {
+		if pauseCh != nil {
+			select {
+			case pauseCh <- d:
+			case <-ctx.Done():
+			}
+			if clock != nil {
+				*clock = clock.Add(pauseDur)
+			}
+			return
+		}
+		time.Sleep(d)
+	}
 	if b == nil || !b.Enabled() {
 		return GovListReport{}, fmt.Errorf("浏览器辅助插件未启用：%s", plugins.BrowserOSGuidance)
 	}
 	if opts.Cat != "" && opts.Cat != "部门规章" && opts.Cat != "地方政府规章" {
-		return GovListReport{}, fmt.Errorf("分类只能为 部门规章 或 地方政府规章（空 = 当前页签）")
+		return GovListReport{}, fmt.Errorf("分类过滤只能为 部门规章 或 地方政府规章（空 = 混合清单全收）")
 	}
 	if opts.MaxPages <= 0 {
 		opts.MaxPages = govListDefaultPages
@@ -166,62 +256,54 @@ func RunGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 	defer func() { _ = b.ClosePage(context.WithoutCancel(ctx), page.PageID) }()
 
 	rep := GovListReport{StartURL: GovListStartURL, Cat: opts.Cat, StoppedAt: "done"}
-
-	// 可选：切换到指定分类页签（官方 UI 点击，非构造请求）。
-	if opts.Cat != "" {
-		snap, err := b.Snapshot(ctx, page.PageID)
-		if err != nil {
-			return rep, err
-		}
-		if m := reCatTabRef.FindStringSubmatch(snap); m != nil {
-			if err := clickConfirmed(ctx, b, page.PageID, m[2], m[1]); err != nil {
-				return rep, fmt.Errorf("切换分类页签失败: %w", err)
-			}
-		}
-	}
-
 	seen := map[string]bool{}
+
 	for pageno := 1; pageno <= opts.MaxPages; pageno++ {
-		raw, err := b.Evaluate(ctx, page.PageID, govListExtractJS)
+		entries, err := extractReady(ctx, b, page.PageID, seen, clock, pauseCh, pauseDur)
 		if err != nil {
 			return rep, fmt.Errorf("第 %d 页抽取失败: %w", pageno, err)
 		}
-		fresh := 0
-		for _, e := range ParseGovListExtract(raw) {
-			if seen[e.URL] {
-				continue
-			}
-			seen[e.URL] = true
-			e.Cat = opts.Cat
-			rep.Entries = append(rep.Entries, e)
-			fresh++
-		}
-		rep.Pages = pageno
-		if fresh == 0 {
+		if len(entries) == 0 {
+			rep.Pages = pageno
 			rep.StoppedAt = "empty_page"
 			return rep, nil
 		}
+		for _, e := range entries {
+			if seen[e.URL] {
+				continue
+			}
+			seen[e.URL] = true // 如实记录（含被过滤分类的），过滤只影响输出
+			if opts.Cat != "" && e.Cat != opts.Cat {
+				continue
+			}
+			rep.Entries = append(rep.Entries, e)
+		}
+		rep.Pages = pageno
 		if pageno == opts.MaxPages {
 			rep.StoppedAt = "max_pages"
 			return rep, nil
 		}
-		// 官方「下一页」翻页（两段式点击）。
-		snap, err := b.Snapshot(ctx, page.PageID)
-		if err != nil {
-			return rep, fmt.Errorf("第 %d 页快照失败: %w", pageno, err)
+		if pauseCh == nil {
+			select {
+			case <-time.After(opts.Delay):
+			case <-ctx.Done():
+				return rep, ctx.Err()
+			}
+		} else {
+			// 翻页间隔 = 对官方分页按钮的真实点击间隔（虚拟时钟仅跳过墙钟等待，
+			// 绝不跳过点击本身）
+			sleep(opts.Delay)
+			if ctx.Err() != nil {
+				return rep, ctx.Err()
+			}
 		}
-		m := reNextPageRef.FindStringSubmatch(snap)
-		if m == nil {
+		ok, err := clickNextPage(ctx, b, page.PageID)
+		if err != nil {
+			return rep, fmt.Errorf("翻页失败: %w", err)
+		}
+		if !ok {
 			rep.StoppedAt = "no_next"
 			return rep, nil
-		}
-		select {
-		case <-time.After(opts.Delay):
-		case <-ctx.Done():
-			return rep, ctx.Err()
-		}
-		if err := clickConfirmed(ctx, b, page.PageID, m[1], "下一页"); err != nil {
-			return rep, fmt.Errorf("翻页被拦截: %w", err)
 		}
 	}
 	return rep, nil

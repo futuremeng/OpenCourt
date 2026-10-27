@@ -77,10 +77,8 @@ func TestLiveGovListBrowse(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	// 通过 neutral 层跑完整浏览编排（含 URL 硬校验与限速护栏）。
-	rep, err := neutral.RunGovListBrowse(ctx, p, neutral.GovListOptions{
-		Cat: "部门规章", MaxPages: 2,
-	})
+	// 通过 neutral 层跑完整浏览编排（混合清单：cat 逐条推断；含 URL 硬校验与限速护栏）。
+	rep, err := neutral.RunGovListBrowse(ctx, p, neutral.GovListOptions{MaxPages: 2})
 	if err != nil {
 		t.Fatalf("规章库浏览失败: %v（部分结果 %+v）", err, rep)
 	}
@@ -91,10 +89,10 @@ func TestLiveGovListBrowse(t *testing.T) {
 		t.Fatalf("未收集到条目（站点改版或页面未就绪？）: %+v", rep)
 	}
 	for _, e := range rep.Entries {
-		if !strings.HasPrefix(e.URL, "https://www.gov.cn/") {
+		if !strings.Contains(e.URL, ".gov.cn/") {
 			t.Fatalf("条目 URL 越界: %s", e.URL)
 		}
 	}
-	t.Logf("规章库浏览通过：%d 页 %d 条（%s），首条 %q",
-		rep.Pages, len(rep.Entries), rep.StoppedAt, rep.Entries[0].Title)
+	t.Logf("规章库浏览通过：%d 页 %d 条（%s），首条 %q [%s]",
+		rep.Pages, len(rep.Entries), rep.StoppedAt, rep.Entries[0].Title, rep.Entries[0].Cat)
 }
