@@ -40,6 +40,7 @@ func main() {
 	cat := flag.String("cat", "", "分类过滤：部门规章 / 地方政府规章 / 空 = 混合清单全收")
 	start := flag.Int("start", 1, "起始页（官方跳转控件续接）")
 	pages := flag.Int("pages", 200, "单会话翻页上限（硬上限 200）")
+	emptystop := flag.Int("emptystop", 0, "连续真空页停止阈值（默认 10；稀疏区补采建议 30）")
 	outDir := flag.String("out", defaultOutDir(), "清单输出目录")
 	flag.Parse()
 
@@ -51,7 +52,7 @@ func main() {
 	ctx := context.Background()
 	t0 := time.Now()
 	rep, err := neutral.RunGovListBrowse(ctx, b, neutral.GovListOptions{
-		Cat: *cat, MaxPages: *pages, StartPage: *start,
+		Cat: *cat, MaxPages: *pages, StartPage: *start, EmptyStop: *emptystop,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "浏览失败（已浏览 %d 页）: %v\n", rep.Pages, err)

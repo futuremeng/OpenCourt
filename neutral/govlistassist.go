@@ -76,6 +76,7 @@ type GovListOptions struct {
 	MaxPages  int           // 单会话翻页上限（默认 50，硬上限 200）
 	Delay     time.Duration // 翻页间隔（默认 2.5s，下限 2s）
 	StartPage int           // 起始页（默认 1；>1 用官方「跳转」控件到达，跨会话续接用）
+	EmptyStop int           // 连续真空页停止阈值（默认 10；官方清单存在大段稀疏空区，补采可调高）
 }
 
 // GovListReport 浏览任务结果（OutPath 由调用方写盘后填充）。
@@ -342,6 +343,9 @@ func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 	if opts.StartPage < 1 {
 		opts.StartPage = 1
 	}
+	if opts.EmptyStop <= 0 {
+		opts.EmptyStop = govListEmptyStop
+	}
 
 	page, err := b.Open(ctx, GovListStartURL)
 	if err != nil {
@@ -394,7 +398,7 @@ func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 			// 停止（真机实测偶发空壳渲染会连续误报）。
 			emptyStreak++
 			rep.Pages = pageno
-			if emptyStreak >= govListEmptyStop {
+			if emptyStreak >= opts.EmptyStop {
 				rep.StoppedAt = "empty_page"
 				return rep, nil
 			}
