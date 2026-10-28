@@ -4,9 +4,12 @@
 
 ## Unreleased（阶段二开发中）
 
+### 修复
+- **条目 URL 硬校验 http/https 双收（重大真机教训）**：官方清单 `docurl` 大量为 `http://` 主站形态（301 → https）——只收 https 把整页 7 条全滤光、把满页误判成空页：所谓「大段稀疏空区」（472–499 等）实为 http 条目页，全库因此只收到 1970/约 7000 条。修复后同区段 6.9 条/页（曾 1.3）；主机仍硬锁 `.gov.cn` 域名族。教训已回写：页大小实测为 7 条/页（1000 页 ≈ 7000 条），「空页」判定前必须先排除协议过滤误伤
+
 ### 变更
 - **规章库清单跨会话续接 + CLI 批量采集**：全库约 1000 页 > 单会话 200 页硬上限——起始页经官方「跳转」控件（`input.jumpText` + 「确定」）到达并以分页控件选中页码核验（等价人工输入页码；核验不过即报错，绝不在错误页采集）；`BrowseGovList` 增加 `startPage` 参数（前端加「起始页」输入）；新增 `cmd/govlistcollect` CLI（与应用面板同一代码路径与护栏）与 `scripts/govcollect.sh`（分批串行、会话间冷却 30s）
-- **空页停止阈值可配（EmptyStop / -emptystop）**：真机全量采集证实官方清单存在大段真实稀疏空区（如 472–499 连续 28 页无数据而 500 页恢复），固定阈值 10 会误停漏采——`GovListOptions.EmptyStop`（默认 10）+ CLI `-emptystop`（稀疏区补采用 25–40）；`cmd/govlistcollect` 修复有条目会话误 exit 1 丢弃产物的 bug
+- **空页停止阈值可配（EmptyStop / -emptystop）**：`GovListOptions.EmptyStop`（默认 10）+ CLI `-emptystop`；`cmd/govlistcollect` 修复有条目会话误 exit 1 丢弃产物的 bug（注：早前「大段真实稀疏空区」结论已被证伪——见上「修复」条目，系 http 过滤误伤而非真空页）
 - **采集改为跳转控件驱动（真机全量试跑校准）**：顺序点「下一页」只覆盖首页窗口前 ~97 页（其后按钮返回空壳渲染），跳转控件可达全部约 1000 页——主循环改为每页官方跳转 + 页码核验（弃用 `turnPage.next-page` 点击；页码核验不过 = 越过末页 `end_of_list` 正常结束）；SPA 空壳渲染防误停：DOM 重读 ≤5 次 → 官方跳转重刷当前页（等价人工刷新）≤2 次 → 连续 3 页真空才停（`empty_page`）；单测改为跳转驱动语义（含越界 `end_of_list`、虚拟时钟跳页间隔 ≥2s 断言）
 - **国家规章库清单浏览（真机校准，neo 0.0.80）**：默认列表即混合清单（部门规章+地方政府规章同列，共约 1000 页，无独立分类页签）——分类改为按发布机关**逐条推断**（puborg 含「人民政府」→ 地方政府规章，与 OpenLaw `gvgzResolveLevel` 同规则），`cat` 参数改为可选过滤（空 = 全收）；翻页改为官方分页按钮 `button.turnPage.next-page` DOM click（等价人工点击；快照 ref 在大列表下不可靠，弃用两段式点击路径，evaluate 仍仅两段固定脚本）；URL 硬校验放宽至 `.gov.cn` 域名族（地方政府规章详情页直链地方政府网站——清单如实记录，OpenLaw 主机锁使其在导入报告可见转人工）；新增 SPA 就绪重试（只重读 DOM，零额外网络请求）与翻页间隔 ≥2s 虚拟时钟断言测试；`evaluate` 传 `maxChars=100000`（neo 默认 5000 字节即截断落本地文件，远端读回会丢数据）；`evaluate` code 语义修正为函数体（IIFE 返回 undefined）。真机端到端通过：2 页 13 条混合清单、翻页与 cat 推断正确
 - **立案最终提交绝对红线（代码级强化）**：`core/gate/action.go` 提交类拦截词表扩展至 zxfw 实测词汇（递交/重新提起/提起申请/正式提交/pay/submit/delete 等，英文加词边界）；执行链三重硬约束写入文档——被拦候选不进 pending 登记表、ExecuteAction 复查 gate、一次性消费，两段式确认不可绕过红线（`docs/browseros-integration.md` 5.3）；gate 测试新增 zxfw 提交/非提交用例 12 条

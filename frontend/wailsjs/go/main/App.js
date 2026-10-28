@@ -6,12 +6,12 @@ export function AppInfo() {
   return window['go']['main']['App']['AppInfo']();
 }
 
-export function BrowserAwaitHuman() {
-  return window['go']['main']['App']['BrowserAwaitHuman']();
-}
-
 export function BrowseGovList(arg1, arg2, arg3) {
   return window['go']['main']['App']['BrowseGovList'](arg1, arg2, arg3);
+}
+
+export function BrowserAwaitHuman() {
+  return window['go']['main']['App']['BrowserAwaitHuman']();
 }
 
 export function BrowserExecuteAction(arg1, arg2) {

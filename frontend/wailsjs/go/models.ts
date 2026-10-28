@@ -139,69 +139,6 @@ export namespace gate {
 }
 
 export namespace neutral {
-
-	export class GovListEntry {
-	    title: string;
-	    url: string;
-	    cat?: string;
-	    puborg?: string;
-	    pcode?: string;
-
-	    static createFrom(source: any = {}) {
-	        return new GovListEntry(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.title = source["title"];
-	        this.url = source["url"];
-	        this.cat = source["cat"];
-	        this.puborg = source["puborg"];
-	        this.pcode = source["pcode"];
-	    }
-	}
-	export class GovListReport {
-	    start_url: string;
-	    cat: string;
-	    start_page: number;
-	    pages: number;
-	    entries: GovListEntry[];
-	    stopped_at: string;
-	    out_path?: string;
-
-	    static createFrom(source: any = {}) {
-	        return new GovListReport(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.start_url = source["start_url"];
-	        this.cat = source["cat"];
-	        this.start_page = source["start_page"];
-	        this.pages = source["pages"];
-	        this.entries = this.convertValues(source["entries"], GovListEntry);
-	        this.stopped_at = source["stopped_at"];
-	        this.out_path = source["out_path"];
-	    }
-
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	
 	export class Blindspot {
 	    question: string;
@@ -236,6 +173,68 @@ export namespace neutral {
 	        this.from_opponent = source["from_opponent"];
 	        this.related_element = source["related_element"];
 	    }
+	}
+	export class GovListEntry {
+	    title: string;
+	    url: string;
+	    cat?: string;
+	    puborg?: string;
+	    pcode?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GovListEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.title = source["title"];
+	        this.url = source["url"];
+	        this.cat = source["cat"];
+	        this.puborg = source["puborg"];
+	        this.pcode = source["pcode"];
+	    }
+	}
+	export class GovListReport {
+	    start_url: string;
+	    cat: string;
+	    start_page: number;
+	    pages: number;
+	    entries: GovListEntry[];
+	    stopped_at: string;
+	    out_path?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GovListReport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.start_url = source["start_url"];
+	        this.cat = source["cat"];
+	        this.start_page = source["start_page"];
+	        this.pages = source["pages"];
+	        this.entries = this.convertValues(source["entries"], GovListEntry);
+	        this.stopped_at = source["stopped_at"];
+	        this.out_path = source["out_path"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class MatchResult {
 	    Covered: string[];
