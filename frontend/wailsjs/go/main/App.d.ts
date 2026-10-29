@@ -31,6 +31,10 @@ export function CheckOutput(arg1:string):Promise<Array<gate.Violation>>;
 
 export function CreateFact(arg1:string,arg2:string,arg3:number,arg4:string,arg5:boolean):Promise<domain.Fact>;
 
+export function CreateCase(arg1:string,arg2:string,arg3:string):Promise<domain.Case>;
+
+export function CurrentCase():Promise<domain.Case>;
+
 export function DownloadAndInstallLawData(arg1:Array<string>):Promise<Record<string, any>>;
 
 export function IngestDocument(arg1:string):Promise<storage.DocumentInfo>;
@@ -38,6 +42,8 @@ export function IngestDocument(arg1:string):Promise<storage.DocumentInfo>;
 export function InstallAppUpdate():Promise<void>;
 
 export function LawDataStatus():Promise<Record<string, any>>;
+
+export function ListCases():Promise<Array<domain.Case>>;
 
 export function ListConflicts():Promise<Array<domain.Conflict>>;
 
@@ -64,5 +70,7 @@ export function RunBlindspots(arg1:Array<string>):Promise<Array<neutral.Blindspo
 export function RunElementMatch(arg1:Array<string>):Promise<neutral.MatchResult>;
 
 export function RunReader(arg1:string):Promise<neutral.ReaderReport>;
+
+export function SwitchCase(arg1:string):Promise<void>;
 
 export function UpgradeFact(arg1:string,arg2:string,arg3:boolean,arg4:boolean,arg5:boolean):Promise<domain.Fact>;

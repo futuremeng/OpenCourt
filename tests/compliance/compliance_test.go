@@ -88,11 +88,12 @@ func TestConflictsRemainUnresolved(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	sc := s.WithCase(domain.DefaultCaseID)
 	c := domain.Conflict{ConflictID: "C1", FactIDs: []string{"F1", "F2"}, ConflictPoint: "两份合同金额不一致"}
-	if err := s.CreateConflict(c); err != nil {
+	if err := sc.CreateConflict(c); err != nil {
 		t.Fatal(err)
 	}
-	list, _ := s.ListConflicts()
+	list, _ := sc.ListConflicts()
 	if len(list) != 1 || list[0].IsResolved {
 		t.Fatal("冲突入库后必须保持未消解状态")
 	}
@@ -151,16 +152,17 @@ func TestPhase2ReaderPipeline(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	sc := s.WithCase(domain.DefaultCaseID)
 	for _, f := range report.Accepted {
-		if err := s.CreateFact(f); err != nil {
+		if err := sc.CreateFact(f); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := s.SaveElements(report.Elements); err != nil {
+	if err := sc.SaveElements(report.Elements); err != nil {
 		t.Fatal(err)
 	}
-	facts, _ := s.ListFacts()
-	elements, _ := s.ListElements()
+	facts, _ := sc.ListFacts()
+	elements, _ := sc.ListElements()
 	tl := neutral.BuildTimeline(facts, elements)
 	if len(tl) != 2 {
 		t.Fatalf("时间线长度错误: %d", len(tl))

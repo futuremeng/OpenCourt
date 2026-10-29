@@ -58,8 +58,11 @@ type App struct {
 	settings *config.Settings
 	profile  profiles.Profile
 	store    *storage.Store
-	auditLog *audit.Logger
-	model    plugins.ModelAdapter
+	// currentCaseID 当前活动案件（v0.2 M1，plan-v0.2 D1/D5）：全部事实/冲突/
+	// 文档/要素读写经 store.WithCase 自动限定；state.json 持久化，重启恢复。
+	currentCaseID string
+	auditLog      *audit.Logger
+	model         plugins.ModelAdapter
 	// lawSource OpenLaw 法条源（M4 对接）：nil = 未配置，法条检索降级不可用。
 	lawSource plugins.LawSourcePlugin
 	// browser 浏览器辅助插件（BrowserOS neo，外部组件默认禁用）：
@@ -120,6 +123,7 @@ func (a *App) startup(ctx context.Context) {
 		log.Fatalf("本地数据库打开失败: %v", err)
 	}
 	a.store = store
+	a.currentCaseID = a.loadCurrentCase()
 
 	logger, err := audit.NewLogger(dataDir + "/audit.jsonl")
 	if err != nil {
@@ -630,6 +634,99 @@ func newID(prefix string) string {
 	return prefix + "-" + hex.EncodeToString(b)
 }
 
+// --- 案件上下文（v0.2 M1，plan-v0.2 D1/D5/§5.1）---
+
+// scope 当前案件的仓储视图：全部事实/冲突/文档/要素读写自动限定 case_id，
+// 跨案件访问在 SQL 层不可能发生（编译期已无全局仓储方法）。
+func (a *App) scope() *storage.CaseScope {
+	return a.store.WithCase(a.currentCaseID)
+}
+
+// statePath 应用状态文件（当前案件 ID 持久化，重启恢复）。
+func (a *App) statePath() string { return filepath.Join(a.dataDir, "state.json") }
+
+// loadCurrentCase 从 state.json 恢复当前案件；案件不存在（删除/损坏）回落默认案件。
+func (a *App) loadCurrentCase() string {
+	if b, err := os.ReadFile(a.statePath()); err == nil {
+		var st struct {
+			CurrentCase string `json:"current_case"`
+		}
+		if json.Unmarshal(b, &st) == nil && st.CurrentCase != "" {
+			if _, err := a.store.GetCase(st.CurrentCase); err == nil {
+				return st.CurrentCase
+			}
+			log.Printf("state.json 中的案件不存在，回落默认案件: %s", st.CurrentCase)
+		}
+	}
+	return domain.DefaultCaseID
+}
+
+// saveCurrentCase 持久化当前案件 ID。
+func (a *App) saveCurrentCase() error {
+	b, err := json.Marshal(map[string]string{"current_case": a.currentCaseID})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(a.statePath(), b, 0o600)
+}
+
+// CreateCase 新建案件并即时切换为当前案件。标题必填；案由为自由文本
+// （不自动判定案由）；stage 缺省 CONSULT，非法阶段直接报错。
+func (a *App) CreateCase(title, caseType, stage string) (domain.Case, error) {
+	if strings.TrimSpace(title) == "" {
+		return domain.Case{}, fmt.Errorf("案件标题不能为空")
+	}
+	st := domain.StageConsult
+	if stage != "" {
+		st = domain.CaseStage(stage)
+		if !st.Valid() {
+			return domain.Case{}, fmt.Errorf("非法案件阶段: %q（允许: CONSULT/FILING/FIRST_TRIAL/APPEAL/SECOND_TRIAL）", stage)
+		}
+	}
+	c := domain.Case{
+		CaseID: newID("CASE"), Title: strings.TrimSpace(title), CaseType: strings.TrimSpace(caseType),
+		Stage: st, Visibility: domain.VisBoth, CreatedAt: time.Now().UTC(),
+	}
+	if err := a.store.CreateCase(c); err != nil {
+		return domain.Case{}, err
+	}
+	_ = a.auditLog.Log(a.profile.Role, "CASE_CREATE", c.CaseID, c.Title)
+	if err := a.SwitchCase(c.CaseID); err != nil {
+		return c, err
+	}
+	return c, nil
+}
+
+// ListCases 列出全部案件（创建时间倒序）。
+func (a *App) ListCases() ([]domain.Case, error) {
+	return a.store.ListCases()
+}
+
+// SwitchCase 切换当前案件（不存在的案件报错；审计 CASE_SWITCH；
+// state.json 持久化——切换失败即回滚，绝不出现内存与磁盘状态分裂）。
+func (a *App) SwitchCase(caseID string) error {
+	c, err := a.store.GetCase(caseID)
+	if err != nil {
+		return err
+	}
+	if caseID == a.currentCaseID {
+		return nil
+	}
+	prev := a.currentCaseID
+	a.currentCaseID = caseID
+	if err := a.saveCurrentCase(); err != nil {
+		a.currentCaseID = prev
+		return err
+	}
+	_ = a.auditLog.Log(a.profile.Role, "CASE_SWITCH", caseID, c.Title)
+	return nil
+}
+
+// CurrentCase 当前活动案件。
+func (a *App) CurrentCase() (domain.Case, error) {
+	return a.store.GetCase(a.currentCaseID)
+}
+
 // AppInfo 返回应用与当前 Profile 概况（前端首屏展示）。
 func (a *App) AppInfo() map[string]any {
 	return map[string]any{
@@ -647,7 +744,7 @@ func (a *App) AppInfo() map[string]any {
 
 // ListFacts 列出全部事实（先过可见性过滤——本部署仅本方数据）。
 func (a *App) ListFacts() ([]domain.Fact, error) {
-	facts, err := a.store.ListFacts()
+	facts, err := a.scope().ListFacts()
 	if err != nil {
 		return nil, err
 	}
@@ -671,7 +768,7 @@ func (a *App) CreateFact(description, sourceFile string, pageNum int, snippet st
 		f.Citation = &domain.Citation{SourceFile: sourceFile, PageNum: pageNum, Snippet: snippet}
 	}
 	f.State = statemachine.InitialState(f, fromOpponent)
-	if err := a.store.CreateFact(f); err != nil {
+	if err := a.scope().CreateFact(f); err != nil {
 		return domain.Fact{}, err
 	}
 	_ = a.auditLog.Log(a.profile.Role, "CREATE", f.FactID, "初始状态 "+f.State.DisplayName())
@@ -685,7 +782,7 @@ func (a *App) UpgradeFact(factID string, targetState string, evidenceImported, l
 	if err != nil {
 		return domain.Fact{}, err
 	}
-	f, err := a.store.GetFact(factID)
+	f, err := a.scope().GetFact(factID)
 	if err != nil {
 		return domain.Fact{}, err
 	}
@@ -700,7 +797,7 @@ func (a *App) UpgradeFact(factID string, targetState string, evidenceImported, l
 		_ = a.auditLog.Log(a.profile.Role, "STATE_UPGRADE_BLOCKED", factID, err.Error())
 		return domain.Fact{}, err
 	}
-	if err := a.store.UpdateFactState(updated.FactID, updated.State); err != nil {
+	if err := a.scope().UpdateFactState(updated.FactID, updated.State); err != nil {
 		return domain.Fact{}, err
 	}
 	_ = a.auditLog.Log(a.profile.Role, "STATE_UPGRADE", factID, f.State.DisplayName()+" -> "+updated.State.DisplayName())
@@ -709,7 +806,7 @@ func (a *App) UpgradeFact(factID string, targetState string, evidenceImported, l
 
 // ListConflicts 列出全部冲突（并列展示，不自动消解）。
 func (a *App) ListConflicts() ([]domain.Conflict, error) {
-	return a.store.ListConflicts()
+	return a.scope().ListConflicts()
 }
 
 // CheckOutput 对任意文本执行输出门禁（引导性检测），供前端预检与合规演示。
@@ -755,22 +852,22 @@ func (a *App) IngestDocument(path string) (storage.DocumentInfo, error) {
 		return storage.DocumentInfo{}, err
 	}
 	docID := newID("DOC")
-	if err := a.store.SaveDocument(docID, doc.File, doc.Pages); err != nil {
+	if err := a.scope().SaveDocument(docID, doc.File, doc.Pages); err != nil {
 		return storage.DocumentInfo{}, err
 	}
 	_ = a.auditLog.Log(a.profile.Role, "INGEST", docID, fmt.Sprintf("%s 共 %d 页", filepath.Base(path), len(doc.Pages)))
-	return a.store.GetDocumentInfo(docID)
+	return a.scope().GetDocumentInfo(docID)
 }
 
 // ListDocuments 列出已接入文档。
 func (a *App) ListDocuments() ([]storage.DocumentInfo, error) {
-	return a.store.ListDocuments()
+	return a.scope().ListDocuments()
 }
 
 // RunReader 对指定文档执行阅卷：模型产候选事实 → 核验器回原文定位仲裁。
 // 定位失败的候选被拒绝入库并记审计；时间/金额要素由正则确定性抽取。
 func (a *App) RunReader(docID string) (neutral.ReaderReport, error) {
-	doc, err := a.store.GetDocument(docID)
+	doc, err := a.scope().GetDocument(docID)
 	if err != nil {
 		return neutral.ReaderReport{}, err
 	}
@@ -780,11 +877,11 @@ func (a *App) RunReader(docID string) (neutral.ReaderReport, error) {
 		return neutral.ReaderReport{}, err
 	}
 	for _, f := range report.Accepted {
-		if err := a.store.CreateFact(f); err != nil {
+		if err := a.scope().CreateFact(f); err != nil {
 			return neutral.ReaderReport{}, err
 		}
 	}
-	if err := a.store.SaveElements(report.Elements); err != nil {
+	if err := a.scope().SaveElements(report.Elements); err != nil {
 		return neutral.ReaderReport{}, err
 	}
 	_ = a.auditLog.Log(a.profile.Role, "READER", docID,
@@ -807,7 +904,7 @@ func (a *App) ResearchWebPage(url string, names []string) (neutral.ResearchResul
 		_ = a.auditLog.Log(a.profile.Role, "BROWSER_RESEARCH_FAIL", url, err.Error())
 		return neutral.ResearchResult{}, err
 	}
-	if err := a.store.CreateFact(res.Fact); err != nil {
+	if err := a.scope().CreateFact(res.Fact); err != nil {
 		return neutral.ResearchResult{}, err
 	}
 	for _, act := range res.RedactActions {
@@ -946,11 +1043,11 @@ func (a *App) BrowseGovList(cat string, maxPages int, startPage int) (neutral.Go
 
 // BuildTimeline 构建案件时间线（按时间要素锚定，无锚点排末尾，不虚构日期）。
 func (a *App) BuildTimeline() ([]neutral.TimelineItem, error) {
-	facts, err := a.store.ListFacts()
+	facts, err := a.scope().ListFacts()
 	if err != nil {
 		return nil, err
 	}
-	elements, err := a.store.ListElements()
+	elements, err := a.scope().ListElements()
 	if err != nil {
 		return nil, err
 	}
@@ -959,13 +1056,13 @@ func (a *App) BuildTimeline() ([]neutral.TimelineItem, error) {
 
 // RunAggregate 汇聚全部事实：检测冲突并列输出入库（不自动消解）。
 func (a *App) RunAggregate() ([]domain.Conflict, error) {
-	facts, err := a.store.ListFacts()
+	facts, err := a.scope().ListFacts()
 	if err != nil {
 		return nil, err
 	}
 	_, conflicts := neutral.Aggregate(facts)
 	for _, c := range conflicts {
-		if err := a.store.CreateConflict(c); err != nil {
+		if err := a.scope().CreateConflict(c); err != nil {
 			return nil, err
 		}
 	}
@@ -975,7 +1072,7 @@ func (a *App) RunAggregate() ([]domain.Conflict, error) {
 
 // RunElementMatch 要件匹配：只有「已溯源确认」的事实才能覆盖要件。
 func (a *App) RunElementMatch(requirements []string) (neutral.MatchResult, error) {
-	facts, err := a.store.ListFacts()
+	facts, err := a.scope().ListFacts()
 	if err != nil {
 		return neutral.MatchResult{}, err
 	}

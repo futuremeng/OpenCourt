@@ -4,6 +4,12 @@
 
 ## Unreleased（阶段二开发中）
 
+### 新增
+- **案件实体与案件级隔离（v0.2 M1，plan-v0.2 D1/D5）**：`cases` 表（标题/案由自由文本/阶段枚举/可见性）与 `law_refs`/`case_refs` 引用留痕表就位（D2：法条不是事实、类案要旨不是本案事实——不进 facts、永不进五态）；存量五表幂等迁移补 `case_id`（PRAGMA table_info 探测，迁移前自动备份 `<db>.bak-<ts>`，存量一律归 `CASE-DEFAULT` 不丢历史）；仓储改为 `Store.WithCase(caseID)` → `CaseScope` 案件限定视图，**旧全局方法已从 Store 移除（编译期强制）**——跨案件读写在 SQL 层不可能（WHERE 强制），跨案件引用天然 not-found；App 层新增 `CreateCase`/`ListCases`/`SwitchCase`/`CurrentCase` 绑定（新建即切换；非法阶段报错；当前案件持久化 `state.json` 重启恢复；审计 `CASE_CREATE`/`CASE_SWITCH`）；前端新增 `CaseBar` 案件切换栏（当前案件 + 切换 + 新建，切换后各面板联动刷新）；Profile `data_dir` 明确未启用（字段注释 + 加载告警，防误认为按立场分库）；单测覆盖：迁移幂等（重复打开 no-op 且不重复备份）、跨案件隔离（事实/冲突/文档/要素/refs 互不可见互改不动）、未核验引用保守缺省（UNVERIFIED/pending）
+
+### 变更
+- **既有绑定签名不变、内部一律走当前案件视图**（`ListFacts`/`CreateFact`/`UpgradeFact`/`RunReader`/`BuildTimeline`/`RunAggregate`/`RunElementMatch`/`RunBlindspots` 等经 `store.WithCase(currentCaseID)`），前端无感；`scanFact`/冲突扫描加固 NULL 列读取（存量库健壮性）
+
 ### 修复
 - **条目 URL 硬校验 http/https 双收（重大真机教训）**：官方清单 `docurl` 大量为 `http://` 主站形态（301 → https）——只收 https 把整页 7 条全滤光、把满页误判成空页：所谓「大段稀疏空区」（472–499 等）实为 http 条目页，全库因此只收到 1970/约 7000 条。修复后同区段 6.9 条/页（曾 1.3）；主机仍硬锁 `.gov.cn` 域名族。教训已回写：页大小实测为 7 条/页（1000 页 ≈ 7000 条），「空页」判定前必须先排除协议过滤误伤
 

@@ -16,6 +16,9 @@ import (
 
 	"github.com/futuremeng/OpenCourt/config"
 	"github.com/futuremeng/OpenCourt/core/audit"
+	"github.com/futuremeng/OpenCourt/core/domain"
+	"github.com/futuremeng/OpenCourt/core/storage"
+	"github.com/futuremeng/OpenCourt/profiles"
 )
 
 func TestLoadSettingsAppDirPriority(t *testing.T) {
@@ -258,5 +261,81 @@ func TestCheckAndDownloadLawData(t *testing.T) {
 	a2.settings.OpenLaw.IndexURL = srv.URL + "/bad-index.json"
 	if _, err := a2.DownloadAndInstallLawData([]string{"lawdata-core-x.zip"}); err == nil {
 		t.Error("sha256 不符应拒绝")
+	}
+}
+
+// --- 案件实体（v0.2 M1）：建案/切换/隔离/重启恢复 ---
+
+// newCaseApp 打开真实 SQLite 的最小 App（案件绑定测试用）。
+func newCaseApp(t *testing.T, dir string) *App {
+	t.Helper()
+	lg, err := audit.NewLogger(filepath.Join(dir, "audit.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := storage.Open(filepath.Join(dir, "opencourt.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	a := &App{
+		settings: config.Default(), dataDir: dir, auditLog: lg, store: st,
+		profile: profiles.Profile{Role: "court", Name: "court"},
+	}
+	a.currentCaseID = a.loadCurrentCase()
+	return a
+}
+
+func TestCaseLifecycle(t *testing.T) {
+	dir := t.TempDir()
+	a := newCaseApp(t, dir)
+
+	// 初始即默认案件
+	cur, err := a.CurrentCase()
+	if err != nil || cur.CaseID != domain.DefaultCaseID {
+		t.Fatalf("初始应为默认案件: %+v %v", cur, err)
+	}
+	if _, err := a.CreateCase("", "", ""); err == nil {
+		t.Error("空标题应被拒绝")
+	}
+	if _, err := a.CreateCase("x 案", "", "BOGUS"); err == nil {
+		t.Error("非法阶段应被拒绝")
+	}
+
+	c, err := a.CreateCase("民间借贷纠纷", "民间借贷", "FIRST_TRIAL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cur, _ = a.CurrentCase(); cur.CaseID != c.CaseID {
+		t.Errorf("新建案件应即时切换: %+v", cur)
+	}
+
+	// 事实挂当前案件；切回默认案件后不可见（SQL 层隔离）
+	if _, err := a.CreateFact("A 案事实", "", 0, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if facts, _ := a.ListFacts(); len(facts) != 1 {
+		t.Errorf("新案件应见 1 条事实: %+v", facts)
+	}
+	if err := a.SwitchCase(domain.DefaultCaseID); err != nil {
+		t.Fatal(err)
+	}
+	if facts, _ := a.ListFacts(); len(facts) != 0 {
+		t.Errorf("默认案件不得见新案件事实: %+v", facts)
+	}
+	if err := a.SwitchCase("CASE-NOPE"); err == nil {
+		t.Error("切换到不存在的案件必须报错")
+	}
+
+	// 重启恢复：同目录重建 App，state.json 生效
+	a2 := newCaseApp(t, dir)
+	if cur, _ = a2.CurrentCase(); cur.CaseID != domain.DefaultCaseID {
+		t.Errorf("重启应恢复 state.json 中的当前案件: %+v", cur)
+	}
+	if err := a2.SwitchCase(c.CaseID); err != nil {
+		t.Fatal(err)
+	}
+	if facts, _ := a2.ListFacts(); len(facts) != 1 {
+		t.Errorf("切回新案件应见其事实: %+v", facts)
 	}
 }

@@ -6,6 +6,7 @@ package profiles
 import (
 	"embed"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -24,8 +25,11 @@ type Profile struct {
 	Role          string   `yaml:"role"` // court / plaintiff / defendant / party
 	EnabledAgents []string `yaml:"enabled_agents"`
 	DisabledTools []string `yaml:"disabled_tools"`
-	DataDir       string   `yaml:"data_dir"`
-	OutputRules   []string `yaml:"output_rules"`
+	// DataDir 在 v0.2 明确未启用：案件隔离由 cases 表 + CaseScope 承担
+	// （docs/plan-v0.2.md D1），本字段不参与任何数据路径。配置了只会告警，
+	// 避免误以为已按立场分库隔离。
+	DataDir     string   `yaml:"data_dir"`
+	OutputRules []string `yaml:"output_rules"`
 }
 
 // ToolEnabled 报告某工具在该 Profile 下是否可用（默认拒绝：出现在
@@ -73,6 +77,10 @@ func Load(dir, role string) (Profile, error) {
 	}
 	if p.Role != role {
 		return Profile{}, fmt.Errorf("Profile 角色不一致: 文件名 %s, 内容 %s", role, p.Role)
+	}
+	if p.DataDir != "" {
+		log.Printf("Profile %s 配置了 data_dir=%q：该字段未启用（案件隔离经 cases 表 + CaseScope，见 docs/plan-v0.2.md D1），已忽略",
+			role, p.DataDir)
 	}
 	return p, nil
 }

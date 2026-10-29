@@ -4,6 +4,7 @@ import * as App from "../wailsjs/go/main/App";
 import type { AppInfo, Fact } from "../wailsjs/go/main/App";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 import FactBoard from "./components/FactBoard.vue";
+import CaseBar from "./components/CaseBar.vue";
 
 const info = ref<AppInfo | null>(null);
 const facts = ref<Fact[]>([]);
@@ -18,6 +19,17 @@ const error = ref("");
 
 async function refresh() {
   facts.value = await App.ListFacts();
+}
+
+// 案件切换后刷新当前案件的全部面板数据（事实/文档/时间线均按案件隔离）
+async function onCaseSwitched() {
+  try {
+    await refresh();
+    await refreshDocs();
+    await refreshTimeline();
+  } catch (e) {
+    error.value = String(e);
+  }
 }
 
 onMounted(async () => {
@@ -393,6 +405,9 @@ async function awaitHuman() {
       <span class="badge">脱敏级别: {{ info.redactLevel }}</span>
     </div>
   </header>
+
+  <!-- 案件切换器（v0.2 M1）：一切事实/冲突/文档/要素按案件隔离 -->
+  <CaseBar @switched="onCaseSwitched" />
 
   <!-- 程序更新横幅（发现新版才显示） -->
   <div v-if="appUpdate && appUpdate.available" class="update-banner">

@@ -50,6 +50,14 @@ export function CreateFact(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['CreateFact'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function CreateCase(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CreateCase'](arg1, arg2, arg3);
+}
+
+export function CurrentCase() {
+  return window['go']['main']['App']['CurrentCase']();
+}
+
 export function DownloadAndInstallLawData(arg1) {
   return window['go']['main']['App']['DownloadAndInstallLawData'](arg1);
 }
@@ -64,6 +72,10 @@ export function InstallAppUpdate() {
 
 export function LawDataStatus() {
   return window['go']['main']['App']['LawDataStatus']();
+}
+
+export function ListCases() {
+  return window['go']['main']['App']['ListCases']();
 }
 
 export function ListConflicts() {
@@ -116,6 +128,10 @@ export function RunElementMatch(arg1) {
 
 export function RunReader(arg1) {
   return window['go']['main']['App']['RunReader'](arg1);
+}
+
+export function SwitchCase(arg1) {
+  return window['go']['main']['App']['SwitchCase'](arg1);
 }
 
 export function UpgradeFact(arg1, arg2, arg3, arg4, arg5) {
