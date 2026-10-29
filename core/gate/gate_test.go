@@ -30,29 +30,29 @@ func TestHallucinationGate(t *testing.T) {
 	}
 	// 引用不存在的事实 → 拦截（注入虚假事实）。
 	out := OutputDraft{Text: "陈述", FactIDs: []string{"F9"}}
-	if v := CheckGrounding(out, index); len(v) == 0 || v[0].Rule != "HALLUCINATION" {
+	if v := CheckGrounding(out, index, RefIndex{}); len(v) == 0 || v[0].Rule != "HALLUCINATION" {
 		t.Fatal("引用不存在的事实应被拦截")
 	}
 	// 引用无依据事实 → 拦截。
 	out = OutputDraft{Text: "陈述", FactIDs: []string{"F2"}}
-	if v := CheckGrounding(out, index); len(v) == 0 {
+	if v := CheckGrounding(out, index, RefIndex{}); len(v) == 0 {
 		t.Fatal("引用无依据事实应被拦截")
 	}
 	// 对方主张混入事实段落 → 拦截。
 	out = OutputDraft{Text: "陈述", FactIDs: []string{"F3"}}
-	if v := CheckGrounding(out, index); len(v) == 0 || v[0].Rule != "OPPONENT_CLAIM_IN_FACT" {
+	if v := CheckGrounding(out, index, RefIndex{}); len(v) == 0 || v[0].Rule != "OPPONENT_CLAIM_IN_FACT" {
 		t.Fatal("对方主张出现在事实段落应被拦截")
 	}
 	// 引用缺少页码/原文 → 拦截。
 	out = OutputDraft{Text: "陈述", Citations: []domain.Citation{{SourceFile: "a.pdf"}}}
-	if v := CheckGrounding(out, index); len(v) == 0 || v[0].Rule != "CITATION_INVALID" {
+	if v := CheckGrounding(out, index, RefIndex{}); len(v) == 0 || v[0].Rule != "CITATION_INVALID" {
 		t.Fatal("无效引用应被拦截")
 	}
 	// 已废止法条 → 标红提示。
 	out = OutputDraft{Text: "陈述", Citations: []domain.Citation{
 		{SourceFile: "a.pdf", PageNum: 1, Snippet: "片段", LawRepealed: true},
 	}}
-	if v := CheckGrounding(out, index); len(v) == 0 || v[0].Rule != "LAW_REPEALED" {
+	if v := CheckGrounding(out, index, RefIndex{}); len(v) == 0 || v[0].Rule != "LAW_REPEALED" {
 		t.Fatal("已废止法条应触发提示")
 	}
 }
@@ -60,7 +60,7 @@ func TestHallucinationGate(t *testing.T) {
 func TestCheckCombined(t *testing.T) {
 	index := FactIndex{"F1": {FactID: "F1", State: domain.StateTracedConfirmed}}
 	out := OutputDraft{Text: "建议起诉", FactIDs: []string{"F1"}}
-	v := Check(out, index)
+	v := Check(out, index, RefIndex{})
 	if len(v) != 1 || v[0].Rule != "NO_GUIDANCE" {
 		t.Fatalf("组合门禁结果错误: %+v", v)
 	}

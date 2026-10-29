@@ -30,7 +30,7 @@ func TestFalseFactInjectionBlocked(t *testing.T) {
 		Text:    "被告于 2024 年 5 月 1 日收到催款函。",
 		FactIDs: []string{"FACT-HALLUCINATED-001"},
 	}
-	violations := gate.CheckGrounding(out, index)
+	violations := gate.CheckGrounding(out, index, gate.RefIndex{})
 	if len(violations) == 0 {
 		t.Fatal("注入虚假事实必须被拦截")
 	}
@@ -246,5 +246,128 @@ func TestWebResearchDisabledByDefault(t *testing.T) {
 	}
 	if _, err := neutral.RunResearch(context.Background(), nil, nil, "https://x"); err == nil {
 		t.Fatal("未配置必须报错")
+	}
+}
+
+// --- v0.2 合规用例（plan-v0.2 §7）---
+
+// 合规用例 1：跨案件引用必须被拦截。存储层隔离（B 案索引装不进 A 案实体）
+// 与门禁校验（索引查不到即幻觉）双重防线，任何一层失守另一层兜底。
+func TestCrossCaseReferenceBlocked(t *testing.T) {
+	dir := t.TempDir()
+	st, err := storage.Open(filepath.Join(dir, "case.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for _, c := range []domain.Case{
+		{CaseID: "CASE-A", Title: "甲案", Stage: domain.StageConsult, Visibility: domain.VisBoth},
+		{CaseID: "CASE-B", Title: "乙案", Stage: domain.StageConsult, Visibility: domain.VisBoth},
+	} {
+		if err := st.CreateCase(c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sa, sb := st.WithCase("CASE-A"), st.WithCase("CASE-B")
+	if err := sa.CreateFact(domain.Fact{FactID: "FACT-A1", Description: "甲案事实", State: domain.StateSingleSource, Visibility: domain.VisBoth}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sa.AddLawRef(domain.LawRef{LawName: "民法典", ArticleNo: "第五百七十七条", VerifyResult: "OK", Status: "UNKNOWN", ConfirmStatus: "confirmed"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 存储层：乙案视野内没有甲案的事实与法条留痕。
+	factsB, err := sb.ListFacts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range factsB {
+		if f.FactID == "FACT-A1" {
+			t.Fatal("存储层隔离失守：乙案读到了甲案事实")
+		}
+	}
+	refsB, err := sb.ListLawRefs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refsB) != 0 {
+		t.Fatalf("存储层隔离失守：乙案读到了 %d 条甲案法条留痕", len(refsB))
+	}
+
+	// 门禁层：即便模型把甲案 ID 塞进乙案输出，也必须按幻觉拦截。
+	index := gate.FactIndex{}
+	for _, f := range factsB {
+		index[f.FactID] = f
+	}
+	out := gate.OutputDraft{Text: "参照甲案事实认定。", FactIDs: []string{"FACT-A1"}}
+	v := gate.CheckGrounding(out, index, gate.RefIndex{})
+	if len(v) == 0 || v[0].Rule != "HALLUCINATION" {
+		t.Fatalf("跨案件事实引用必须拦截: %+v", v)
+	}
+	out = gate.OutputDraft{Text: "援引甲案法条。", FactIDs: []string{refsA0(t, sa)}}
+	v = gate.CheckGrounding(out, index, gate.RefIndex{})
+	if len(v) == 0 || v[0].Rule != "HALLUCINATION" {
+		t.Fatalf("跨案件法条引用必须拦截: %+v", v)
+	}
+}
+
+// refsA0 取甲案首条法条留痕 ID。
+func refsA0(t *testing.T, sc *storage.CaseScope) string {
+	t.Helper()
+	refs, err := sc.ListLawRefs()
+	if err != nil || len(refs) == 0 {
+		t.Fatal("甲案法条留痕缺失")
+	}
+	return refs[0].RefID
+}
+
+// complianceVerifier 合规测试用假核验器：按预置判定透传（模拟 OpenLaw 六分支）。
+type complianceVerifier struct {
+	verdicts map[string]plugins.CitationVerdict
+}
+
+func (v complianceVerifier) CheckCitation(_ context.Context, lawName, articleNo, _, _ string) (plugins.CitationVerdict, error) {
+	if d, ok := v.verdicts[lawName+" "+articleNo]; ok {
+		return d, nil
+	}
+	return plugins.CitationVerdict{VerifyResult: "OL-1001", Status: "UNKNOWN", ConfirmStatus: "pending"}, nil
+}
+
+func (v complianceVerifier) FindRelation(_ context.Context, _ string) ([]plugins.Relation, error) {
+	return nil, nil
+}
+
+// 合规用例 3：未核验/断链的法条引用必须显式上浮——留痕带 OL 码入库，
+// 门禁对 UNVERIFIED/pending 引用强制违规，禁止静默通过。
+func TestLawRefUnverifiedSurfaces(t *testing.T) {
+	cv := complianceVerifier{verdicts: map[string]plugins.CitationVerdict{
+		"民法典 第五百七十七条": {VerifyResult: "OK", Status: "UNKNOWN", ConfirmStatus: "confirmed", ArticleID: "art-ok"},
+		"民法典 第九百九十九条": {VerifyResult: "OL-1003", Status: "UNVERIFIED", ConfirmStatus: "pending"},
+		"劳动合同法 第八十七条": {VerifyResult: "OL-1006", Status: "UNVERIFIED", ConfirmStatus: "pending", ArticleID: "art-broken"},
+	}}
+	refs, err := neutral.VerifyCitations(context.Background(), cv, "2024-01-01", []neutral.LawCitationDraft{
+		{LawName: "民法典", ArticleNo: "第五百七十七条"},
+		{LawName: "民法典", ArticleNo: "第九百九十九条"},
+		{LawName: "劳动合同法", ArticleNo: "第八十七条"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	refsIndex := gate.RefIndex{}
+	for i := range refs {
+		r := refs[i]
+		r.RefID = "LAW-" + r.VerifyResult
+		refsIndex[r.RefID] = gate.RefInfo{Kind: "LAW", Status: r.Status, ConfirmStatus: r.ConfirmStatus, VerifyResult: r.VerifyResult}
+	}
+	for _, id := range []string{"LAW-OL-1003", "LAW-OL-1006"} {
+		out := gate.OutputDraft{FactIDs: []string{id}}
+		v := gate.CheckGrounding(out, gate.FactIndex{}, refsIndex)
+		if len(v) == 0 || v[0].Rule != "REF_UNVERIFIED" {
+			t.Fatalf("未核验引用 %s 必须违规上浮: %+v", id, v)
+		}
+	}
+	out := gate.OutputDraft{FactIDs: []string{"LAW-OK"}}
+	if v := gate.CheckGrounding(out, gate.FactIndex{}, refsIndex); len(v) != 0 {
+		t.Fatalf("已核验引用不应被拦截: %+v", v)
 	}
 }

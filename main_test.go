@@ -339,3 +339,22 @@ func TestCaseLifecycle(t *testing.T) {
 		t.Errorf("切回新案件应见其事实: %+v", facts)
 	}
 }
+
+// M2 绑定守卫：法条源未配置时检索/核验/关系查询必须 fail-closed 显式报错，
+// 绝不静默返回空冒充「语料里没有」。
+func TestLawBindingsFailClosedWithoutSource(t *testing.T) {
+	a := newCaseApp(t, t.TempDir())
+	if _, err := a.SearchLaw("违约金", 10); err == nil {
+		t.Error("SearchLaw 未配置法条源必须报错")
+	}
+	if _, err := a.VerifyDocLawCitations("DOC-X", ""); err == nil {
+		t.Error("VerifyDocLawCitations 未配置法条源必须报错")
+	}
+	if _, err := a.GetLawRelations("LAW-x"); err == nil {
+		t.Error("GetLawRelations 未配置法条源必须报错")
+	}
+	refs, err := a.ListLawRefs()
+	if err != nil || len(refs) != 0 {
+		t.Errorf("本案留痕应为空列表: %v %+v", err, refs)
+	}
+}

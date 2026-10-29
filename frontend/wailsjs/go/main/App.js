@@ -62,6 +62,10 @@ export function DownloadAndInstallLawData(arg1) {
   return window['go']['main']['App']['DownloadAndInstallLawData'](arg1);
 }
 
+export function GetLawRelations(arg1) {
+  return window['go']['main']['App']['GetLawRelations'](arg1);
+}
+
 export function IngestDocument(arg1) {
   return window['go']['main']['App']['IngestDocument'](arg1);
 }
@@ -88,6 +92,10 @@ export function ListDocuments() {
 
 export function ListFacts() {
   return window['go']['main']['App']['ListFacts']();
+}
+
+export function ListLawRefs() {
+  return window['go']['main']['App']['ListLawRefs']();
 }
 
 export function LoadLawData(arg1) {
@@ -130,10 +138,18 @@ export function RunReader(arg1) {
   return window['go']['main']['App']['RunReader'](arg1);
 }
 
+export function SearchLaw(arg1, arg2) {
+  return window['go']['main']['App']['SearchLaw'](arg1, arg2);
+}
+
 export function SwitchCase(arg1) {
   return window['go']['main']['App']['SwitchCase'](arg1);
 }
 
 export function UpgradeFact(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['UpgradeFact'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function VerifyDocLawCitations(arg1, arg2) {
+  return window['go']['main']['App']['VerifyDocLawCitations'](arg1, arg2);
 }

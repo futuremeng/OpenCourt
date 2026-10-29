@@ -97,6 +97,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("案件表迁移失败: %w", err)
 	}
+	if err := migrateLawRefLawID(db, path); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if _, err := db.Exec(
 		`INSERT OR IGNORE INTO cases (case_id, title, stage, visibility, created_at)
 		 VALUES (?, ?, ?, ?, ?)`,

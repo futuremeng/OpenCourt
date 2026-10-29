@@ -37,6 +37,8 @@ export function CurrentCase():Promise<domain.Case>;
 
 export function DownloadAndInstallLawData(arg1:Array<string>):Promise<Record<string, any>>;
 
+export function GetLawRelations(arg1:string):Promise<Array<plugins.Relation>>;
+
 export function IngestDocument(arg1:string):Promise<storage.DocumentInfo>;
 
 export function InstallAppUpdate():Promise<void>;
@@ -50,6 +52,8 @@ export function ListConflicts():Promise<Array<domain.Conflict>>;
 export function ListDocuments():Promise<Array<storage.DocumentInfo>>;
 
 export function ListFacts():Promise<Array<domain.Fact>>;
+
+export function ListLawRefs():Promise<Array<domain.LawRef>>;
 
 export function LoadLawData(arg1:string):Promise<Record<string, any>>;
 
@@ -71,6 +75,10 @@ export function RunElementMatch(arg1:Array<string>):Promise<neutral.MatchResult>
 
 export function RunReader(arg1:string):Promise<neutral.ReaderReport>;
 
+export function SearchLaw(arg1:string,arg2:number):Promise<Array<plugins.LawHit>>;
+
 export function SwitchCase(arg1:string):Promise<void>;
 
 export function UpgradeFact(arg1:string,arg2:string,arg3:boolean,arg4:boolean,arg5:boolean):Promise<domain.Fact>;
+
+export function VerifyDocLawCitations(arg1:string,arg2:string):Promise<Array<domain.LawRef>>;

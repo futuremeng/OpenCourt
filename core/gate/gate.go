@@ -63,6 +63,19 @@ func CheckGuidance(text string) []Violation {
 // FactIndex 按 ID 索引的事实集合，供门禁做实体落地检查。
 type FactIndex map[string]domain.Fact
 
+// RefInfo 引用留痕（law_refs / case_refs）做门禁校验所需的最小信息（D2）。
+type RefInfo struct {
+	Kind          string // LAW / CASE
+	Status        string // EFFECTIVE / AMENDED / UNVERIFIED / UNKNOWN
+	ConfirmStatus string // confirmed / pending
+	VerifyResult  string // OK 或 OL-1001..OL-1006
+}
+
+// RefIndex 按引用 ID（LAW-…/CASE-…）索引的引用留痕。
+// 跨案件引用在此天然失败：scope 存储只装当前案件的 refs，A 案的 ID 在
+// B 案的索引里不存在 → HALLUCINATION。
+type RefIndex map[string]RefInfo
+
 // OutputDraft 一次待检输出：文本 + 其引用的事实 ID 集合。
 type OutputDraft struct {
 	Text      string
@@ -70,11 +83,33 @@ type OutputDraft struct {
 	Citations []domain.Citation
 }
 
-// CheckGrounding 幻觉门禁：输出引用的事实必须在索引中可落地，
-// 且不得引用「无依据」状态的事实；引用必须满足最低溯源要求（页码+原文）。
-func CheckGrounding(out OutputDraft, index FactIndex) []Violation {
+// CheckGrounding 幻觉门禁：输出引用的实体必须可落地——
+// FACT- 前缀走事实索引（不得引用「无依据」状态）；
+// LAW- / CASE- 前缀走引用表校验（不存在即幻觉；UNVERIFIED 或 pending
+// 即违规——未核验/待人工确认的引用不得静默通过，D2）。
+// 引用必须满足最低溯源要求（页码+原文）。
+func CheckGrounding(out OutputDraft, index FactIndex, refs RefIndex) []Violation {
 	violations := make([]Violation, 0)
 	for _, id := range out.FactIDs {
+		if strings.HasPrefix(id, "LAW-") || strings.HasPrefix(id, "CASE-") {
+			r, ok := refs[id]
+			if !ok {
+				violations = append(violations, Violation{
+					Rule:    "HALLUCINATION",
+					Phrase:  id,
+					Message: fmt.Sprintf("引用的实体 %s 在当前案件的引用留痕中不存在（跨案件引用同样拦截），直接拦截", id),
+				})
+				continue
+			}
+			if r.Status == "UNVERIFIED" || r.ConfirmStatus == "pending" || r.VerifyResult != "OK" {
+				violations = append(violations, Violation{
+					Rule:    "REF_UNVERIFIED",
+					Phrase:  id,
+					Message: fmt.Sprintf("引用 %s 未核验或待人工确认（状态 %s / 确认 %s / 核验 %s）：不得静默通过，界面必须标注并转人工", id, r.Status, r.ConfirmStatus, r.VerifyResult),
+				})
+			}
+			continue
+		}
 		f, ok := index[id]
 		if !ok {
 			violations = append(violations, Violation{
@@ -120,9 +155,9 @@ func CheckGrounding(out OutputDraft, index FactIndex) []Violation {
 
 // Check 汇总执行全部输出门禁（开发文档 7.4 三层门禁）。
 // 返回的 violations 非空即表示输出必须被拒绝或改写。
-func Check(out OutputDraft, index FactIndex) []Violation {
+func Check(out OutputDraft, index FactIndex, refs RefIndex) []Violation {
 	all := make([]Violation, 0)
 	all = append(all, CheckGuidance(out.Text)...)
-	all = append(all, CheckGrounding(out, index)...)
+	all = append(all, CheckGrounding(out, index, refs)...)
 	return all
 }

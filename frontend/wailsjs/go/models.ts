@@ -130,6 +130,61 @@ export namespace domain {
 		    return a;
 		}
 	}
+	export class LawRef {
+	    ref_id: string;
+	    case_id: string;
+	    article_id: string;
+	    law_id?: string;
+	    law_name: string;
+	    article_no?: string;
+	    quote?: string;
+	    effective_date?: string;
+	    status: string;
+	    confirm_status: string;
+	    verify_result?: string;
+	    at_date?: string;
+	    // Go type: time
+	    created_at: any;
+
+	    static createFrom(source: any = {}) {
+	        return new LawRef(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ref_id = source["ref_id"];
+	        this.case_id = source["case_id"];
+	        this.article_id = source["article_id"];
+	        this.law_id = source["law_id"];
+	        this.law_name = source["law_name"];
+	        this.article_no = source["article_no"];
+	        this.quote = source["quote"];
+	        this.effective_date = source["effective_date"];
+	        this.status = source["status"];
+	        this.confirm_status = source["confirm_status"];
+	        this.verify_result = source["verify_result"];
+	        this.at_date = source["at_date"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 
@@ -480,6 +535,48 @@ export namespace plugins {
 	    }
 	}
 
+	export class LawHit {
+	    law_id: string;
+	    title: string;
+	    article: string;
+	    effective_date: string;
+	    status: string;
+	    confirm_status: string;
+
+	    static createFrom(source: any = {}) {
+	        return new LawHit(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.law_id = source["law_id"];
+	        this.title = source["title"];
+	        this.article = source["article"];
+	        this.effective_date = source["effective_date"];
+	        this.status = source["status"];
+	        this.confirm_status = source["confirm_status"];
+	    }
+	}
+	export class Relation {
+	    src_law_id: string;
+	    dst_law_id: string;
+	    relation_type: string;
+	    based_on_doc_id?: string;
+	    confirm_status: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Relation(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.src_law_id = source["src_law_id"];
+	        this.dst_law_id = source["dst_law_id"];
+	        this.relation_type = source["relation_type"];
+	        this.based_on_doc_id = source["based_on_doc_id"];
+	        this.confirm_status = source["confirm_status"];
+	    }
+	}
 }
 
 export namespace redact {

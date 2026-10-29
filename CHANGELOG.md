@@ -5,7 +5,12 @@
 ## Unreleased（阶段二开发中）
 
 ### 新增
+- **法条检索与文书引用核验（v0.2 M2，plan-v0.2 4.1）**：`neutral/lawassist.go` 检索守卫 + 确定性引用抽取（正则「《法名》第X条之Y」，无模型参与、不猜简称）+ 核验管线（`LawVerifier` 窄接口，fake 可测）；`plugins/law_openlaw_verdict.go` 透传 OpenLaw `CheckCitation`/`FindRelation`/`ResolveVersion` 与 DTO——核验判定直接采用 OpenLaw 错误码（OK / OL-1001..OL-1006，不另建同义枚举），断链数据照常返回；`law_refs` 补 `law_id` 列（幂等迁移 + 自动备份；OpenLaw SDK 现不返回 law_id，`GetLawRelations` 对此 fail-closed 报错不猜——桥接缺口已记录）；`gate.CheckGrounding` 引用表分支：`FACT-` 走事实索引、`LAW-`/`CASE-` 走引用留痕索引（不存在即幻觉——跨案件引用天然拦截；UNVERIFIED/pending/非 OK 即违规 `REF_UNVERIFIED`，未核验不得静默通过）；App 绑定 `SearchLaw`/`VerifyDocLawCitations`/`ListLawRefs`/`GetLawRelations`（审计 `LAW_SEARCH`/`LAW_VERIFY`/`LAW_VERIFY_FAIL`）；前端 `LawSearch` 面板（检索结果与核验留痕，UNKNOWN「效力待确认」橙标、pending「待人工确认」橙标、OL-1006「无法溯源」红标、关系 pending 橙标）；合规用例 `TestCrossCaseReferenceBlocked`（存储隔离 + 门禁双防线）与 `TestLawRefUnverifiedSurfaces`（未核验上浮）
 - **案件实体与案件级隔离（v0.2 M1，plan-v0.2 D1/D5）**：`cases` 表（标题/案由自由文本/阶段枚举/可见性）与 `law_refs`/`case_refs` 引用留痕表就位（D2：法条不是事实、类案要旨不是本案事实——不进 facts、永不进五态）；存量五表幂等迁移补 `case_id`（PRAGMA table_info 探测，迁移前自动备份 `<db>.bak-<ts>`，存量一律归 `CASE-DEFAULT` 不丢历史）；仓储改为 `Store.WithCase(caseID)` → `CaseScope` 案件限定视图，**旧全局方法已从 Store 移除（编译期强制）**——跨案件读写在 SQL 层不可能（WHERE 强制），跨案件引用天然 not-found；App 层新增 `CreateCase`/`ListCases`/`SwitchCase`/`CurrentCase` 绑定（新建即切换；非法阶段报错；当前案件持久化 `state.json` 重启恢复；审计 `CASE_CREATE`/`CASE_SWITCH`）；前端新增 `CaseBar` 案件切换栏（当前案件 + 切换 + 新建，切换后各面板联动刷新）；Profile `data_dir` 明确未启用（字段注释 + 加载告警，防误认为按立场分库）；单测覆盖：迁移幂等（重复打开 no-op 且不重复备份）、跨案件隔离（事实/冲突/文档/要素/refs 互不可见互改不动）、未核验引用保守缺省（UNVERIFIED/pending）
+
+### 变更
+- **V1 修法（plan-v0.2 D0）**：`plugins/law_openlaw.go` 删除 `openlawStatus` 自行映射——效力状态是语料层判断归 OpenLaw，只透传 `effect_status`（OL-1 未就绪前一律 UNKNOWN）；OpenLaw 打开方式改为 `sdk.OpenReadOnly`（OL-7 已就位：query_only、不跑迁移、不写 meta；OL-8 schema 协商 fail-closed）
+- **V2 修法**：`core/retrieve` 删除 `LawEntry`/`CaseEntry`/`FilterRepealed`（全仓无引用的死代码）——法条/类案是外部语料，检索归 plugins 适配层 + OpenLaw sdk，效力归 OpenLaw；本包定位收窄为「本案卷宗内检索」
 
 ### 变更
 - **既有绑定签名不变、内部一律走当前案件视图**（`ListFacts`/`CreateFact`/`UpgradeFact`/`RunReader`/`BuildTimeline`/`RunAggregate`/`RunElementMatch`/`RunBlindspots` 等经 `store.WithCase(currentCaseID)`），前端无感；`scanFact`/冲突扫描加固 NULL 列读取（存量库健壮性）

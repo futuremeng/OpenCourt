@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS law_refs (
     ref_id         TEXT PRIMARY KEY,
     case_id        TEXT NOT NULL,
     article_id     TEXT NOT NULL,
+    law_id         TEXT,
     law_name       TEXT NOT NULL,
     article_no     TEXT,
     quote          TEXT,
@@ -55,6 +56,25 @@ CREATE TABLE IF NOT EXISTS case_refs (
 CREATE INDEX IF NOT EXISTS idx_law_refs_case ON law_refs (case_id);
 CREATE INDEX IF NOT EXISTS idx_case_refs_case ON case_refs (case_id);
 `
+
+// migrateLawRefLawID law_refs 补 law_id 列（M2：relation 查询键）——
+// 幂等：已有列 no-op；补列前自动备份（与 M1 迁移同一纪律）。
+func migrateLawRefLawID(db *sql.DB, path string) error {
+	has, err := columnExists(db, "law_refs", "law_id")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	if err := backupDatabase(path); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`ALTER TABLE law_refs ADD COLUMN law_id TEXT`); err != nil {
+		return fmt.Errorf("law_refs 补 law_id 列失败: %w", err)
+	}
+	return nil
+}
 
 // CreateCase 新建案件（case_id/title 必填；stage 缺省 CONSULT，必须合法）。
 func (s *Store) CreateCase(c domain.Case) error {
@@ -178,10 +198,10 @@ func (sc *CaseScope) AddLawRef(r domain.LawRef) error {
 		r.CreatedAt = time.Now().UTC()
 	}
 	_, err := sc.db().Exec(
-		`INSERT INTO law_refs (ref_id, case_id, article_id, law_name, article_no, quote,
+		`INSERT INTO law_refs (ref_id, case_id, article_id, law_id, law_name, article_no, quote,
 			effective_date, status, confirm_status, verify_result, at_date, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.RefID, sc.caseID, r.ArticleID, r.LawName, r.ArticleNo, r.Quote,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.RefID, sc.caseID, r.ArticleID, r.LawID, r.LawName, r.ArticleNo, r.Quote,
 		r.EffectiveDate, r.Status, r.ConfirmStatus, r.VerifyResult, r.AtDate, r.CreatedAt,
 	)
 	return err
@@ -190,7 +210,7 @@ func (sc *CaseScope) AddLawRef(r domain.LawRef) error {
 // ListLawRefs 列出本案全部法条引用（创建时间倒序）。
 func (sc *CaseScope) ListLawRefs() ([]domain.LawRef, error) {
 	rows, err := sc.db().Query(
-		`SELECT ref_id, case_id, article_id, law_name, article_no, quote, effective_date,
+		`SELECT ref_id, case_id, article_id, COALESCE(law_id,''), law_name, article_no, quote, effective_date,
 			status, confirm_status, verify_result, at_date, created_at
 		 FROM law_refs WHERE case_id = ? ORDER BY created_at DESC`, sc.caseID)
 	if err != nil {
@@ -201,6 +221,7 @@ func (sc *CaseScope) ListLawRefs() ([]domain.LawRef, error) {
 	for rows.Next() {
 		var (
 			r         domain.LawRef
+			lawID     string
 			articleID sql.NullString
 			lawName   sql.NullString
 			articleNo sql.NullString
@@ -212,11 +233,12 @@ func (sc *CaseScope) ListLawRefs() ([]domain.LawRef, error) {
 			confirm   string
 			createdAt time.Time
 		)
-		if err := rows.Scan(&r.RefID, &r.CaseID, &articleID, &lawName, &articleNo, &quote,
+		if err := rows.Scan(&r.RefID, &r.CaseID, &articleID, &lawID, &lawName, &articleNo, &quote,
 			&eff, &status, &confirm, &verifyRes, &at, &createdAt); err != nil {
 			return nil, err
 		}
 		r.ArticleID, r.LawName, r.ArticleNo = articleID.String, lawName.String, articleNo.String
+		r.LawID = lawID
 		r.Quote, r.EffectiveDate = quote.String, eff.String
 		r.AtDate, r.VerifyResult = at.String, verifyRes.String
 		r.Status, r.ConfirmStatus = status, confirm

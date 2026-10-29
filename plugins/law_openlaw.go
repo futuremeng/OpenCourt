@@ -18,11 +18,15 @@ type OpenLawSource struct {
 
 // NewOpenLawSource 打开 OpenLaw 数据目录；dataDir 为空返回 (nil, nil)——
 // 未配置法条源时调用方降级（框架不内置任何法条数据）。
+// OL-7（plan-v0.2 D7）：消费方唯一合法入口是 OpenReadOnly——query_only、
+// 不跑迁移、不写 meta；用读写入口打开共享语料属于对生产者数据的越权。
+// OL-8：schema 版本协商由 OpenReadOnly 内部完成（[SchemaMin, SchemaMax]
+// 之外 fail-closed 报错，不迁移、不部分读、不猜）。
 func NewOpenLawSource(dataDir string) (*OpenLawSource, error) {
 	if dataDir == "" {
 		return nil, nil
 	}
-	ol, err := sdk.New(dataDir)
+	ol, err := sdk.OpenReadOnly(dataDir)
 	if err != nil {
 		return nil, fmt.Errorf("打开 OpenLaw 数据目录失败: %w", err)
 	}
@@ -72,24 +76,25 @@ func (s *OpenLawSource) GetLawDetail(ctx context.Context, lawID string) (LawHit,
 }
 
 // lawHitFrom sdk 命中 map → LawHit。
+// 【V1 修法，plan-v0.2 D0】效力状态是语料层判断，归 OpenLaw：这里只透传
+// SDK 返回的 effect_status（OL-1 未就绪前一律 UNKNOWN）——不再用
+// expire_date 是否为空自行映射 EFFECTIVE/AMENDED，绝不自行判定废止/修改关系。
 func lawHitFrom(m map[string]any) LawHit {
 	str := func(k string) string { v, _ := m[k].(string); return v }
+	status := str("effect_status")
+	if status == "" {
+		status = "UNKNOWN" // 效力状态待确认：不猜
+	}
+	confirm := str("confirm_status")
+	if confirm != "confirmed" {
+		confirm = "pending" // 非 confirmed 一律标待人工确认（12.3）
+	}
 	return LawHit{
 		LawID:         str("article_id"),
 		Title:         str("law_name"),
 		Article:       str("snippet"),
 		EffectiveDate: str("effective_date"),
-		Status:        openlawStatus(str("expire_date")),
+		Status:        status,
+		ConfirmStatus: confirm,
 	}
-}
-
-// openlawStatus 状态映射：OpenLaw 版本区间 → LawHit.Status。
-// 被后续版本接续（expire_date 非空）→ AMENDED；否则 EFFECTIVE。
-// 绝不输出 REPEALED：机器不自动判定废止（OpenLaw 10 章纪律）——废止须
-// confirmed 的 relation 证据，M4 未接 relation 查询，宁可少判。
-func openlawStatus(expireDate string) string {
-	if expireDate != "" {
-		return "AMENDED"
-	}
-	return "EFFECTIVE"
 }

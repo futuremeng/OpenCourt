@@ -25,7 +25,12 @@ type LawHit struct {
 	Title         string `json:"title"`
 	Article       string `json:"article"`
 	EffectiveDate string `json:"effective_date"`
-	Status        string `json:"status"` // EFFECTIVE / AMENDED / REPEALED
+	// Status 效力状态：由 OpenLaw 透传（EFFECTIVE / AMENDED / REPEALED）；
+	// OL-1 未就绪时一律 UNKNOWN（「效力状态待确认」）——OpenCourt 不自行映射（V1）。
+	Status string `json:"status"`
+	// ConfirmStatus 文本确认状态（confirmed / pending）：pending 原样上浮，
+	// UI 必须标「待人工确认」，不得静默通过。
+	ConfirmStatus string `json:"confirm_status"`
 }
 
 // CaseSourcePlugin 类案源插件接口：支持裁判要旨提取。

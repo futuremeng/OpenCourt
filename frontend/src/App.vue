@@ -5,6 +5,7 @@ import type { AppInfo, Fact } from "../wailsjs/go/main/App";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 import FactBoard from "./components/FactBoard.vue";
 import CaseBar from "./components/CaseBar.vue";
+import LawSearch from "./components/LawSearch.vue";
 
 const info = ref<AppInfo | null>(null);
 const facts = ref<Fact[]>([]);
@@ -27,10 +28,12 @@ async function onCaseSwitched() {
     await refresh();
     await refreshDocs();
     await refreshTimeline();
+    (lawSearchRef.value as any)?.refresh?.();
   } catch (e) {
     error.value = String(e);
   }
 }
+const lawSearchRef = ref(null);
 
 onMounted(async () => {
   try {
@@ -468,6 +471,13 @@ async function awaitHuman() {
       <ul v-if="lawMsgs.length" class="law-progress">
         <li v-for="(m, i) in lawMsgs" :key="i">{{ m }}</li>
       </ul>
+    </section>
+
+    <!-- 法条检索与文书引用核验（v0.2 M2）：核验判定 = OpenLaw 错误码原样透传；
+         UNKNOWN/pending/OL-1006 必须显式标出，不得静默通过 -->
+    <section class="panel wide">
+      <h2>法条检索与引用核验</h2>
+      <LawSearch ref="lawSearchRef" />
     </section>
 
     <section class="panel">

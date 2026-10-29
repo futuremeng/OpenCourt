@@ -70,10 +70,13 @@ func TestOpenLawSourceSearchLaw(t *testing.T) {
 		if h.Title != "测试法" || h.LawID == "" || h.EffectiveDate == "" {
 			t.Errorf("LawHit 字段缺失: %+v", h)
 		}
-		switch h.Status {
-		case "EFFECTIVE", "AMENDED":
-		default:
-			t.Errorf("状态映射异常（绝不出现 REPEALED）: %+v", h)
+		// V1 修法（plan-v0.2 D0）：效力状态不自行映射——OpenLaw 未给出
+		// effect_status（OL-1 未就绪）前一律 UNKNOWN，绝不猜 EFFECTIVE/AMENDED。
+		if h.Status != "UNKNOWN" {
+			t.Errorf("效力状态必须透传（OL-1 未就绪时应 UNKNOWN）: %+v", h)
+		}
+		if h.ConfirmStatus != "confirmed" && h.ConfirmStatus != "pending" {
+			t.Errorf("确认状态异常: %+v", h)
 		}
 	}
 }
@@ -109,5 +112,85 @@ func TestOpenLawSourceUnconfigured(t *testing.T) {
 	src, err := NewOpenLawSource("")
 	if src != nil || err != nil {
 		t.Errorf("未配置应 (nil, nil)：调用方降级: %v %v", src, err)
+	}
+}
+
+// --- M2 引用核验透传（plan-v0.2 4.1）：判定 = OpenLaw 错误码原样 ---
+
+func TestOpenLawVerdictCheckCitation(t *testing.T) {
+	src, err := NewOpenLawSource(openlawTestDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+	ctx := context.Background()
+
+	// 法规名不存在 → OL-1001
+	v, err := src.CheckCitation(ctx, "不存在的法", "第一条", "", "2024-01-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.VerifyResult != "OL-1001" {
+		t.Errorf("OL-1001 分支异常: %+v", v)
+	}
+	// 条款不存在 → OL-1003
+	v, _ = src.CheckCitation(ctx, "测试法", "第九十九条", "", "2024-01-01")
+	if v.VerifyResult != "OL-1003" {
+		t.Errorf("OL-1003 分支异常: %+v", v)
+	}
+	// 最小数据目录无 manifest → 断链优先 OL-1006；数据不吞（条标识照常返回）
+	v, err = src.CheckCitation(ctx, "测试法", "第一条",
+		"公司股东滥用公司法人独立地位和股东有限责任，逃避债务，严重损害公司债权人利益的，应当对公司债务承担连带责任。", "2024-01-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.VerifyResult != "OL-1006" || v.ChainOK || v.ArticleID != "l1_v1_第一条" {
+		t.Errorf("OL-1006 断链应数据照常返回: %+v", v)
+	}
+	if v.Status != "UNKNOWN" {
+		t.Errorf("效力状态应保守 UNKNOWN: %+v", v)
+	}
+}
+
+func TestOpenLawVerdictResolveAndRelation(t *testing.T) {
+	dir := openlawTestDir(t)
+	src, err := NewOpenLawSource(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+	ctx := context.Background()
+
+	info, err := src.ResolveVersion(ctx, "测试法", "2015-01-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.VersionNo != "v0" || info.ConfirmStatus != "confirmed" {
+		t.Errorf("版本解析异常: %+v", info)
+	}
+
+	// 无关系 → 空列表不是错误
+	rels, err := src.FindRelation(ctx, "l1")
+	if err != nil || len(rels) != 0 {
+		t.Fatalf("空关系应为空列表: %v %+v", err, rels)
+	}
+	// pending 关系原样透传（机器不自动判定废止）
+	db, err := store.Open(filepath.Join(dir, "db", "openlaw.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO law(law_id, name) VALUES('l2','关联法')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO relation(src_law_id, dst_law_id, relation_type, confirm_status)
+		VALUES('l1','l2','废止','pending')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	rels, err = src.FindRelation(ctx, "l1")
+	if err != nil || len(rels) != 1 || rels[0].ConfirmStatus != "pending" {
+		t.Fatalf("pending 关系必须原样上浮: %v %+v", err, rels)
 	}
 }

@@ -1,7 +1,9 @@
-// Package retrieve 检索层模块（开发文档 4.4、7.4）：
-// “向量+关键词+重排”混合检索。本阶段实现关键词召回与重排接口；
-// 向量检索由 plugins/model 的 embedding 适配器在后续阶段接入。
-// 法条条目强制携带版本与废止状态，已废止法条在输出端标红。
+// Package retrieve 检索层模块（开发文档 4.4、7.4；plan-v0.2 V2 收窄）：
+// 仅负责「本案卷宗内」的混合检索（关键词召回 + 重排；向量由 plugins/model
+// embedding 后续接入）。
+// 【V2】法条/类案条目类型已移除：法条与类案是外部语料（OpenLaw /
+// LocalCases），其检索归 plugins 适配层 + OpenLaw sdk，效力状态归 OpenLaw——
+// OpenCourt 检索层不得自建语料类型、不得自行判定效力。
 package retrieve
 
 import (
@@ -9,34 +11,14 @@ import (
 	"strings"
 )
 
-// LawEntry 法条条目：必须带 effective_date 与 status（开发文档 7.4 门禁 1）。
-type LawEntry struct {
-	LawID         string `json:"law_id"`
-	Title         string `json:"title"`
-	Article       string `json:"article"`
-	EffectiveDate string `json:"effective_date"`
-	Status        string `json:"status"` // EFFECTIVE / AMENDED / REPEALED
-}
-
-// IsRepealed 报告法条是否已废止。
-func (l LawEntry) IsRepealed() bool { return l.Status == "REPEALED" }
-
-// CaseEntry 类案条目：带裁判要旨。
-type CaseEntry struct {
-	CaseID  string `json:"case_id"`
-	Title   string `json:"title"`
-	Summary string `json:"summary"` // 裁判要旨
-}
-
-// Result 一条检索结果及重排得分。
+// Result 一条卷宗检索结果及重排得分。
 type Result struct {
-	Kind  string  `json:"kind"` // LAW / CASE / DOC
-	Ref   any     `json:"ref"`
+	Ref   any     `json:"ref"` // 文档ID（卷宗内）
 	Score float64 `json:"score"`
 }
 
 // KeywordSearch 关键词召回 + 简单重排（命中词数/文档长度），返回 topK。
-// docs 为 文档ID→文本。
+// docs 为 文档ID→文本（必须来自当前案件的卷宗，跨案件在存储层即失败）。
 func KeywordSearch(query string, docs map[string]string, topK int) []Result {
 	terms := strings.Fields(query)
 	results := make([]Result, 0, len(docs))
@@ -52,7 +34,7 @@ func KeywordSearch(query string, docs map[string]string, topK int) []Result {
 			if n := len([]rune(text)); n > 0 {
 				norm = score / float64(n) * 1000
 			}
-			results = append(results, Result{Kind: "DOC", Ref: id, Score: norm})
+			results = append(results, Result{Ref: id, Score: norm})
 		}
 	}
 	sort.Slice(results, func(i, j int) bool { return results[i].Score > results[j].Score })
@@ -60,16 +42,4 @@ func KeywordSearch(query string, docs map[string]string, topK int) []Result {
 		results = results[:topK]
 	}
 	return results
-}
-
-// FilterRepealed 从法条结果中分离出已废止条目（输出端必须标红提示）。
-func FilterRepealed(entries []LawEntry) (active []LawEntry, repealed []LawEntry) {
-	for _, e := range entries {
-		if e.IsRepealed() {
-			repealed = append(repealed, e)
-		} else {
-			active = append(active, e)
-		}
-	}
-	return active, repealed
 }
