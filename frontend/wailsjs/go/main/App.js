@@ -134,6 +134,10 @@ export function RunElementMatch(arg1) {
   return window['go']['main']['App']['RunElementMatch'](arg1);
 }
 
+export function RunElementMatchByCaseType(arg1) {
+  return window['go']['main']['App']['RunElementMatchByCaseType'](arg1);
+}
+
 export function RunReader(arg1) {
   return window['go']['main']['App']['RunReader'](arg1);
 }

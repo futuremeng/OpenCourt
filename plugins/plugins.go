@@ -47,6 +47,16 @@ type CaseHit struct {
 	Summary string `json:"summary"` // 裁判要旨
 }
 
+// ElementSpec 构成要件（OpenLaw 要件库透传，plan-v0.2 M4）。
+// 要件数据归 OpenLaw（人工确认 + review_log 留痕）；OpenCourt 只读取
+// 封闭候选集——绝不生成或补全要件（V3）。
+type ElementSpec struct {
+	ElementID   string `json:"element_id"` // 稳定标识
+	Name        string `json:"name"`
+	ArticleID   string `json:"article_id,omitempty"`
+	HowToAttack string `json:"how_to_attack,omitempty"` // 突破方向（OpenLaw 风险假设）
+}
+
 // ModelAdapter 模型适配插件接口（开发文档 9.4）。
 // 默认离线：未显式配置并启用前，任何适配器不得发起网络请求。
 // 使用云端 API 时，适配器必须负责附加“禁止用于模型训练”标识。

@@ -52,7 +52,8 @@ func main() {
 	defer cancel()
 
 	start := time.Now()
-	report, err := neutral.RunReader(ctx, "DOC-SMOKE", doc, adapter)
+	// 冒烟检查无要件库：传 nil（V3——related_element 一律置空）
+	report, err := neutral.RunReader(ctx, "DOC-SMOKE", doc, adapter, nil)
 	if err != nil {
 		log.Fatalf("阅卷失败: %v", err)
 	}

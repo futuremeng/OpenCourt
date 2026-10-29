@@ -28,6 +28,7 @@ async function onCaseSwitched() {
     await refresh();
     await refreshDocs();
     await refreshTimeline();
+    await refreshCurrentCaseType();
     (lawSearchRef.value as any)?.refresh?.();
   } catch (e) {
     error.value = String(e);
@@ -39,6 +40,7 @@ onMounted(async () => {
   try {
     info.value = await App.AppInfo();
     await refresh();
+    await refreshCurrentCaseType();
   } catch (e) {
     error.value = String(e);
   }
@@ -110,6 +112,33 @@ async function runBlindspots() {
     blindspots.value = await App.RunBlindspots(reqs);
   } catch (e) {
     error.value = String(e);
+  }
+}
+
+// --- v0.2 M4：按案由要件匹配（要件只来自 OpenLaw 要件库封闭候选集） ---
+const currentCaseType = ref("");
+const elemMatch = ref<{ Covered: string[]; Missing: string[] } | null>(null);
+const elemMsg = ref("");
+const elemBusy = ref(false);
+
+async function refreshCurrentCaseType() {
+  try {
+    const c = await App.CurrentCase();
+    currentCaseType.value = c?.case_type || "";
+  } catch {
+    currentCaseType.value = "";
+  }
+}
+
+async function runElementMatchByCaseType() {
+  error.value = ""; elemMsg.value = ""; elemMatch.value = null; elemBusy.value = true;
+  try {
+    const res = await App.RunElementMatchByCaseType(currentCaseType.value);
+    elemMatch.value = { Covered: res.Covered || [], Missing: res.Missing || [] };
+  } catch (e) {
+    elemMsg.value = String(e); // 无要件库等显式降级提示，绝不静默
+  } finally {
+    elemBusy.value = false;
   }
 }
 
@@ -548,6 +577,17 @@ async function awaitHuman() {
         <input v-model="requirements" placeholder="要件列表（逗号分隔）" style="flex:1" />
         <button @click="runBlindspots">匹配并生成盲区</button>
       </div>
+      <div class="row">
+        <button :disabled="elemBusy" class="primary" @click="runElementMatchByCaseType">
+          {{ elemBusy ? "匹配中…" : "按案由匹配（OpenLaw 要件库）" }}
+        </button>
+        <span class="hint">当前案由：{{ currentCaseType || "（未设置）" }}；要件只从要件库封闭候选集取，无库时显式报错不猜</span>
+      </div>
+      <p v-if="elemMsg" class="hint">{{ elemMsg }}</p>
+      <ul v-if="elemMatch" class="blindspots">
+        <li v-for="c in elemMatch.Covered" :key="'cov-' + c">✓ 已覆盖：{{ c }}</li>
+        <li v-for="m in elemMatch.Missing" :key="'mis-' + m">✗ 缺失：{{ m }}</li>
+      </ul>
       <ul class="blindspots">
         <li v-for="b in blindspots" :key="b.question">{{ b.question }} —— {{ b.supplement }}</li>
       </ul>

@@ -955,12 +955,14 @@ func (a *App) ListDocuments() ([]storage.DocumentInfo, error) {
 
 // RunReader 对指定文档执行阅卷：模型产候选事实 → 核验器回原文定位仲裁。
 // 定位失败的候选被拒绝入库并记审计；时间/金额要素由正则确定性抽取。
+// 【V3】要件名封闭候选集由当前案件案由从 OpenLaw 要件库注入；无要件库
+// 传 nil——related_element 一律置空，绝不回退到模型自由生成要件。
 func (a *App) RunReader(docID string) (neutral.ReaderReport, error) {
 	doc, err := a.scope().GetDocument(docID)
 	if err != nil {
 		return neutral.ReaderReport{}, err
 	}
-	report, err := neutral.RunReader(a.ctx, docID, doc, a.model)
+	report, err := neutral.RunReader(a.ctx, docID, doc, a.model, a.elementNamesForCurrentCase())
 	if err != nil {
 		_ = a.auditLog.Log(a.profile.Role, "READER_FAILED", docID, err.Error())
 		return neutral.ReaderReport{}, err
@@ -1166,6 +1168,50 @@ func (a *App) RunElementMatch(requirements []string) (neutral.MatchResult, error
 		return neutral.MatchResult{}, err
 	}
 	return neutral.MatchElements(facts, requirements), nil
+}
+
+// RunElementMatchByCaseType 按案由要件匹配（v0.2 M4）：要件清单只从 OpenLaw
+// 要件库取（封闭集，要件经人工确认导入）。无要件库显式报错并给出出路——
+// 绝不回退到模型自由生成要件（V3）。审计 ELEMENT_MATCH。
+func (a *App) RunElementMatchByCaseType(caseType string) (neutral.MatchResult, error) {
+	src, ok := a.lawSource.(neutral.ElementSource)
+	if !ok {
+		return neutral.MatchResult{}, fmt.Errorf("无要件库：请手输要件（要件匹配面板），或经 OpenLaw（openlaw-element）人工确认导入要件")
+	}
+	facts, err := a.scope().ListFacts()
+	if err != nil {
+		return neutral.MatchResult{}, err
+	}
+	res, err := neutral.MatchElementsFrom(facts, src, caseType)
+	if err != nil {
+		return neutral.MatchResult{}, err
+	}
+	_ = a.auditLog.Log(a.profile.Role, "ELEMENT_MATCH", caseType,
+		fmt.Sprintf("覆盖 %d / 缺失 %d", len(res.Covered), len(res.Missing)))
+	return res, nil
+}
+
+// elementNamesForCurrentCase 当前案件的要件名封闭候选集（V3 阅卷注入）：
+// 法条源未配置、案由为空或取数失败一律返回空集——阅卷照常但要件字段
+// 强制置空，绝不因要件库失败而中断阅卷，也绝不放模型自由生成。
+func (a *App) elementNamesForCurrentCase() []string {
+	src, ok := a.lawSource.(neutral.ElementSource)
+	if !ok {
+		return nil
+	}
+	c, err := a.store.GetCase(a.currentCaseID)
+	if err != nil || strings.TrimSpace(c.CaseType) == "" {
+		return nil
+	}
+	specs, err := src.ElementsByCaseType(context.Background(), c.CaseType)
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(specs))
+	for _, sp := range specs {
+		names = append(names, sp.Name)
+	}
+	return names
 }
 
 // RunBlindspots 盲区生成：输出无法判断的问题与补证方向，绝不幻觉填补。

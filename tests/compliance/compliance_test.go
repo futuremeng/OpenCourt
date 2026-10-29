@@ -135,7 +135,7 @@ func TestPhase2ReaderPipeline(t *testing.T) {
 	 {"description":"捏造：被告曾书面承诺赔偿","snippet":"被告书面承诺赔偿三倍定金","page_num":2},
 	 {"description":"对方主张已发货","snippet":"被告未按期交货","page_num":2,"from_opponent":true}
 	]`
-	report, err := neutral.RunReader(context.Background(), "DOC-1", doc, fakeModel{out: modelOut})
+	report, err := neutral.RunReader(context.Background(), "DOC-1", doc, fakeModel{out: modelOut}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

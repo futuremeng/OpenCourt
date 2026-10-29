@@ -11,11 +11,12 @@ import (
 	"github.com/futuremeng/OpenCourt/core/verify"
 )
 
-// fakeModel 测试用模型适配器：返回预设输出。
+// fakeModel 测试用模型适配器：返回预设输出（并记录最后一次 prompt）。
 type fakeModel struct {
 	out     string
 	enabled bool
 	err     error
+	prompt  string
 }
 
 func (f *fakeModel) Name() string  { return "fake" }
@@ -23,7 +24,8 @@ func (f *fakeModel) Enabled() bool { return f.enabled }
 func (f *fakeModel) Embed(_ context.Context, _ string) ([]float64, error) {
 	return nil, errors.New("unsupported")
 }
-func (f *fakeModel) Generate(_ context.Context, _ string) (string, error) {
+func (f *fakeModel) Generate(_ context.Context, prompt string) (string, error) {
+	f.prompt = prompt
 	return f.out, f.err
 }
 
@@ -38,7 +40,7 @@ func testDoc() *verify.DocumentText {
 }
 
 func TestReaderRejectsDisabledModel(t *testing.T) {
-	_, err := RunReader(context.Background(), "DOC-1", testDoc(), &fakeModel{enabled: false})
+	_, err := RunReader(context.Background(), "DOC-1", testDoc(), &fakeModel{enabled: false}, nil)
 	if err == nil {
 		t.Fatal("默认离线：模型未启用时阅卷必须失败")
 	}
@@ -54,7 +56,7 @@ func TestReaderVerifiesCandidates(t *testing.T) {
 ]
 ` + "```" + `
 `
-	report, err := RunReader(context.Background(), "DOC-1", testDoc(), &fakeModel{out: out, enabled: true})
+	report, err := RunReader(context.Background(), "DOC-1", testDoc(), &fakeModel{out: out, enabled: true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,5 +140,47 @@ func TestParseDate(t *testing.T) {
 	}
 	if _, ok := parseDate(strings.Repeat("x", 10)); ok {
 		t.Error("乱码不得被当作日期")
+	}
+}
+
+// 【V3】要件名封闭候选集：prompt 注入要件库清单，
+// 模型输出不在集内的要件名一律置空（不匹配不入库）。
+func TestReaderElementNamesClosedSet(t *testing.T) {
+	out := `[
+	  {"description":"定金已付","snippet":"原告向被告支付定金50000元","page_num":1,"related_element":"合同有效成立"},
+	  {"description":"违约事实","snippet":"被告未按期交货","page_num":2,"related_element":"模型编造的要件名"}
+	]`
+	m := &fakeModel{out: out, enabled: true}
+	report, err := RunReader(context.Background(), "DOC-1", testDoc(), m, []string{"合同有效成立", "违约行为"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(m.prompt, "合同有效成立、违约行为") {
+		t.Error("prompt 必须注入要件库封闭候选集")
+	}
+	if len(report.Accepted) != 2 {
+		t.Fatalf("应接受 2 条，实际 %d", len(report.Accepted))
+	}
+	if report.Accepted[0].RelatedElement != "合同有效成立" {
+		t.Errorf("集内要件名应保留: %+v", report.Accepted[0])
+	}
+	if report.Accepted[1].RelatedElement != "" {
+		t.Errorf("集外要件名必须置空（V3）: %+v", report.Accepted[1])
+	}
+}
+
+// 【V3】无要件库：related_element 一律置空，绝不放行模型自由生成的要件名。
+func TestReaderNoElementLibForcesBlank(t *testing.T) {
+	out := `[{"description":"定金已付","snippet":"原告向被告支付定金50000元","page_num":1,"related_element":"自由生成的要件"}]`
+	m := &fakeModel{out: out, enabled: true}
+	report, err := RunReader(context.Background(), "DOC-1", testDoc(), m, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(m.prompt, "自由生成的要件") {
+		t.Error("无要件库时 prompt 不应携带任何要件候选")
+	}
+	if len(report.Accepted) != 1 || report.Accepted[0].RelatedElement != "" {
+		t.Fatalf("无要件库时要件字段必须置空: %+v", report.Accepted)
 	}
 }

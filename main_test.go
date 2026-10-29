@@ -353,6 +353,9 @@ func TestLawBindingsFailClosedWithoutSource(t *testing.T) {
 	if _, err := a.GetLawRelations("LAW-x"); err == nil {
 		t.Error("GetLawRelations 未配置法条源必须报错")
 	}
+	if _, err := a.RunElementMatchByCaseType("公司纠纷"); err == nil {
+		t.Error("RunElementMatchByCaseType 未配置要件库必须报错（绝不回退模型生成要件）")
+	}
 	refs, err := a.ListLawRefs()
 	if err != nil || len(refs) != 0 {
 		t.Errorf("本案留痕应为空列表: %v %+v", err, refs)

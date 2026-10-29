@@ -73,6 +73,8 @@ export function RunBlindspots(arg1:Array<string>):Promise<Array<neutral.Blindspo
 
 export function RunElementMatch(arg1:Array<string>):Promise<neutral.MatchResult>;
 
+export function RunElementMatchByCaseType(arg1:string):Promise<neutral.MatchResult>;
+
 export function RunReader(arg1:string):Promise<neutral.ReaderReport>;
 
 export function SearchLaw(arg1:string,arg2:number):Promise<Array<plugins.LawHit>>;

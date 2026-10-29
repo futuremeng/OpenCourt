@@ -5,10 +5,14 @@
 package neutral
 
 import (
+	"context"
+	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/futuremeng/OpenCourt/core/domain"
 	"github.com/futuremeng/OpenCourt/core/verify"
+	"github.com/futuremeng/OpenCourt/plugins"
 )
 
 // TimelineItem 时间线条目。
@@ -123,6 +127,39 @@ func MatchElements(facts []domain.Fact, requirements []string) MatchResult {
 		}
 	}
 	return res
+}
+
+// ElementSource 要件来源（plan-v0.2 M4）：OpenLaw 要件库适配器实现；
+// nil = 无要件库。要件数据归 OpenLaw（人工确认导入），OpenCourt 只读取
+// 封闭候选集——绝不生成或补全要件（V3）。
+type ElementSource interface {
+	ElementsByCaseType(ctx context.Context, caseType string) ([]plugins.ElementSpec, error)
+}
+
+// MatchElementsFrom 按案由的要件匹配：要件清单只从要件库取（封闭集），
+// 匹配语义与 MatchElements 一致（仅「已溯源确认」事实可覆盖要件）。
+// src == nil、案由为空或案由无要件 → 明确报错并给出出路，
+// 绝不回退到模型自由生成要件。
+func MatchElementsFrom(facts []domain.Fact, src ElementSource, caseType string) (MatchResult, error) {
+	if src == nil {
+		return MatchResult{}, fmt.Errorf("无要件库：请手输要件，或经 OpenLaw（openlaw-element）人工确认导入要件")
+	}
+	caseType = strings.TrimSpace(caseType)
+	if caseType == "" {
+		return MatchResult{}, fmt.Errorf("案由为空：无法按案由取要件（案由是自由文本，须与要件库录入一致）")
+	}
+	specs, err := src.ElementsByCaseType(context.Background(), caseType)
+	if err != nil {
+		return MatchResult{}, err
+	}
+	if len(specs) == 0 {
+		return MatchResult{}, fmt.Errorf("案由「%s」无已录入构成要件：请手输要件或经 OpenLaw 人工确认导入", caseType)
+	}
+	reqs := make([]string, 0, len(specs))
+	for _, sp := range specs {
+		reqs = append(reqs, sp.Name)
+	}
+	return MatchElements(facts, reqs), nil
 }
 
 // Blindspot 盲区条目（开发文档 4.12）。

@@ -39,7 +39,9 @@ type ReaderReport struct {
 }
 
 // readerPrompt 构造阅卷提示：要求模型输出严格 JSON，片段必须逐字来自原文。
-func readerPrompt(doc *verify.DocumentText) string {
+// 【V3，plan-v0.2】要件名是封闭候选集：有要件库时模型只能从要件库清单中
+// 原样选择或留空；无要件库时禁止输出 related_element 字段（后置校验兜底）。
+func readerPrompt(doc *verify.DocumentText, elementNames []string) string {
 	var sb strings.Builder
 	sb.WriteString(`你是法律文书阅卷助手。阅读以下带页码标记的文档，提取候选事实。
 
@@ -48,10 +50,17 @@ func readerPrompt(doc *verify.DocumentText) string {
 2. page_num 必须是片段实际所在页码（对应页码标记）；
 3. 无法在原文找到依据的内容一律不得输出；
 4. from_opponent: 该事实若来自对方主张则 true；
-5. 只输出 JSON 数组，不要输出其他文字。
+`)
+	if len(elementNames) > 0 {
+		sb.WriteString("5. related_element 只能从以下要件清单中原样选择（不相关则留空），清单之外一律留空：\n   " +
+			strings.Join(elementNames, "、") + "\n")
+	} else {
+		sb.WriteString("5. 不得输出 related_element 字段（一律留空）；\n")
+	}
+	sb.WriteString(`6. 只输出 JSON 数组，不要输出其他文字。
 
 输出格式：
-[{"description":"...","snippet":"...","page_num":1,"from_opponent":false,"related_element":"可选要件名"}]
+[{"description":"...","snippet":"...","page_num":1,"from_opponent":false,"related_element":"..."}]
 
 文档内容：
 `)
@@ -92,17 +101,25 @@ func ParseCandidates(out string) ([]CandidateFact, error) {
 // RunReader 执行阅卷：调用模型产候选 → 逐条回原文定位核验 →
 // 定位成功者按状态机初始态规则入库候选态；定位失败者拒绝。
 // 确定性要素（时间/金额）由正则抽取，不经模型。
-func RunReader(ctx context.Context, docID string, doc *verify.DocumentText, model plugins.ModelAdapter) (ReaderReport, error) {
+// elementNames 是要件库封闭候选集（V3）：模型给出的要件名不在集内一律
+// 置空（不匹配不入库）；无要件库传 nil——要件字段一律置空。
+func RunReader(ctx context.Context, docID string, doc *verify.DocumentText, model plugins.ModelAdapter, elementNames []string) (ReaderReport, error) {
 	if !model.Enabled() {
 		return ReaderReport{}, fmt.Errorf("模型适配器 %s 未启用：默认离线，阅卷需要先在配置中显式启用模型", model.Name())
 	}
-	out, err := model.Generate(ctx, readerPrompt(doc))
+	out, err := model.Generate(ctx, readerPrompt(doc, elementNames))
 	if err != nil {
 		return ReaderReport{}, err
 	}
 	cands, err := ParseCandidates(out)
 	if err != nil {
 		return ReaderReport{}, err
+	}
+
+	// V3 后置校验：要件名不信任模型输出——不在封闭集内的一律置空。
+	allowed := make(map[string]bool, len(elementNames))
+	for _, n := range elementNames {
+		allowed[n] = true
 	}
 
 	docs := map[string]*verify.DocumentText{doc.File: doc}
@@ -115,6 +132,9 @@ func RunReader(ctx context.Context, docID string, doc *verify.DocumentText, mode
 	for _, c := range cands {
 		if strings.TrimSpace(c.Description) == "" {
 			continue
+		}
+		if !allowed[c.RelatedElement] {
+			c.RelatedElement = ""
 		}
 		f := domain.Fact{
 			FactID:         newFactID(),
