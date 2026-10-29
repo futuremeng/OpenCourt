@@ -95,3 +95,10 @@ make build     # 产出安装包：build/bin/OpenCourt.app（macOS）/.msi/.AppI
 - 免责声明：[DISCLAIMER.md](DISCLAIMER.md)
 - 贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)
 - 架构文档：[docs/architecture.md](docs/architecture.md)
+- 下一阶段规划（庭审模拟与案件推演方向，盘点 + 里程碑 M1–M8）：
+  [docs/roadmap-next.md](docs/roadmap-next.md)
+- **v0.2 实施方案（已定案：案件实体 + 法条链路 + 类案接入）**：
+  [docs/plan-v0.2.md](docs/plan-v0.2.md)
+- 跨项目对接契约：[docs/openlaw-integration.md](docs/openlaw-integration.md) ·
+  [docs/localcases-integration.md](docs/localcases-integration.md) ·
+  调用方式与语料所有权设计：[docs/integration-model.md](docs/integration-model.md)
