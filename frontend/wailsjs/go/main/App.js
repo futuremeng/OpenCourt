@@ -98,6 +98,18 @@ export function ListLawRefs() {
   return window['go']['main']['App']['ListLawRefs']();
 }
 
+export function ListCaseRefs() {
+  return window['go']['main']['App']['ListCaseRefs']();
+}
+
+export function LocalCasesStatus() {
+  return window['go']['main']['App']['LocalCasesStatus']();
+}
+
+export function SearchSimilarCases(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['SearchSimilarCases'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+}
+
 export function LoadLawData(arg1) {
   return window['go']['main']['App']['LoadLawData'](arg1);
 }

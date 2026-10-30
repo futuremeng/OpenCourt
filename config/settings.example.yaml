@@ -42,4 +42,13 @@ browseros:
   endpoint: ""
   enabled: false
 
+localcases:
+  # 类案源（外部可选组件，默认禁用）：指向用户自装 LocalCases 的回环 HTTP 服务。
+  # 留空或 enabled=false = 类案检索不可用（默认离线安全）。
+  # LC-6 发现文件未就绪前，base_url + token_env 是手动临时通道（UI 已标注）；
+  # token 严禁写入本文件——只填环境变量名，token 值经该环境变量注入。
+  base_url: ""            # 例 http://127.0.0.1:5010
+  token_env: ""           # 例 LOCALCASES_TOKEN
+  enabled: false
+
 data_dir: data

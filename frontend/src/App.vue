@@ -6,6 +6,7 @@ import { EventsOn } from "../wailsjs/runtime/runtime";
 import FactBoard from "./components/FactBoard.vue";
 import CaseBar from "./components/CaseBar.vue";
 import LawSearch from "./components/LawSearch.vue";
+import SimilarCases from "./components/SimilarCases.vue";
 
 const info = ref<AppInfo | null>(null);
 const facts = ref<Fact[]>([]);
@@ -30,11 +31,13 @@ async function onCaseSwitched() {
     await refreshTimeline();
     await refreshCurrentCaseType();
     (lawSearchRef.value as any)?.refresh?.();
+    (caseSearchRef.value as any)?.refresh?.();
   } catch (e) {
     error.value = String(e);
   }
 }
 const lawSearchRef = ref(null);
+const caseSearchRef = ref(null);
 
 onMounted(async () => {
   try {
@@ -508,6 +511,10 @@ async function awaitHuman() {
       <h2>法条检索与引用核验</h2>
       <LawSearch ref="lawSearchRef" />
     </section>
+
+    <!-- 类案检索（v0.2 M3）：LocalCases 外部可选组件默认禁用；要旨强制脱敏；
+         留痕非事实不进五态；facet 分布必须附「不是裁判概率」固定标注 -->
+    <SimilarCases ref="caseSearchRef" />
 
     <section class="panel">
       <h2>录入事实</h2>

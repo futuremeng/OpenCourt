@@ -36,6 +36,12 @@ var blockedGuidance = []struct {
 	{"胜诉率", "NO_PROBABILITY"},
 	{"败诉率", "NO_PROBABILITY"},
 	{"胜诉概率", "NO_PROBABILITY"},
+	// D6（plan-v0.2）：facet 分布是唯一合法概率类输出，且不得被换算成
+	// 「胜算/几成/可能性多大/倾向判决」等表述——词表先行拦截。
+	{"胜算", "NO_PROBABILITY"},
+	{"几成", "NO_PROBABILITY"},
+	{"可能性多大", "NO_PROBABILITY"},
+	{"倾向判决", "NO_PROBABILITY"},
 	{"量刑预测", "NO_PREDICTION"},
 	{"判决预测", "NO_PREDICTION"},
 	{"估计刑期", "NO_PREDICTION"},

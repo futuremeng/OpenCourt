@@ -49,6 +49,15 @@ type Settings struct {
 		Endpoint string `yaml:"endpoint"`
 		Enabled  bool   `yaml:"enabled"`
 	} `yaml:"browseros"`
+	// LocalCases 类案源（外部可选组件，默认禁用；plan-v0.2 M3/D3）：
+	// 指向用户自装 LocalCases 的回环 HTTP 服务。留空或 enabled=false =
+	// 类案检索不可用（默认离线安全）。LC-6 发现文件未就绪前，
+	// base_url + token_env 是手动临时通道（UI 必须标注）。token 严禁写入本文件。
+	LocalCases struct {
+		BaseURL  string `yaml:"base_url"`  // 例 http://127.0.0.1:5010
+		TokenEnv string `yaml:"token_env"` // 例 LOCALCASES_TOKEN；token 只经环境变量注入
+		Enabled  bool   `yaml:"enabled"`
+	} `yaml:"localcases"`
 	// App 程序自身更新（GitHub Releases latest API；空 = 关闭自动检查）。
 	App struct {
 		UpdateAPI string `yaml:"update_api"`
@@ -159,6 +168,15 @@ func (s *Settings) applyEnv() {
 	}
 	if v, ok := get("BROWSEROS_ENABLED"); ok {
 		s.BrowserOS.Enabled = parseBool(v)
+	}
+	if v, ok := get("LOCALCASES_BASE_URL"); ok {
+		s.LocalCases.BaseURL = v
+	}
+	if v, ok := get("LOCALCASES_TOKEN_ENV"); ok {
+		s.LocalCases.TokenEnv = v
+	}
+	if v, ok := get("LOCALCASES_ENABLED"); ok {
+		s.LocalCases.Enabled = parseBool(v)
 	}
 	if v, ok := get("OPENLAW_INDEX_URL"); ok {
 		s.OpenLaw.IndexURL = v

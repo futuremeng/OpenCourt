@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/futuremeng/OpenLaw/store"
@@ -18,6 +19,7 @@ import (
 	"github.com/futuremeng/OpenCourt/core/audit"
 	"github.com/futuremeng/OpenCourt/core/domain"
 	"github.com/futuremeng/OpenCourt/core/storage"
+	"github.com/futuremeng/OpenCourt/plugins"
 	"github.com/futuremeng/OpenCourt/profiles"
 )
 
@@ -359,5 +361,23 @@ func TestLawBindingsFailClosedWithoutSource(t *testing.T) {
 	refs, err := a.ListLawRefs()
 	if err != nil || len(refs) != 0 {
 		t.Errorf("本案留痕应为空列表: %v %+v", err, refs)
+	}
+}
+
+// M3 绑定守卫：类案源未配置时 SearchSimilarCases 必须 fail-closed 报错带指引
+// （不降级到其他来源、不返回空列表冒充「语料里没有」）；ListCaseRefs 为本案
+// 空留痕（类案引用非事实）；LocalCasesStatus 如实报告未启用。
+func TestCaseBindingsFailClosedWithoutSource(t *testing.T) {
+	a := newCaseApp(t, t.TempDir())
+	if _, err := a.SearchSimilarCases("借款", "", "", 0, 0, 10, nil); err == nil ||
+		!strings.Contains(err.Error(), plugins.LocalCasesGuidance) {
+		t.Errorf("SearchSimilarCases 未配置类案源必须报错带指引: %v", err)
+	}
+	refs, err := a.ListCaseRefs()
+	if err != nil || len(refs) != 0 {
+		t.Errorf("本案类案留痕应为空列表: %v %+v", err, refs)
+	}
+	if st := a.LocalCasesStatus(); st["enabled"] != false {
+		t.Errorf("LocalCasesStatus 必须如实报告未启用: %v", st)
 	}
 }

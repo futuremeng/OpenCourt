@@ -68,7 +68,10 @@ type App struct {
 	// browser 浏览器辅助插件（BrowserOS neo，外部组件默认禁用）：
 	// 未启用时联网查阅调用直接报错，绝不降级到其他抓取方式。
 	browser plugins.BrowserPlugin
-	ingest  *ingest.Registry
+	// caseSource 类案源（v0.2 M3，LocalCases 外部可选组件默认禁用）：
+	// nil/未启用时类案检索直接报错带指引，绝不降级到其他来源（D3）。
+	caseSource plugins.CaseSourcePlugin
+	ingest     *ingest.Registry
 }
 
 // appDataDir 返回本机应用数据目录（默认 ~/Library/Application Support/OpenCourt 等），
@@ -181,6 +184,11 @@ func (a *App) startup(ctx context.Context) {
 	if a.browser.Enabled() {
 		_ = a.auditLog.Log(settings.Profile.Active, "BROWSER_SOURCE_OK", "browseros", a.browser.Name())
 	}
+
+	// 类案源（LocalCases，外部可选组件）：默认禁用；启用仅指向用户自装的
+	// 回环 HTTP 服务（出站连接，不新增监听端口，绝不拉起外部进程）。
+	// LC-6 发现文件未就绪前 base_url + token_env 为手动临时通道。
+	a.caseSource = a.newLocalCasesSource()
 }
 
 // openLawSource 按当前设置打开法条源（启动时与数据包加载后复用）。
@@ -207,6 +215,28 @@ func (a *App) closeLawSource() {
 		_ = c.Close()
 	}
 	a.lawSource = nil
+}
+
+// newLocalCasesSource 按配置构造类案源：token 只经 token_env 指向的环境变量
+// 注入（严禁写入配置文件）；启用但环境变量缺失不阻断构造——请求时 401 如实
+// 报错并提示检查 token_env（§9）。
+func (a *App) newLocalCasesSource() plugins.CaseSourcePlugin {
+	cfg := a.settings.LocalCases
+	if !cfg.Enabled || cfg.BaseURL == "" {
+		return nil
+	}
+	token := ""
+	if cfg.TokenEnv != "" {
+		token = os.Getenv(cfg.TokenEnv)
+	}
+	src := plugins.NewLocalCasesSource(cfg.BaseURL, token, true)
+	if !src.Enabled() {
+		_ = a.auditLog.Log(a.settings.Profile.Active, "CASE_SOURCE_FAIL", "localcases",
+			"base_url 非法或非回环地址（类案语料含未脱敏文书，只允许回环）")
+		return nil
+	}
+	_ = a.auditLog.Log(a.settings.Profile.Active, "CASE_SOURCE_OK", "localcases", cfg.BaseURL)
+	return src
 }
 
 // loadSettings 配置加载顺序（桌面分发）：
@@ -814,6 +844,79 @@ func (a *App) GetLawRelations(refID string) ([]plugins.Relation, error) {
 		}
 	}
 	return nil, fmt.Errorf("法条引用不存在: %s", refID)
+}
+
+// --- 类案检索（v0.2 M3，plan-v0.2 §4.2/§4.3；docs/localcases-integration.md）---
+
+// LocalCasesStatus 类案源状态（前端面板用）：未启用时返回指引而非空列表。
+// Health 探测失败不阻断——如实返回 ok=false 与错误文本。
+func (a *App) LocalCasesStatus() map[string]any {
+	out := map[string]any{
+		"enabled":  a.caseSource != nil && a.caseSource.Enabled(),
+		"base_url": a.settings.LocalCases.BaseURL,
+		"token_set": a.settings.LocalCases.TokenEnv != "" &&
+			os.Getenv(a.settings.LocalCases.TokenEnv) != "",
+		"guidance":     plugins.LocalCasesGuidance,
+		"temp_channel": true, // LC-6 未就绪：手动 base_url+token_env 为临时通道（UI 标注）
+		"disclaimer":   neutral.CaseSearchDisclaimer,
+		"indexed_docs": int64(0),
+		"version":      "",
+		"health_ok":    false,
+		"health_error": "",
+	}
+	if hs, ok := a.caseSource.(interface {
+		Health(context.Context) (plugins.LocalCasesHealth, error)
+	}); ok && a.caseSource.Enabled() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		h, err := hs.Health(ctx)
+		if err != nil {
+			out["health_error"] = err.Error()
+		} else {
+			out["health_ok"] = h.OK
+			out["version"] = h.Version
+			out["indexed_docs"] = h.IndexedDocuments
+		}
+	}
+	return out
+}
+
+// SearchSimilarCases 类案检索：检索 → 要旨强制脱敏 → CaseRef 留痕
+// （不进 facts，永不进五态）。未启用直接报错带指引（不降级到其他来源）。
+// facet 分布只在 structured=true 时随行，且必须附固定标注（D6）；
+// 语料规模（indexed_documents）由 LocalCasesStatus 同时显示，防小样本误读。
+func (a *App) SearchSimilarCases(search, court, cause string, yearFrom, yearTo, topK int, names []string) (neutral.CaseSearchReport, error) {
+	if a.caseSource == nil || !a.caseSource.Enabled() {
+		_ = a.auditLog.Log(a.profile.Role, "CASE_SEARCH_FAIL", "localcases", "未启用")
+		return neutral.CaseSearchReport{}, fmt.Errorf("%s", plugins.LocalCasesGuidance)
+	}
+	q := plugins.CaseQuery{
+		Search: search, Court: court, Cause: cause,
+		YearFrom: yearFrom, YearTo: yearTo,
+		GroupBy: []string{"year", "court"}, FacetSize: 10,
+	}
+	report, err := neutral.RunCaseSearch(a.ctx, a.caseSource, names, q)
+	if err != nil {
+		_ = a.auditLog.Log(a.profile.Role, "CASE_SEARCH_FAIL", search, err.Error())
+		return neutral.CaseSearchReport{}, err
+	}
+	if topK > 0 && topK < len(report.Refs) {
+		report.Refs = report.Refs[:topK]
+	}
+	for _, r := range report.Refs {
+		if err := a.scope().AddCaseRef(r); err != nil {
+			return neutral.CaseSearchReport{}, err
+		}
+	}
+	_ = a.auditLog.Log(a.profile.Role, "CASE_SEARCH", search,
+		fmt.Sprintf("命中 %d（总 %d）；精确过滤 %v；脱敏 %d 项；留痕 %d 条（非事实）",
+			len(report.Refs), report.Total, report.Structured, report.RedactCount, len(report.Refs)))
+	return report, nil
+}
+
+// ListCaseRefs 列出本案类案引用留痕（检索时间倒序）。
+func (a *App) ListCaseRefs() ([]domain.CaseRef, error) {
+	return a.scope().ListCaseRefs()
 }
 
 // AppInfo 返回应用与当前 Profile 概况（前端首屏展示）。

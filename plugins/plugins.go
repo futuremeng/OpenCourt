@@ -34,8 +34,11 @@ type LawHit struct {
 }
 
 // CaseSourcePlugin 类案源插件接口：支持裁判要旨提取。
+// Enabled 与 ModelAdapter/BrowserPlugin 同纪律：默认禁用，未启用时调用
+// 直接报错带指引，绝不降级到其他来源。
 type CaseSourcePlugin interface {
 	Name() string
+	Enabled() bool
 	// SearchCases 检索类案（结构化或向量由插件内部决定）。
 	SearchCases(ctx context.Context, query string, topK int) ([]CaseHit, error)
 }

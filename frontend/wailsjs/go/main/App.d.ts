@@ -55,6 +55,12 @@ export function ListFacts():Promise<Array<domain.Fact>>;
 
 export function ListLawRefs():Promise<Array<domain.LawRef>>;
 
+export function ListCaseRefs():Promise<Array<domain.CaseRef>>;
+
+export function LocalCasesStatus():Promise<Record<string, any>>;
+
+export function SearchSimilarCases(arg1:string,arg2:string,arg3:string,arg4:number,arg5:number,arg6:number,arg7:Array<string>):Promise<any>;
+
 export function LoadLawData(arg1:string):Promise<Record<string, any>>;
 
 export function PickDocumentFile():Promise<string>;
