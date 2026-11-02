@@ -93,6 +93,33 @@ func (s *govListStub) AwaitHuman(ctx context.Context) (plugins.HumanHelpStatus, 
 	return plugins.HumanHelpStatus{}, fmt.Errorf("unused")
 }
 
+// browseVirtual 用虚拟时钟跑完浏览：每一次限速等待都会广播到 pauseCh
+// （测试据此断言限速没有被偷偷跳过），但墙钟不真的等。
+//
+// 为什么必须这样：一轮默认 50 页 × 2.5s 人工间隔 = 2 分钟真实等待，200 页
+// 上限 = 8 分钟；此前本包测试因此跑到 265s。限速语义（间隔下限、次数）
+// 仍然被断言，只是不再用真墙钟兑现。
+func browseVirtual(t *testing.T, b plugins.BrowserPlugin, opts GovListOptions) (GovListReport, error, []time.Duration) {
+	t.Helper()
+	pauseCh := make(chan time.Duration, 8192)
+	done := make(chan struct{})
+	var waits []time.Duration
+	go func() {
+		for d := range pauseCh {
+			waits = append(waits, d)
+		}
+		close(done)
+	}()
+	clock := time.Unix(0, 0)
+	rep, err := runGovListBrowseWithClock(context.Background(), b, opts, &clock, pauseCh, govListDefaultDelay)
+	close(pauseCh)
+	<-done
+	if clock.Sub(time.Unix(0, 0)) < time.Duration(len(waits))*govListMinDelay {
+		t.Errorf("虚拟时钟推进量与等待次数不符（限速被跳过？）: clock=%v waits=%d", clock, len(waits))
+	}
+	return rep, err, waits
+}
+
 func TestParseGovListExtract(t *testing.T) {
 	raw := `Tip: blah
 [{"title":"甲办法","url":"https://www.gov.cn/zhengce/202610/content_1.htm","puborg":"国家统计局"},
@@ -123,7 +150,7 @@ func TestRunGovListBrowseFlow(t *testing.T) {
 	page2 := `[{"title":"甲办法","url":"https://www.gov.cn/zhengce/a/content_1.htm","puborg":"国家统计局"},
 	           {"title":"乙办法","url":"https://www.changdu.gov.cn/x/abc.shtml","puborg":"昌都市人民政府"}]`
 	s := &govListStub{pages: []string{page1, page2}}
-	rep, err := RunGovListBrowse(context.Background(), s, GovListOptions{Delay: time.Millisecond})
+	rep, err, _ := browseVirtual(t, s, GovListOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,9 +177,7 @@ func TestRunGovListBrowseStartPage(t *testing.T) {
 		pages[i] = fmt.Sprintf(`[{"title":"t%d","url":"https://www.gov.cn/a/content_%d.htm","puborg":"教育部"}]`, i, i)
 	}
 	s := &govListStub{pages: pages}
-	rep, err := RunGovListBrowse(context.Background(), s, GovListOptions{
-		StartPage: 3, MaxPages: 2, Delay: time.Millisecond,
-	})
+	rep, err, _ := browseVirtual(t, s, GovListOptions{StartPage: 3, MaxPages: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,9 +192,7 @@ func TestRunGovListBrowseStartPage(t *testing.T) {
 	}
 	// 页码越界（跳转核验不过）= 越过末页 → 正常结束，绝不采集错误页
 	s2 := &govListStub{pages: pages, totalPages: 6}
-	rep2, err := RunGovListBrowse(context.Background(), s2, GovListOptions{
-		StartPage: 99, MaxPages: 9, Delay: time.Millisecond,
-	})
+	rep2, err, _ := browseVirtual(t, s2, GovListOptions{StartPage: 99, MaxPages: 9})
 	if err != nil || rep2.StoppedAt != "end_of_list" || len(rep2.Entries) != 0 {
 		t.Errorf("越界起始页应 end_of_list 即停: %+v %v", rep2, err)
 	}
@@ -179,9 +202,7 @@ func TestRunGovListBrowseCatFilter(t *testing.T) {
 	page1 := `[{"title":"甲","url":"https://www.gov.cn/a/content_1.htm","puborg":"教育部"},
 	           {"title":"乙","url":"https://www.beijing.gov.cn/x/a.html","puborg":"北京市人民政府"}]`
 	s := &govListStub{pages: []string{page1}}
-	rep, err := RunGovListBrowse(context.Background(), s, GovListOptions{
-		Cat: "部门规章", Delay: time.Millisecond,
-	})
+	rep, err, _ := browseVirtual(t, s, GovListOptions{Cat: "部门规章"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,29 +226,26 @@ func TestRunGovListBrowseGuardrails(t *testing.T) {
 	// 空清单页：SPA 就绪重试（只重读 DOM）+ 官方跳转重刷后，连续 3 空页即停
 	//（不伪造数据、不硬拼页码）。
 	s3 := &govListStub{pages: []string{"[]"}}
-	rep, err := RunGovListBrowse(context.Background(), s3, GovListOptions{MaxPages: 9999, Delay: time.Millisecond})
+	rep, err, _ := browseVirtual(t, s3, GovListOptions{MaxPages: 9999})
 	if err != nil || rep.StoppedAt != "empty_page" || rep.Pages != govListEmptyStop {
 		t.Errorf("连续 %d 空页应即停: %+v %v", govListEmptyStop, rep, err)
 	}
-	// MaxPages 钳制：200 页上限。用虚拟时钟加速墙钟等待，但断言每一次跳页
-	// 间隔都 >= 2s（真实人工跳页间隔语义不因加速而失真）。
+	// MaxPages 钳制：200 页上限；每一次跳页间隔都 >= 2s（真实人工跳页间隔
+	// 语义不因虚拟时钟加速而失真——browseVirtual 内已断言推进量与等待次数）。
 	pages := make([]string, 0, 250)
 	for i := 0; i < 250; i++ {
 		pages = append(pages, fmt.Sprintf(`[{"title":"t%d","url":"https://www.gov.cn/a/content_%d.htm","puborg":"教育部"}]`, i, i))
 	}
 	s4 := &govListStub{pages: pages}
-	pauseCh := make(chan time.Duration, 400)
-	clock := time.Unix(0, 0)
-	rep, err = runGovListBrowse(context.Background(), s4, GovListOptions{MaxPages: 9999},
-		&clock, pauseCh, 3*time.Second)
+	rep, err, waits := browseVirtual(t, s4, GovListOptions{MaxPages: 9999})
 	if err != nil || rep.StoppedAt != "max_pages" || rep.Pages != govListMaxPages || len(rep.Entries) != govListMaxPages {
 		t.Errorf("MaxPages 应钳制到 %d: %+v %v", govListMaxPages, rep, err)
 	}
 	if s4.jumps != govListMaxPages {
 		t.Errorf("每页一次官方跳转: jumps=%d", s4.jumps)
 	}
-	if clock.Sub(time.Unix(0, 0)) < time.Duration(govListMaxPages-1)*govListMinDelay {
-		t.Errorf("跳页间隔必须 >= %v（真实人工间隔）", govListMinDelay)
+	if len(waits) < govListMaxPages-1 {
+		t.Errorf("每页之间都必须限速等待一次: waits=%d", len(waits))
 	}
 }
 

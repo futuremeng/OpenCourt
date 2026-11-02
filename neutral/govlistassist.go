@@ -188,37 +188,56 @@ func ParseGovListExtract(raw string) []GovListEntry {
 	return out
 }
 
+// pacer 限速时钟。生产路径 pauseCh == nil → 真实 time.After 限速；
+// 单测注入虚拟时钟（clock + pauseCh）后墙钟等待归零，只推进逻辑时间——
+// 慢路径（重试/重刷/翻页间隔）断言因此能在秒级完成，而不是真等几十分钟。
+type pacer struct {
+	ctx      context.Context
+	clock    *time.Time
+	pauseCh  chan time.Duration
+	pauseDur time.Duration
+}
+
+// wait 等待 d。虚拟时钟下向 pauseCh 广播本次暂停时长（供测试断言「限速
+// 没有被跳过」），并推进逻辑时钟。
+func (p pacer) wait(d time.Duration) error {
+	if p.pauseCh == nil {
+		select {
+		case <-time.After(d):
+		case <-p.ctx.Done():
+			return p.ctx.Err()
+		}
+		return nil
+	}
+	select {
+	case p.pauseCh <- d:
+	case <-p.ctx.Done():
+		return p.ctx.Err()
+	}
+	if p.clock != nil {
+		*p.clock = p.clock.Add(p.pauseDur)
+	}
+	return nil
+}
+
 // extractReady 抽取当前页条目。SPA 异步渲染/翻页生效可能滞后——重试只重读
 // DOM（零网络请求，不构成额外访问），最多 govListReadyTries 次；仍为空则用
 // 官方「跳转」控件重刷当前页（等价人工刷新页面，页面自身 JS 重新取数）再试，
 // 最多 govListReloadTries 次（真机实测：偶发空壳渲染持续 >6s，纯 DOM 重读
 // 无效，重刷可恢复）。返回的条目可能全部已见（翻页尚未生效时）。
 func extractReady(ctx context.Context, b plugins.BrowserPlugin, pageID, curPage int, seen map[string]bool,
-	clock *time.Time, pauseCh chan time.Duration, pauseDur time.Duration) ([]GovListEntry, error) {
+	p pacer) ([]GovListEntry, error) {
 	var last []GovListEntry
 	for reload := 0; reload <= govListReloadTries; reload++ {
 		if reload > 0 {
-			if err := jumpToPage(ctx, b, pageID, curPage); err != nil {
+			if err := jumpToPage(ctx, b, pageID, curPage, p); err != nil {
 				return nil, err
 			}
 		}
 		for tries := 0; tries < govListReadyTries; tries++ {
 			if tries > 0 {
-				if pauseCh != nil {
-					select {
-					case pauseCh <- govListReadyPause:
-					case <-ctx.Done():
-						return nil, ctx.Err()
-					}
-					if clock != nil {
-						*clock = clock.Add(pauseDur)
-					}
-				} else {
-					select {
-					case <-time.After(govListReadyPause):
-					case <-ctx.Done():
-						return nil, ctx.Err()
-					}
+				if err := p.wait(govListReadyPause); err != nil {
+					return nil, err
 				}
 			}
 			raw, err := b.Evaluate(ctx, pageID, govListExtractJS)
@@ -250,7 +269,7 @@ func extractReady(ctx context.Context, b plugins.BrowserPlugin, pageID, curPage 
 // jumpToPage 用官方「跳转」控件到达指定页（等价人工输入页码 + 点确定），并以
 // 分页控件选中页码核验生效（SPA 生效滞后重试 ≤govListReadyTries 次）。
 // 核验不过（页码越界/控件改版）直接报错——绝不在错误页上采集。
-func jumpToPage(ctx context.Context, b plugins.BrowserPlugin, pageID, page int) error {
+func jumpToPage(ctx context.Context, b plugins.BrowserPlugin, pageID, page int, p pacer) error {
 	raw, err := b.Evaluate(ctx, pageID, fmt.Sprintf(govListJumpJSFmt, page))
 	if err != nil {
 		return err
@@ -264,10 +283,8 @@ func jumpToPage(ctx context.Context, b plugins.BrowserPlugin, pageID, page int) 
 	want := fmt.Sprintf("%d", page)
 	for tries := 0; tries < govListJumpTries; tries++ {
 		if tries > 0 {
-			select {
-			case <-time.After(govListReadyPause):
-			case <-ctx.Done():
-				return ctx.Err()
+			if err := p.wait(govListReadyPause); err != nil {
+				return err
 			}
 		}
 		raw, err := b.Evaluate(ctx, pageID, govListSelPageJS)
@@ -283,13 +300,11 @@ func jumpToPage(ctx context.Context, b plugins.BrowserPlugin, pageID, page int) 
 
 // waitListControlReady 等待官方跳转控件渲染就绪（SPA 首屏异步渲染，
 // 只重读 DOM，零额外网络请求）。
-func waitListControlReady(ctx context.Context, b plugins.BrowserPlugin, pageID int) error {
+func waitListControlReady(ctx context.Context, b plugins.BrowserPlugin, pageID int, p pacer) error {
 	for tries := 0; tries < govListOpenTries; tries++ {
 		if tries > 0 {
-			select {
-			case <-time.After(govListReadyPause):
-			case <-ctx.Done():
-				return ctx.Err()
+			if err := p.wait(govListReadyPause); err != nil {
+				return err
 			}
 		}
 		raw, err := b.Evaluate(ctx, pageID, govListControlReadyJS)
@@ -308,26 +323,20 @@ func waitListControlReady(ctx context.Context, b plugins.BrowserPlugin, pageID i
 // 返回的清单字段与 OpenLaw openlaw-govcn -source gzk 的 list.json 直接兼容。
 //
 // 时钟注入（clock/pauseCh/pauseDur）仅供单测用虚拟时钟加速；生产路径恒为
-// nil（time.Sleep / time.After 真实限速）。
+// nil（time.After 真实限速）。
 func RunGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovListOptions) (GovListReport, error) {
-	return runGovListBrowse(ctx, b, opts, nil, nil, 0)
+	return runGovListBrowse(ctx, b, opts, pacer{ctx: ctx})
 }
 
-func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovListOptions,
+// runGovListBrowseWithClock 单测入口：注入虚拟时钟。pauseCh 非 nil 时，所有
+// 限速等待（翻页间隔、DOM 重读、重刷、页码核验）改为向通道广播并推进逻辑
+// 时钟——限速语义照旧可断言，墙钟不再真的等（整轮浏览从数分钟降到毫秒级）。
+func runGovListBrowseWithClock(ctx context.Context, b plugins.BrowserPlugin, opts GovListOptions,
 	clock *time.Time, pauseCh chan time.Duration, pauseDur time.Duration) (GovListReport, error) {
-	sleep := func(d time.Duration) {
-		if pauseCh != nil {
-			select {
-			case pauseCh <- d:
-			case <-ctx.Done():
-			}
-			if clock != nil {
-				*clock = clock.Add(pauseDur)
-			}
-			return
-		}
-		time.Sleep(d)
-	}
+	return runGovListBrowse(ctx, b, opts, pacer{ctx: ctx, clock: clock, pauseCh: pauseCh, pauseDur: pauseDur})
+}
+
+func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovListOptions, p pacer) (GovListReport, error) {
 	if b == nil || !b.Enabled() {
 		return GovListReport{}, fmt.Errorf("浏览器辅助插件未启用：%s", plugins.BrowserOSGuidance)
 	}
@@ -355,7 +364,7 @@ func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 		return GovListReport{}, fmt.Errorf("打开规章库列表页失败: %w", err)
 	}
 	defer func() { _ = b.ClosePage(context.WithoutCancel(ctx), page.PageID) }()
-	if err := waitListControlReady(ctx, b, page.PageID); err != nil {
+	if err := waitListControlReady(ctx, b, page.PageID, p); err != nil {
 		return GovListReport{}, err
 	}
 
@@ -371,20 +380,11 @@ func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 		curPage := opts.StartPage + pageno - 1
 		if pageno > 1 {
 			// 限速 = 人工连续跳页的真实间隔（虚拟时钟仅跳过墙钟等待）
-			if pauseCh == nil {
-				select {
-				case <-time.After(opts.Delay):
-				case <-ctx.Done():
-					return rep, ctx.Err()
-				}
-			} else {
-				sleep(opts.Delay)
-				if ctx.Err() != nil {
-					return rep, ctx.Err()
-				}
+			if err := p.wait(opts.Delay); err != nil {
+				return rep, err
 			}
 		}
-		if err := jumpToPage(ctx, b, page.PageID, curPage); err != nil {
+		if err := jumpToPage(ctx, b, page.PageID, curPage, p); err != nil {
 			var uv *jumpUnverifiedError
 			if errors.As(err, &uv) {
 				rep.StoppedAt = "end_of_list" // 页码越界 = 越过末页，正常结束
@@ -392,7 +392,7 @@ func runGovListBrowse(ctx context.Context, b plugins.BrowserPlugin, opts GovList
 			}
 			return rep, fmt.Errorf("第 %d 页跳转失败: %w", pageno, err)
 		}
-		entries, err := extractReady(ctx, b, page.PageID, curPage, seen, clock, pauseCh, pauseDur)
+		entries, err := extractReady(ctx, b, page.PageID, curPage, seen, p)
 		if err != nil {
 			return rep, fmt.Errorf("第 %d 页抽取失败: %w", pageno, err)
 		}

@@ -20,6 +20,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # go.mod 的 replace 指向仓库外的 ../OpenLaw（本地开发形态）。CI 工作区里
+      # 没有这个目录，模块解析会直接失败——故先取进工作区再改写 replace。
+      - name: Checkout OpenLaw into workspace
+        uses: actions/checkout@v4
+        with:
+          repository: futuremeng/OpenLaw
+          ref: main
+          path: .deps/OpenLaw
+
+      - name: Point replace directive at the checked-out copy
+        run: go mod edit -replace github.com/futuremeng/OpenLaw=./.deps/OpenLaw
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -39,15 +51,20 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
 
       - name: Verify tests
-        run: go test ./...
+        run: go test -race ./...
 
       - name: Build
         shell: bash
         run: |
+          # 版本单一来源：发布 tag 注入 main.version（未打 tag 的手动触发保留代码内默认值）
+          LDFLAGS=""
+          if [ -n "${GITHUB_REF_NAME}" ] && [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            LDFLAGS="-ldflags=-X=main.version=${GITHUB_REF_NAME}"
+          fi
           if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            wails build -clean -tags webkit2_41
+            wails build -clean -tags webkit2_41 $LDFLAGS
           else
-            wails build -clean
+            wails build -clean $LDFLAGS
           fi
 
       - name: Package artifact

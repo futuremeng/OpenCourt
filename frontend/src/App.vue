@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import * as App from "../wailsjs/go/main/App";
-import type { AppInfo, Fact } from "../wailsjs/go/main/App";
+import type { domain } from "../wailsjs/go/models";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 import FactBoard from "./components/FactBoard.vue";
 import CaseBar from "./components/CaseBar.vue";
 import LawSearch from "./components/LawSearch.vue";
 import SimilarCases from "./components/SimilarCases.vue";
 
-const info = ref<AppInfo | null>(null);
-const facts = ref<Fact[]>([]);
+const info = ref<Record<string, any> | null>(null);
+const facts = ref<domain.Fact[]>([]);
 const desc = ref("");
 const sourceFile = ref("");
 const pageNum = ref(1);

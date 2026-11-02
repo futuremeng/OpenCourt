@@ -8,6 +8,8 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/futuremeng/OpenCourt/core/domain"
@@ -32,7 +34,7 @@ func migrateCaseID(db *sql.DB, path string) error {
 	if len(missing) == 0 {
 		return nil // 新库（建表即含 case_id）或已迁移：no-op
 	}
-	if err := backupDatabase(path); err != nil {
+	if err := backupDatabase(db, path); err != nil {
 		return err
 	}
 	for _, t := range missing {
@@ -71,22 +73,48 @@ func columnExists(db *sql.DB, table, column string) (bool, error) {
 	return false, rows.Err()
 }
 
+// backupKeep 迁移备份保留份数。备份里是未脱敏的案件数据，不得无限累积。
+const backupKeep = 3
+
 // backupDatabase 迁移前自动备份（plan-v0.2 §9：迁移前自动备份，失败即中止迁移）。
-// 内存库与磁盘不存在的库没有备份对象（迁移只会发生在存量库上）。
-func backupDatabase(path string) error {
+// 优先 VACUUM INTO——WAL 下的正确快照（已提交事务全部包含，不含半截 -wal）；
+// 不支持时先 wal_checkpoint(TRUNCATE) 再整文件复制。内存库无备份对象。
+func backupDatabase(db *sql.DB, path string) error {
 	if path == "" || path == ":memory:" {
 		return nil
 	}
 	if _, err := os.Stat(path); err != nil {
 		return nil
 	}
+	bak := fmt.Sprintf("%s.bak-%s", path, time.Now().UTC().Format("20060102T150405"))
+	if _, err := db.Exec(`VACUUM INTO ?`, bak); err == nil {
+		return pruneBackups(path)
+	}
+	if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+		return fmt.Errorf("迁移前 WAL 检查点失败: %w", err)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("迁移前备份数据库失败: %w", err)
 	}
-	bak := fmt.Sprintf("%s.bak-%s", path, time.Now().UTC().Format("20060102T150405"))
 	if err := os.WriteFile(bak, data, 0o600); err != nil {
 		return fmt.Errorf("迁移前备份数据库失败: %w", err)
+	}
+	return pruneBackups(path)
+}
+
+// pruneBackups 只保留最近 backupKeep 份 <db>.bak-<UTC 时间戳>（文件名定长，
+// 字典序即时间序）。清理失败不阻断迁移。
+func pruneBackups(path string) error {
+	matches, err := filepath.Glob(path + ".bak-*")
+	if err != nil || len(matches) <= backupKeep {
+		return err
+	}
+	sort.Strings(matches)
+	for _, m := range matches[:len(matches)-backupKeep] {
+		if err := os.Remove(m); err != nil && !os.IsNotExist(err) {
+			return nil
+		}
 	}
 	return nil
 }

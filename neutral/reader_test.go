@@ -143,6 +143,28 @@ func TestParseDate(t *testing.T) {
 	}
 }
 
+// 【门禁接入生产路径】模型产出的候选事实带倾向性/预测性表述：即使能回原文
+// 定位，也必须被门禁拒绝入库（不再是 UI 预检专属）。
+func TestReaderGateBlocksBiasedCandidate(t *testing.T) {
+	out := `[
+	  {"description":"原告证据充分，法院必然支持诉请","snippet":"原告向被告支付定金50000元","page_num":1},
+	  {"description":"定金已支付","snippet":"原告向被告支付定金50000元","page_num":1}
+	]`
+	report, err := RunReader(context.Background(), "DOC-1", testDoc(), &fakeModel{out: out, enabled: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Accepted) != 1 {
+		t.Fatalf("倾向性候选不得入库: %+v", report.Accepted)
+	}
+	if report.GateBlocked != 1 || len(report.Rejected) != 1 {
+		t.Fatalf("应恰有 1 条被门禁拦截: %+v", report.Rejected)
+	}
+	if !strings.HasPrefix(report.Rejected[0].RejectReason, "GATE:") {
+		t.Errorf("拒绝原因必须标明门禁拦截与规则: %q", report.Rejected[0].RejectReason)
+	}
+}
+
 // 【V3】要件名封闭候选集：prompt 注入要件库清单，
 // 模型输出不在集内的要件名一律置空（不匹配不入库）。
 func TestReaderElementNamesClosedSet(t *testing.T) {

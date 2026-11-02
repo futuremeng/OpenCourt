@@ -70,10 +70,21 @@ func TestOpenLawSourceSearchLaw(t *testing.T) {
 		if h.Title != "测试法" || h.LawID == "" || h.EffectiveDate == "" {
 			t.Errorf("LawHit 字段缺失: %+v", h)
 		}
-		// V1 修法（plan-v0.2 D0）：效力状态不自行映射——OpenLaw 未给出
-		// effect_status（OL-1 未就绪）前一律 UNKNOWN，绝不猜 EFFECTIVE/AMENDED。
-		if h.Status != "UNKNOWN" {
-			t.Errorf("效力状态必须透传（OL-1 未就绪时应 UNKNOWN）: %+v", h)
+		// V1 修法（plan-v0.2 D0）+ OL-1 已就绪：效力状态是语料层判断，由
+		// OpenLaw 依 law_version 链 + relation（confirmed 优先）判定，插件只
+		// 透传 effect_status——本 fixture：现行版本（区间覆盖当下、无废止/修改
+		// 佐证）→ EFFECTIVE；已到期且无关系佐证 → 如实 UNKNOWN，绝不猜。
+		switch h.LawID {
+		case "l1_v1_第一条":
+			if h.Status != "EFFECTIVE" {
+				t.Errorf("现行版本效力应透传 EFFECTIVE: %+v", h)
+			}
+		case "l1_v0_第一条":
+			if h.Status != "UNKNOWN" {
+				t.Errorf("到期无关系佐证应如实 UNKNOWN: %+v", h)
+			}
+		default:
+			t.Errorf("意外命中: %+v", h)
 		}
 		if h.ConfirmStatus != "confirmed" && h.ConfirmStatus != "pending" {
 			t.Errorf("确认状态异常: %+v", h)

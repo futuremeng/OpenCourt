@@ -61,6 +61,10 @@ type Settings struct {
 	// App 程序自身更新（GitHub Releases latest API；空 = 关闭自动检查）。
 	App struct {
 		UpdateAPI string `yaml:"update_api"`
+		// AllowUnsigned 自构建/内部分发逃生口：true 时跳过 macOS Gatekeeper
+		// 评估（spctl）。默认 false——sha256 只证明「与发布文件一致」，
+		// 不证明「发布方是谁」。
+		AllowUnsigned bool `yaml:"allow_unsigned"`
 	} `yaml:"app"`
 	DataDir string `yaml:"data_dir"`
 }

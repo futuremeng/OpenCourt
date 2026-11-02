@@ -86,7 +86,14 @@ function statusClass(s: string): string {
 }
 function statusLabel(s: string): string {
   return (
-    { EFFECTIVE: "现行有效", AMENDED: "已被修改", REPEALED: "已废止", UNVERIFIED: "未核验", UNKNOWN: "效力待确认" }[s] || s
+    {
+      EFFECTIVE: "现行有效",
+      AMENDED: "已被修改",
+      REPEALED: "已废止",
+      REPEALED_PENDING: "废止待人工确认",
+      UNVERIFIED: "未核验",
+      UNKNOWN: "效力待确认",
+    }[s] || s
   );
 }
 function verifyClass(v: string): string {

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
-import type { Fact } from "../../wailsjs/go/main/App";
+import type { domain } from "../../wailsjs/go/models";
 
-const props = defineProps<{ facts: Fact[] }>();
+defineProps<{ facts: domain.Fact[] }>();
 const emit = defineEmits<{ (e: "changed"): void }>();
 
 const stateNames: Record<string, string> = {
@@ -17,7 +17,7 @@ const stateNames: Record<string, string> = {
 const msg = ref("");
 
 // 升级候选提交给 Go 侧，由 statemachine 确定性仲裁；前端无权直接改状态。
-async function tryConfirm(f: Fact) {
+async function tryConfirm(f: domain.Fact) {
   msg.value = "";
   try {
     await App.UpgradeFact(f.fact_id, "TRACED_CONFIRMED", true, true, true);
@@ -29,7 +29,7 @@ async function tryConfirm(f: Fact) {
 }
 
 // 演示违规路径：不导入证据直接要求升格，必然被代码仲裁拒绝。
-async function tryIllegalUpgrade(f: Fact) {
+async function tryIllegalUpgrade(f: domain.Fact) {
   msg.value = "";
   try {
     await App.UpgradeFact(f.fact_id, "TRACED_CONFIRMED", false, false, true);
@@ -47,7 +47,7 @@ async function tryIllegalUpgrade(f: Fact) {
       <div v-for="f in facts.filter((x) => x.state === state)" :key="f.fact_id" class="card">
         <p class="desc">{{ f.description }}</p>
         <p v-if="f.citation" class="cite">
-          📄 {{ f.citation.source_file }} 第 {{ f.citation.page_num }} 页：「{{ f.citation.snippet }}」
+          📄 {{ f.citation.SourceFile }} 第 {{ f.citation.PageNum }} 页：「{{ f.citation.Snippet }}」
         </p>
         <div class="actions" v-if="state !== 'TRACED_CONFIRMED'">
           <button @click="tryConfirm(f)">证据驱动升级</button>

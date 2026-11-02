@@ -39,6 +39,57 @@ func TestRedactText(t *testing.T) {
 	}
 }
 
+// TestRedactExtendedFields 补漏（review P1-5）：类案要旨与网页正文把 redact
+// 当唯一强制关口，手机号 / 邮箱 / 统一社会信用代码 / 无市区县前缀的门牌地址
+// 一旦漏网即直接泄露——必须有断言守着。
+func TestRedactExtendedFields(t *testing.T) {
+	r := New([]string{"张三"})
+	text := "联系电话13800138000，邮箱 zhang.san@court.gov.cn，" +
+		"统一社会信用代码 91110000MA01ABCD7X，住朝阳路88号院3号楼502室。"
+	res := r.RedactText(text)
+
+	for _, leak := range []string{"13800138000", "zhang.san@", "MA01ABCD7X", "88号院3号楼502室"} {
+		if strings.Contains(res.Text, leak) {
+			t.Errorf("敏感项泄露 %q: %s", leak, res.Text)
+		}
+	}
+	if !strings.Contains(res.Text, "138****8000") {
+		t.Errorf("手机号掩码格式错误: %s", res.Text)
+	}
+	if !strings.Contains(res.Text, "***@court.gov.cn") {
+		t.Errorf("邮箱应保留域名: %s", res.Text)
+	}
+	if !strings.Contains(res.Text, "91") || !strings.Contains(res.Text, "D7X") {
+		t.Errorf("信用代码应保留前2后4: %s", res.Text)
+	}
+	if !strings.Contains(res.Text, "朝阳路") {
+		t.Errorf("门牌泛化应保留到路级: %s", res.Text)
+	}
+	want := map[string]bool{"USCC_MASK": true, "PHONE_MASK": true, "EMAIL_MASK": true,
+		"ADDRESS_DETAIL_GENERALIZE": true}
+	got := map[string]bool{}
+	for _, a := range res.Actions {
+		got[a.RuleID] = true
+	}
+	for w := range want {
+		if !got[w] {
+			t.Errorf("缺少脱敏动作 %s（审计需逐条留痕）: %+v", w, res.Actions)
+		}
+	}
+}
+
+// TestRedactNoFalsePositiveOnCaseNo 案号与年份不得被新规则误伤。
+func TestRedactNoFalsePositiveOnCaseNo(t *testing.T) {
+	r := New(nil)
+	text := "案号 (2024)京01民初1号，2024年5月1日立案，金额 128000.50 元。"
+	res := r.RedactText(text)
+	for _, keep := range []string{"(2024)京01民初1号", "2024年5月1日", "128000.50"} {
+		if !strings.Contains(res.Text, keep) {
+			t.Errorf("不应误伤 %q: %s", keep, res.Text)
+		}
+	}
+}
+
 func TestRestoreTable(t *testing.T) {
 	r := New([]string{"王五"})
 	res := r.RedactText("王五签署了合同。")

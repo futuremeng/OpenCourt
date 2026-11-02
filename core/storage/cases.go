@@ -67,7 +67,7 @@ func migrateLawRefLawID(db *sql.DB, path string) error {
 	if has {
 		return nil
 	}
-	if err := backupDatabase(path); err != nil {
+	if err := backupDatabase(db, path); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`ALTER TABLE law_refs ADD COLUMN law_id TEXT`); err != nil {

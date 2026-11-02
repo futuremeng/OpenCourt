@@ -15,6 +15,7 @@ import (
 
 	"github.com/futuremeng/OpenCourt/core/domain"
 	"github.com/futuremeng/OpenCourt/core/extract"
+	"github.com/futuremeng/OpenCourt/core/gate"
 	"github.com/futuremeng/OpenCourt/core/statemachine"
 	"github.com/futuremeng/OpenCourt/core/verify"
 	"github.com/futuremeng/OpenCourt/plugins"
@@ -27,6 +28,9 @@ type CandidateFact struct {
 	PageNum        int    `json:"page_num"`
 	FromOpponent   bool   `json:"from_opponent"`
 	RelatedElement string `json:"related_element,omitempty"`
+	// RejectReason 拒绝原因（仅出参用，模型不需要也无法提供）：
+	// "VERIFY_FAILED" = 回原文定位失败；"GATE:<规则>:<表述>" = 门禁拦截。
+	RejectReason string `json:"reject_reason,omitempty"`
 }
 
 // ReaderReport 阅卷结果。
@@ -34,8 +38,11 @@ type ReaderReport struct {
 	DocID     string            `json:"doc_id"`
 	ModelName string            `json:"model_name"`
 	Accepted  []domain.Fact     `json:"accepted"` // 已入库事实（状态为核验器判定）
-	Rejected  []CandidateFact   `json:"rejected"` // 回原文失败被拒绝的候选（仅审计）
+	Rejected  []CandidateFact   `json:"rejected"` // 回原文失败/门禁拦截被拒绝的候选（仅审计）
 	Elements  []extract.Element `json:"elements"` // 确定性时间/金额要素（均已定位）
+	// GateBlocked 被输出门禁拦截的候选数（倾向性/预测性表述）——审计与界面
+	// 必须可见：门禁是代码级拦截，不是提示词自觉。
+	GateBlocked int `json:"gate_blocked"`
 }
 
 // readerPrompt 构造阅卷提示：要求模型输出严格 JSON，片段必须逐字来自原文。
@@ -133,6 +140,14 @@ func RunReader(ctx context.Context, docID string, doc *verify.DocumentText, mode
 		if strings.TrimSpace(c.Description) == "" {
 			continue
 		}
+		// 输出门禁接入生产路径（不是 UI 预检专属）：模型产出的事实描述里出现
+		// 倾向性/预测性/裁判性表述，直接拒绝入库并留审计——模型无权把结论写进事实。
+		if v := gate.CheckGuidance(c.Description); len(v) > 0 {
+			c.RejectReason = "GATE:" + v[0].Rule + ":" + v[0].Phrase
+			report.Rejected = append(report.Rejected, c)
+			report.GateBlocked++
+			continue
+		}
 		if !allowed[c.RelatedElement] {
 			c.RelatedElement = ""
 		}
@@ -151,6 +166,7 @@ func RunReader(ctx context.Context, docID string, doc *verify.DocumentText, mode
 		f.State = statemachine.InitialState(f, c.FromOpponent)
 		f = VerifyFact(f, docs)
 		if f.State == domain.StateUnsupported {
+			c.RejectReason = "VERIFY_FAILED"
 			report.Rejected = append(report.Rejected, c)
 			continue
 		}

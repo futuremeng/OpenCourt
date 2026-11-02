@@ -45,6 +45,11 @@ var blockedGuidance = []struct {
 	{"量刑预测", "NO_PREDICTION"},
 	{"判决预测", "NO_PREDICTION"},
 	{"估计刑期", "NO_PREDICTION"},
+	// 确定性断言式预测：阅卷候选里出现即模型在替法官下结论。
+	{"必然胜诉", "NO_PREDICTION"},
+	{"必然败诉", "NO_PREDICTION"},
+	{"必然支持诉请", "NO_PREDICTION"},
+	{"必然驳回", "NO_PREDICTION"},
 	{"应当判决", "NO_VERDICT"},
 	{"构成犯罪", "NO_VERDICT"},
 	{"不构成犯罪", "NO_VERDICT"},

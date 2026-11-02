@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -24,7 +25,12 @@ type Entry struct {
 }
 
 // Logger 追加式审计日志。
+//
+// 必须串行化：每条记录的 PrevHash 依赖上一条的 EntryHash，而 Wails 每次前端
+// 调用都在独立 goroutine 中执行绑定方法——并发写既会数据竞争，更会写出两条
+// 相同 PrevHash 的记录，把哈希链自己写断（Verify 从此报「疑似篡改」）。
 type Logger struct {
+	mu       sync.Mutex
 	path     string
 	prevHash string
 }
@@ -53,7 +59,10 @@ func computeHash(e Entry) string {
 }
 
 // Log 追加一条审计记录（不可篡改：只追加，不修改既有行）。
+// 全程持锁——「取链尾 → 写行 → 推进链尾」必须是一个原子步骤。
 func (l *Logger) Log(actor, action, target, detail string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	e := Entry{
 		Timestamp: time.Now().UTC(),
 		Actor:     actor,

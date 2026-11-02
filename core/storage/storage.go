@@ -75,6 +75,27 @@ CREATE TABLE IF NOT EXISTS elements (
 );
 `
 
+// configure 连接与并发相关 PRAGMA。桌面端多 goroutine 读写同一库（Wails 每次
+// 前端调用一个 goroutine），缺这几项会随机撞 SQLITE_BUSY：
+//   - journal_mode=WAL：读写不互斥（内存库自动回落 memory，不报错）；
+//   - busy_timeout：写-写冲突排队而不是立刻报错；
+//   - foreign_keys：SQLite 默认关，显式打开（后续引用表约束生效）；
+//   - synchronous=NORMAL：WAL 下兼顾断电安全与吞吐。
+func configure(db *sql.DB) error {
+	db.SetMaxOpenConns(4)
+	for _, p := range []string{
+		`PRAGMA journal_mode=WAL`,
+		`PRAGMA busy_timeout=5000`,
+		`PRAGMA foreign_keys=ON`,
+		`PRAGMA synchronous=NORMAL`,
+	} {
+		if _, err := db.Exec(p); err != nil {
+			return fmt.Errorf("数据库参数设置失败（%s）: %w", p, err)
+		}
+	}
+	return nil
+}
+
 // Open 打开（或创建）SQLite 数据库并完成全部迁移：
 //  1. 业务表结构（新库建表即含 case_id）；
 //  2. 存量库案件隔离幂等迁移（迁移前自动备份 <db>.bak-<ts>，plan-v0.2 §9）；
@@ -83,6 +104,10 @@ CREATE TABLE IF NOT EXISTS elements (
 func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
+		return nil, err
+	}
+	if err := configure(db); err != nil {
+		db.Close()
 		return nil, err
 	}
 	if _, err := db.Exec(schema); err != nil {

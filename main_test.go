@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,7 +11,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/futuremeng/OpenLaw/store"
@@ -134,7 +138,7 @@ func TestLoadLawDataFlow(t *testing.T) {
 	if st["installed"] != true || a.lawSource == nil {
 		t.Errorf("core 加载后应已安装且语料源可用: %+v", st)
 	}
-	target := a.settings.OpenLaw.DataDir
+	target := a.lawDataDir()
 
 	// evidence 包 → 合并进已装语料
 	if _, err := a.LoadLawData(ev); err != nil {
@@ -241,7 +245,7 @@ func TestCheckAndDownloadLawData(t *testing.T) {
 	if st["installed"] != true || a.lawSource == nil {
 		t.Errorf("下载后应已安装: %+v", st)
 	}
-	target := a.settings.OpenLaw.DataDir
+	target := a.lawDataDir()
 	if _, err := os.Stat(filepath.Join(target, "docx", "a.docx")); err != nil {
 		t.Error("evidence 应已自动合并:", err)
 	}
@@ -284,7 +288,7 @@ func newCaseApp(t *testing.T, dir string) *App {
 		settings: config.Default(), dataDir: dir, auditLog: lg, store: st,
 		profile: profiles.Profile{Role: "court", Name: "court"},
 	}
-	a.currentCaseID = a.loadCurrentCase()
+	a.currentCaseID = a.validatedCaseID(loadState(a.statePath()).CurrentCase)
 	return a
 }
 
@@ -380,4 +384,158 @@ func TestCaseBindingsFailClosedWithoutSource(t *testing.T) {
 	if st := a.LocalCasesStatus(); st["enabled"] != false {
 		t.Errorf("LocalCasesStatus 必须如实报告未启用: %v", st)
 	}
+}
+
+// TestConcurrentCaseSwitchAndReads 并发回归（review P0-2）：Wails 每次前端调用
+// 都在独立 goroutine 中执行绑定方法，「切换案件」与「读事实」并发是常态。
+// 未加锁时 -race 会直接报 data race；同时断言切换是原子的——单次读取要么
+// 完整看到旧案件、要么完整看到新案件，绝不撕裂。
+func TestConcurrentCaseSwitchAndReads(t *testing.T) {
+	dir := t.TempDir()
+	a := newCaseApp(t, dir)
+	c2, err := a.CreateCase("并发案件", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SwitchCase(domain.DefaultCaseID); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				if _, err := a.ListFacts(); err != nil {
+					t.Errorf("并发读事实失败: %v", err)
+					return
+				}
+				if _, err := a.CurrentCase(); err != nil {
+					t.Errorf("并发读当前案件失败: %v", err)
+					return
+				}
+				runtime.Gosched() // 避免忙等饿死切换方（CI 上 race 检测器已很重）
+			}
+		}()
+	}
+	for i := 0; i < 40; i++ {
+		id := c2.CaseID
+		if i%2 == 0 {
+			id = domain.DefaultCaseID
+		}
+		if err := a.SwitchCase(id); err != nil {
+			t.Fatalf("切换案件失败: %v", err)
+		}
+	}
+	close(stop)
+	wg.Wait()
+
+	// 落盘与内存必须一致（写锁内完成「改 + 落盘」，不留撕裂状态）
+	if err := a.SwitchCase(c2.CaseID); err != nil {
+		t.Fatal(err)
+	}
+	st := loadState(a.statePath())
+	if st.CurrentCase != c2.CaseID {
+		t.Errorf("state.json 与内存不一致: %+v", st)
+	}
+	if cur, err := a.CurrentCase(); err != nil || cur.CaseID != c2.CaseID {
+		t.Errorf("CurrentCase 与 state.json 不一致: %+v %v", cur, err)
+	}
+}
+
+// TestConcurrentLawSourceSwap 并发换语料与检索：withLaw 的读者持 RLock 跨整个
+// 插件调用，替换方必须等到查询结束才关句柄——绝不在已关闭句柄上查询。
+// 换语料窗口内 lawSource 短暂为 nil，此时检索 fail-closed 报错是正确行为。
+// 调度纪律：全量套件负载下 goroutine 可能长时间未被调度，必须先等每个读者
+// 至少完成一次检索（启动 barrier）再开始换语料，且换完后保留读者活跃窗口
+// 才停——否则读者可能全程未参与，okSearch 恒 0 造成与产品无关的假失败。
+func TestConcurrentLawSourceSwap(t *testing.T) {
+	a := newCaseApp(t, t.TempDir())
+	var (
+		track sync.Mutex
+		stubs []*swapStub
+	)
+	newStub := func() *swapStub {
+		s := &swapStub{}
+		track.Lock()
+		stubs = append(stubs, s)
+		track.Unlock()
+		return s
+	}
+	a.setLawSource(newStub())
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	var okSearch, calls int64
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				if _, err := a.SearchLaw("违约金", 5); err == nil {
+					atomic.AddInt64(&okSearch, 1)
+				}
+				atomic.AddInt64(&calls, 1)
+				runtime.Gosched()
+			}
+		}()
+	}
+	// 启动 barrier：每个读者至少完成一次检索后再开始换语料（防负载下读者缺席）
+	for n := 0; atomic.LoadInt64(&calls) < 4 && n < 1_000_000; n++ {
+		runtime.Gosched()
+	}
+	for i := 0; i < 20; i++ {
+		a.closeLawSource()
+		a.setLawSource(newStub())
+	}
+	// 换完后保留读者活跃窗口：等到出现成功检索再停，断言窗口覆盖正常完成路径
+	for n := 0; atomic.LoadInt64(&okSearch) == 0 && n < 1_000_000; n++ {
+		runtime.Gosched()
+	}
+	close(stop)
+	wg.Wait()
+
+	track.Lock()
+	defer track.Unlock()
+	for i, s := range stubs {
+		if s.closed.Load() && s.useAfterClose.Load() {
+			t.Errorf("第 %d 个句柄被关闭后仍被查询（锁未覆盖插件调用全程）", i)
+		}
+	}
+	if atomic.LoadInt64(&okSearch) == 0 {
+		t.Error("并发换语料期间检索应仍可正常完成（不应全部失败）")
+	}
+}
+
+// swapStub 可关闭的法条源：关闭后再被查询即计数（供并发测试断言）。
+type swapStub struct {
+	closed        atomic.Bool
+	useAfterClose atomic.Bool
+}
+
+func (s *swapStub) Name() string { return "swapstub" }
+func (s *swapStub) SearchLaw(ctx context.Context, query string, topK int) ([]plugins.LawHit, error) {
+	if s.closed.Load() {
+		s.useAfterClose.Store(true)
+	}
+	return []plugins.LawHit{{Title: "测试法", Article: "第1条", Status: "EFFECTIVE", ConfirmStatus: "confirmed"}}, nil
+}
+func (s *swapStub) GetLawDetail(ctx context.Context, lawID string) (plugins.LawHit, error) {
+	return plugins.LawHit{Title: "测试法", Status: "EFFECTIVE", ConfirmStatus: "confirmed"}, nil
+}
+func (s *swapStub) Close() error {
+	s.closed.Store(true)
+	return nil
 }
