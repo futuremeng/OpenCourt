@@ -2,6 +2,11 @@
 
 本项目遵循 Semantic Versioning，版本语义见开发文档 10.4。
 
+## Unreleased（v0.3 M5 开发中）
+
+### 新增
+- **本案卷宗混合检索（v0.3 M5，roadmap-next M5 / plan-v0.2 V2 收窄落地）**：`core/storage` 新增 `embeddings` 表（页级向量 BLOB + dim + text_hash + model，挂 `case_id`，`(case,doc,page,model)` 唯一——跨案件天然隔离、模型间向量空间不混用）；`core/retrieve` 补暴力余弦 `VectorSearch`（纯 Go，不引外部向量库）与 `FuseRRF`（RRF k=60 只取排名，分数尺度免疫；关键词/向量/融合三处同分一律按 Ref 升序——结果可复现是验收项）；`neutral/caseindex.go`：`IndexCasePages`（text_hash 未变跳过、改文只重嵌缺页）+ `SearchCaseDocs`（关键词榜+向量榜→RRF；降级四态——模型未启用/不支持 embedding/索引未建/运行期失败——一律 `Mode=keyword_only` 并 Note 显式说明原因，绝不静默冒充向量化过）；App 绑定 `SearchCaseDocs`/`CaseIndexStatus`（审计 `DOC_SEARCH`/`DOC_SEARCH_FAIL`，记录实际召回路径与向量新建/复用数）；前端「卷宗检索」面板（语义召回徽章、降级黄标、命中来源 keyword/vector 标注、页码定位）；**范围纪律**：只搜本案卷宗——法条归 OpenLaw、类案归 LocalCases，检索结果只是候选，无任何写事实库路径、永不产生五态变化（合规用例锁死）；单测/合规：RRF 融合可复现、模型/案件双隔离、text_hash 增量、四态降级标注、检索零写事实零改状态
+
 ## v0.2.0（2026-11-02）
 
 ### 加固（代码 review 修复轮）

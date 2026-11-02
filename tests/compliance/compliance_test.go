@@ -371,3 +371,113 @@ func TestLawRefUnverifiedSurfaces(t *testing.T) {
 		t.Fatalf("已核验引用不应被拦截: %+v", v)
 	}
 }
+
+// ---------- v0.3 M5 混合检索合规 ----------
+
+// embedStub 确定性向量适配器（合规用例只验纪律，不验召回质量）。
+type embedStub struct{}
+
+func (embedStub) Name() string  { return "stub" }
+func (embedStub) Enabled() bool { return true }
+func (embedStub) Generate(context.Context, string) (string, error) {
+	return "", plugins.ErrNotSupported
+}
+func (embedStub) Embed(_ context.Context, text string) ([]float64, error) {
+	if strings.Contains(text, "违约") {
+		return []float64{1, 0}, nil
+	}
+	return []float64{0, 1}, nil
+}
+
+// 检索命中只是候选：跑完整索引+检索管道后，事实表必须一字未动，
+// 状态机与五态不得被检索结果触碰（roadmap M5 验收「检索命中不能直接成为强态事实」）。
+func TestHybridSearchNeverWritesFacts(t *testing.T) {
+	dir := t.TempDir()
+	st, err := storage.Open(filepath.Join(dir, "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	sc := st.WithCase(domain.DefaultCaseID)
+	if err := sc.CreateFact(domain.Fact{
+		FactID: "F1", Description: "既有事实", State: domain.StateUnsupported,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	pages := []neutral.PageText{
+		{DocID: "d1", Page: 1, Text: "合同约定违约金为合同金额的百分之二十"},
+	}
+	if _, _, err := neutral.IndexCasePages(context.Background(), embedStub{}, "m", pages, sc); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := sc.ListEmbeddings("m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	vecs := map[string][]float64{}
+	for _, r := range rows {
+		vecs[neutral.PageRef(r.DocID, r.Page)] = r.Vec
+	}
+	rep, err := neutral.SearchCaseDocs(context.Background(), embedStub{}, "m", pages, vecs, "违约金", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Hits) == 0 {
+		t.Fatal("命中为空说明管道断了")
+	}
+	facts, err := sc.ListFacts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(facts) != 1 || facts[0].FactID != "F1" || facts[0].State != domain.StateUnsupported {
+		t.Errorf("检索必须零写事实、零改状态: %+v", facts)
+	}
+}
+
+// 向量按案件隔离：跨案件向量不得进入本案召回（可见性在存储层前置过滤，
+// 与 roadmap M1「先过滤再召回，不靠 UI 隐藏」同一纪律）。
+func TestEmbeddingsCaseIsolated(t *testing.T) {
+	dir := t.TempDir()
+	st, err := storage.Open(filepath.Join(dir, "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.CreateCase(domain.Case{CaseID: "CASE-A", Title: "A 案"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateCase(domain.Case{CaseID: "CASE-B", Title: "B 案"}); err != nil {
+		t.Fatal(err)
+	}
+	a, b := st.WithCase("CASE-A"), st.WithCase("CASE-B")
+	if err := a.UpsertEmbedding("da", 1, "m", "h", []float64{1, 0}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := b.ListEmbeddings("m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("B 案不得见 A 案向量: %+v", rows)
+	}
+	rep, err := neutral.SearchCaseDocs(context.Background(), embedStub{}, "m",
+		[]neutral.PageText{{DocID: "db", Page: 1, Text: "与 A 案同词的文本"}}, nil, "违约金", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Mode != neutral.SearchModeKeywordOnly {
+		t.Errorf("无本案向量必须降级关键词模式，不得借他案向量: %+v", rep)
+	}
+}
+
+// 模型未启用必须显式降级标注——离线默认值下链路可用但绝不冒充语义召回。
+func TestHybridSearchDegradesExplicitly(t *testing.T) {
+	rep, err := neutral.SearchCaseDocs(context.Background(), nil, "",
+		[]neutral.PageText{{DocID: "d1", Page: 1, Text: "违约金条款"}}, nil, "违约金", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Mode != neutral.SearchModeKeywordOnly || !strings.Contains(rep.Note, "未启用语义召回") {
+		t.Errorf("离线默认必须显式标注降级: %+v", rep)
+	}
+}

@@ -23,6 +23,7 @@ import (
 	"github.com/futuremeng/OpenCourt/core/audit"
 	"github.com/futuremeng/OpenCourt/core/domain"
 	"github.com/futuremeng/OpenCourt/core/storage"
+	"github.com/futuremeng/OpenCourt/neutral"
 	"github.com/futuremeng/OpenCourt/plugins"
 	"github.com/futuremeng/OpenCourt/profiles"
 )
@@ -538,4 +539,41 @@ func (s *swapStub) GetLawDetail(ctx context.Context, lawID string) (plugins.LawH
 func (s *swapStub) Close() error {
 	s.closed.Store(true)
 	return nil
+}
+
+// ---------- v0.3 M5 卷宗混合检索绑定 ----------
+
+// 模型未启用（默认离线）：绑定必须照常可用、Mode=keyword_only 并显式标注；
+// 索引状态如实显示「未启用/已索引 0」；空检索词显式报错。
+func TestSearchCaseDocsBindingOffline(t *testing.T) {
+	a := newCaseApp(t, t.TempDir())
+	if err := a.scope().SaveDocument("d1", "合同.pdf", map[int]string{
+		1: "合同约定违约金为合同金额的百分之二十",
+		2: "送达地址确认书一份",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := a.SearchCaseDocs("违约金", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Mode != neutral.SearchModeKeywordOnly || !strings.Contains(rep.Note, "未启用语义召回") {
+		t.Errorf("离线默认必须降级并显式标注: %+v", rep)
+	}
+	if len(rep.Hits) != 1 || rep.Hits[0].DocID != "d1" || rep.Hits[0].Page != 1 {
+		t.Errorf("命中定位错误: %+v", rep.Hits)
+	}
+	if facts, _ := a.scope().ListFacts(); len(facts) != 0 {
+		t.Errorf("检索不得写事实: %+v", facts)
+	}
+	st, err := a.CaseIndexStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st["model_enabled"] != false || st["total_pages"] != 2 || st["indexed_pages"] != 0 || st["scope"] != "case" {
+		t.Errorf("索引状态如实显示错误: %+v", st)
+	}
+	if _, err := a.SearchCaseDocs("   ", 5); err == nil {
+		t.Error("空检索词必须报错")
+	}
 }

@@ -23,6 +23,8 @@ export function BrowserPlanFill(arg1:number,arg2:Record<string, string>,arg3:Rec
 
 export function BuildTimeline():Promise<Array<neutral.TimelineItem>>;
 
+export function CaseIndexStatus():Promise<Record<string, any>>;
+
 export function CheckAppUpdate():Promise<Record<string, any>>;
 
 export function CheckLawDataUpdates():Promise<Record<string, any>>;
@@ -82,6 +84,8 @@ export function RunElementMatch(arg1:Array<string>):Promise<neutral.MatchResult>
 export function RunElementMatchByCaseType(arg1:string):Promise<neutral.MatchResult>;
 
 export function RunReader(arg1:string):Promise<neutral.ReaderReport>;
+
+export function SearchCaseDocs(arg1:string,arg2:number):Promise<neutral.DocSearchReport>;
 
 export function SearchLaw(arg1:string,arg2:number):Promise<Array<plugins.LawHit>>;
 

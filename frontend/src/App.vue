@@ -7,6 +7,7 @@ import FactBoard from "./components/FactBoard.vue";
 import CaseBar from "./components/CaseBar.vue";
 import LawSearch from "./components/LawSearch.vue";
 import SimilarCases from "./components/SimilarCases.vue";
+import CaseSearch from "./components/CaseSearch.vue";
 
 const info = ref<Record<string, any> | null>(null);
 const facts = ref<domain.Fact[]>([]);
@@ -32,12 +33,14 @@ async function onCaseSwitched() {
     await refreshCurrentCaseType();
     (lawSearchRef.value as any)?.refresh?.();
     (caseSearchRef.value as any)?.refresh?.();
+    (docSearchRef.value as any)?.refresh?.();
   } catch (e) {
     error.value = String(e);
   }
 }
 const lawSearchRef = ref(null);
 const caseSearchRef = ref(null);
+const docSearchRef = ref(null);
 
 onMounted(async () => {
   try {
@@ -515,6 +518,10 @@ async function awaitHuman() {
     <!-- 类案检索（v0.2 M3）：LocalCases 外部可选组件默认禁用；要旨强制脱敏；
          留痕非事实不进五态；facet 分布必须附「不是裁判概率」固定标注 -->
     <SimilarCases ref="caseSearchRef" />
+
+    <!-- 卷宗检索（v0.3 M5）：仅本案文档；语义召回未启用必须显式标注降级；
+         结果是候选不是事实，不进五态 -->
+    <CaseSearch ref="docSearchRef" />
 
     <section class="panel">
       <h2>录入事实</h2>

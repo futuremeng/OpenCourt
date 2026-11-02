@@ -7,8 +7,10 @@ package storage
 
 import (
 	"database/sql"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/futuremeng/OpenCourt/core/domain"
@@ -73,6 +75,21 @@ CREATE TABLE IF NOT EXISTS elements (
     page_num    INTEGER NOT NULL,
     case_id     TEXT NOT NULL DEFAULT 'CASE-DEFAULT'
 );
+-- v0.3 M5 混合检索：本案卷宗页级向量（纯 Go 暴力余弦，无外部向量库）。
+-- 语料所有权（plan-v0.2 D0/V2）：只索引本案文档，法条/类案向量永不入库。
+CREATE TABLE IF NOT EXISTS embeddings (
+    emb_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    doc_id     TEXT NOT NULL,
+    page_num   INTEGER NOT NULL,
+    model      TEXT NOT NULL,
+    dim        INTEGER NOT NULL,
+    vec        BLOB NOT NULL,
+    text_hash  TEXT NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    case_id    TEXT NOT NULL DEFAULT 'CASE-DEFAULT',
+    UNIQUE (case_id, doc_id, page_num, model)
+);
+CREATE INDEX IF NOT EXISTS idx_embeddings_case ON embeddings(case_id, model);
 `
 
 // configure 连接与并发相关 PRAGMA。桌面端多 goroutine 读写同一库（Wails 每次
@@ -415,4 +432,87 @@ func (sc *CaseScope) ListElements() ([]extract.Element, error) {
 		})
 	}
 	return out, rows.Err()
+}
+
+// ---------- v0.3 M5 本案卷宗向量（embeddings 表） ----------
+
+// EmbeddingInfo 本案某页的向量行（已解码）。vec 仅在本机进程内使用，不出域。
+type EmbeddingInfo struct {
+	DocID    string
+	Page     int
+	Model    string
+	Dim      int
+	TextHash string
+	Vec      []float64
+}
+
+// encodeVec 向量 → 小端 float64 BLOB（纯 Go，无序列化依赖）。
+func encodeVec(vec []float64) []byte {
+	buf := make([]byte, 8*len(vec))
+	for i, f := range vec {
+		binary.LittleEndian.PutUint64(buf[8*i:], math.Float64bits(f))
+	}
+	return buf
+}
+
+// decodeVec BLOB → 向量。dim 与 BLOB 长度不符即报错——宁缺毋滥，不猜半截向量。
+func decodeVec(b []byte, dim int) ([]float64, error) {
+	if len(b) != 8*dim || dim <= 0 {
+		return nil, fmt.Errorf("向量存储损坏：dim=%d 与 BLOB %d 字节不符", dim, len(b))
+	}
+	vec := make([]float64, dim)
+	for i := range vec {
+		vec[i] = math.Float64frombits(binary.LittleEndian.Uint64(b[8*i:]))
+	}
+	return vec, nil
+}
+
+// UpsertEmbedding 写入/更新本案某页向量（同 case/doc/page/model 幂等覆盖）。
+// textHash 为页文本 sha256，供「未变即跳过重嵌」判定。
+func (sc *CaseScope) UpsertEmbedding(docID string, page int, model, textHash string, vec []float64) error {
+	if model == "" || len(vec) == 0 {
+		return fmt.Errorf("向量入库缺少 model 或维度为空")
+	}
+	_, err := sc.db().Exec(
+		`INSERT INTO embeddings (doc_id, page_num, model, dim, vec, text_hash, updated_at, case_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT (case_id, doc_id, page_num, model)
+		 DO UPDATE SET dim = excluded.dim, vec = excluded.vec,
+		                   text_hash = excluded.text_hash, updated_at = excluded.updated_at`,
+		docID, page, model, len(vec), encodeVec(vec), textHash, time.Now().UTC(), sc.caseID,
+	)
+	return err
+}
+
+// ListEmbeddings 列出本案指定 embedding 模型的全部页向量。
+// 模型隔离是正确性要求：不同模型的向量空间不可比，绝不混用。
+func (sc *CaseScope) ListEmbeddings(model string) ([]EmbeddingInfo, error) {
+	rows, err := sc.db().Query(
+		`SELECT doc_id, page_num, model, dim, vec, text_hash FROM embeddings
+		 WHERE case_id = ? AND model = ? ORDER BY doc_id, page_num`, sc.caseID, model)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []EmbeddingInfo{}
+	for rows.Next() {
+		var (
+			info EmbeddingInfo
+			blob []byte
+		)
+		if err := rows.Scan(&info.DocID, &info.Page, &info.Model, &info.Dim, &blob, &info.TextHash); err != nil {
+			return nil, err
+		}
+		if info.Vec, err = decodeVec(blob, info.Dim); err != nil {
+			return nil, fmt.Errorf("%s#%d: %w", info.DocID, info.Page, err)
+		}
+		out = append(out, info)
+	}
+	return out, rows.Err()
+}
+
+// DeleteDocumentEmbeddings 删除本案某文档的全部向量（文档删除/重接入时调用）。
+func (sc *CaseScope) DeleteDocumentEmbeddings(docID string) error {
+	_, err := sc.db().Exec(`DELETE FROM embeddings WHERE case_id = ? AND doc_id = ?`, sc.caseID, docID)
+	return err
 }

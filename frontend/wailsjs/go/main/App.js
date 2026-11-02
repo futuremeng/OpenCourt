@@ -34,6 +34,10 @@ export function BuildTimeline() {
   return window['go']['main']['App']['BuildTimeline']();
 }
 
+export function CaseIndexStatus() {
+  return window['go']['main']['App']['CaseIndexStatus']();
+}
+
 export function CheckAppUpdate() {
   return window['go']['main']['App']['CheckAppUpdate']();
 }
@@ -152,6 +156,10 @@ export function RunElementMatchByCaseType(arg1) {
 
 export function RunReader(arg1) {
   return window['go']['main']['App']['RunReader'](arg1);
+}
+
+export function SearchCaseDocs(arg1, arg2) {
+  return window['go']['main']['App']['SearchCaseDocs'](arg1, arg2);
 }
 
 export function SearchLaw(arg1, arg2) {
