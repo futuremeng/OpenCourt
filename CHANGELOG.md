@@ -2,7 +2,21 @@
 
 本项目遵循 Semantic Versioning，版本语义见开发文档 10.4。
 
-## Unreleased（阶段二开发中）
+## v0.2.0（2026-11-02）
+
+### 加固（代码 review 修复轮）
+- **CI 就位并修好依赖**：新增 `.github/workflows/ci.yml`（gofmt/vet/build + `go test -race ./...` + 前端 typecheck/build + Wails 桌面壳冒烟）；`go.mod` 的 `replace ../OpenLaw` 是仓库外路径，CI 改为先把 OpenLaw 检出到 `.deps/OpenLaw` 再 `go mod edit -replace` 改写——不再因模块解析失败整条流水线红；`release.yml` 同步该策略并补 `-ldflags -X main.version=<git tag>`（版本单一来源）
+- **运行时并发保护（P0）**：Wails 每次前端调用在独立 goroutine 中执行绑定方法，`App` 的共享可变状态（当前案件 ID、法条源句柄、语料目录、配置）改为 `sync.RWMutex` 保护，读写统一走 `scope()`/`caseID()`/`withLaw()`/`setLawSource()`/`lawDataDir()`；法条查询一律持读锁跨整个插件调用，换语料方取写锁后才关句柄——**杜绝在已关闭 SQLite 句柄上查询**；`SwitchCase` 的「改内存 + 写 state.json」移入写锁，失败回滚，不留撕裂状态。注意纪律：`withLaw` 闭包内不得再调 `scope()`/`caseID()`（RWMutex 不可重入）
+- **审计日志并发写修复（真机竞态，`-race` 实测检出）**：`audit.Logger.Log` 无锁——并发写不仅数据竞争，还会写出两条相同 `prev_hash` 的记录把哈希链**自己写断**（`Verify` 从此报「疑似篡改」）。改为「取链尾 → 追加 → 推进链尾」全程持锁，并补并发链完整性用例
+- **`lawDataDir` 持久化**：用户显式选择的语料目录此前只在内存，重启即回落配置值（表现为「语料又没了」）；现写入 `state.json` 并在启动时恢复
+- **SQLite 与迁移**：连接串补 `journal_mode=WAL`/`busy_timeout=5000`/`foreign_keys=ON`/`synchronous=NORMAL`，最大连接数限 4；案件 `case_id` 迁移备份优先 `VACUUM INTO`（WAL 下的一致性快照），失败回落 checkpoint + 文件复制，并只保留最近数份备份
+- **脱敏覆盖面**：新增手机号、统一社会信用代码（先掩身份证再匹配 + 必须含字母，防纯数字误伤）、邮箱、街道门牌地址；补误伤反面用例（案号/日期/金额不得被动）
+- **输出门禁接入生产路径**：`neutral.Reader` 候选事实入库前先过 gate（含预测/引导性表述一律拒收并记 `GateBlocked`，拒绝原因 `GATE:<rule>:<phrase>` 上浮 UI）；`CheckOutput` 提取 FACT/LAW/CASE 引用 ID 并对照当前案件留痕核验（跨案件引用天然拦截），违规写审计；gate 预测词表扩充
+- **自更新信任链收紧**：下载源白名单 + 强制 https + 可信主机匹配；资产名按 tag/平台/架构匹配（不再「取第一个资产」）；安装脚本默认执行 macOS Gatekeeper `spctl` 评估，自构建/内部分发需显式 `AllowUnsigned`
+- **测试提速**：govlist 翻页/重试/刷新路径改虚拟时钟 `pacer`（原用真实 sleep，单测耗时分钟级），限流语义改为断言而非挂钟等待
+- **入口拆分**：`main.go`（约 1000 行）按域拆为 `case.go`/`lawdata.go`/`lawsearch.go`/`similar.go`/`facts.go`/`documents.go`/`browser.go`/`update.go`（同 package main，Wails 绑定不受影响），入口只保留装配与生命周期
+- **新增守卫与空白补齐**：绑定漂移守卫（go/ast 比对 `*App` 导出方法与 `frontend/wailsjs/go/main/App.d.ts`，漂移即 CI 失败并提示重跑 `wails build`）；并发回归（切案 × 读事实、换语料 × 检索）；`core/domain`/`core/extract`/`core/retrieve`/`adversary` 补齐首份单测（此前零测试）；前端新增 `make typecheck`（`vue-tsc --noEmit`）并修其检出的真实缺陷——`FactBoard` 引用取值键错误（`source_file`→`SourceFile`，此前页码/原文在界面上恒为空）
+- **测试稳定性与 OL-1 对齐**：`TestConcurrentLawSourceSwap` 修调度竞态——全量套件负载下读者 goroutine 可能未被调度即被 stop，造成与产品无关的假失败；现启动 barrier（每读者至少完成一次检索再换语料）+ 换完保留读者活跃窗口才停。OpenLaw 侧 OL-1 已就绪（SDK 显式返回 `effect_status`），`TestOpenLawSourceSearchLaw` 期望从「一律 UNKNOWN」更新为按 fixture 透传语义（现行版本 EFFECTIVE、到期无关系佐证如实 UNKNOWN）；前端效力标签补 `REPEALED_PENDING`（废止待人工确认）
 
 ### 新增
 - **类案检索接入（v0.2 M3 降级通道，plan-v0.2 §4.2/§4.3 / D3/D6）**：`plugins/case_localcases.go` `LocalCasesSource`（`CaseSourcePlugin` + `FilteredCaseSource`）——契约严格对齐 LocalCases `/api/search`（法条过滤参数 `law`、无 `limit`、分页 `offset`/`id_gt`、token 走 `x-localcases-token` 头）；错误处置按 §9（连接失败→`LocalCasesGuidance` 不降级、401→提示查 token_env、400→原样展示不改写重试）；`structured=false`（索引缺精确层的诚实降级）保守透传并隐藏 facet，`structured` 字段缺失按 false（LC-7 未就绪不冒充）；回环护栏（类案语料含未脱敏文书，拒远程地址）；`neutral/caseassist.go` `RunCaseSearch` 管道：检索→要旨强制过 `core/redact`（唯一强制关口）→`case_refs` 留痕（不进 facts、永不进五态）+ 固定标注 `CaseSearchDisclaimer`（D6）；config `localcases` 段（`base_url`/`token_env`/`enabled`，token 严禁入文件）+ `OPENCOURT_LOCALCASES_*` 覆盖——LC-6 发现文件未就绪前为手动临时通道（UI 已标注）；App 绑定 `SearchSimilarCases`/`ListCaseRefs`/`LocalCasesStatus`（health 探测 + 语料规模同显防小样本误读；审计 `CASE_SEARCH`/`CASE_SEARCH_FAIL`）；前端 `SimilarCases` 面板（未启用显指引不显空列表、降级提示、facet 分布 + 固定标注、本案留痕）；gate 词表补 D6 概率化表述（胜算/几成/可能性多大/倾向判决）并合规用例先行；单测：契约参数断言（law≠legal_basis、无 limit）、structured 三态、401/400 处置、非回环拒绝、脱敏一致替换、facet 降级不留痕、绑定守卫

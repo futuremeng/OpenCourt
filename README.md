@@ -53,14 +53,27 @@ profiles/  adversary/        ← 立场层 / 对抗推演层（按角色加载�
 ## 快速开始
 
 ```bash
-# 前置：Go 1.21+、Node 18+（国内网络建议 GOPROXY=https://goproxy.cn,direct）
-make setup     # 安装 Wails CLI
-make dev       # 开发模式（热重载桌面窗口）
-make test      # 全部测试（单测 + 合规测试）
-make build     # 产出安装包：build/bin/OpenCourt.app（macOS）/.msi/.AppImage
+# 前置：Go 1.27+（与 go.mod 一致）、Node 20+（国内网络建议 GOPROXY=https://goproxy.cn,direct）
+make setup      # 安装 Wails CLI
+make dev        # 开发模式（热重载桌面窗口）
+make test       # 全部测试（-race：Wails 每次前端调用在独立 goroutine 中执行）
+make test-fast  # 无 race 的快速回归
+make lint       # go vet + gofmt 检查
+make typecheck  # 前端类型检查（vue-tsc --noEmit）
+make ci         # 与 .github/workflows/ci.yml 等价的本地门禁
+make build      # 产出安装包：build/bin/OpenCourt.app（macOS）/.msi/.AppImage
 ```
 
 首次运行：`cp config/settings.example.yaml config/settings.yaml`（可跳过，默认配置即安全值：离线、遥测关闭、脱敏 high）。
+
+版本号单一来源：发布构建由 `make build` 从 `git describe --tags` 注入
+（`-ldflags "-X main.version=$(git describe --tags --abbrev=0)"`）；源码内
+`main.go` 的 `version` 常量只是无 tag 时（开发版）的兜底值，不要手工改。
+
+密钥注入：`.env` 只在**进程当前工作目录**读取（`config.LoadDotEnv(".env")`，
+已存在的环境变量优先）。因此它只对 `make dev` / 命令行启动生效——从 Finder
+双击启动的 .app 工作目录是 `/`，不会读到项目下的 `.env`；分发形态请改用系统
+密钥链或环境注入，切勿把密钥写进 `config/settings.yaml`。
 
 ## VS Code 一键调试（按 F5，选择配置）
 
@@ -78,14 +91,26 @@ make build     # 产出安装包：build/bin/OpenCourt.app（macOS）/.msi/.AppI
 
 不预测判决结果 · 不引导用户决策 · 不内置裁判文书/法条数据 · 不替代律师和法官判断 · 不恢复隐名信息
 
-## 预览版边界（v0.1.0-preview）
+## 版本边界（v0.2.0）
 
-⚠️ **本版本是面向开发者的技术预览（Tech Preview / Alpha），不是面向法律从业者的产品**：
+⚠️ **本版本仍是面向开发者的技术预览，不是面向法律从业者的产品**：
 
-- **已可用**：反幻觉安全内核（事实五态、状态机仲裁、门禁、脱敏、哈希链审计）、四套 Profile、合规测试、桌面应用外壳与演示界面；阶段二新增：PDF/文本接入、阅卷 Agent（模型产候选 + 核验器仲裁）、时间线、要件匹配与盲区、OpenAI 兼容模型接口（默认禁用）
-- **尚不可用**：扫描件 OCR（接口已就位，引擎待接）、Word/docx 解析、模型真机评测、案件管理、跨部署交换包
-- **未做验收**：开发文档 11.1 的「100 份真实判决书、幻觉率 < 1%、溯源准确率 > 98%」评测尚未执行
-- **请勿用于真实案件**。macOS 构建为自签名，首次打开需右键 → 打开（或 `xattr -dr com.apple.quarantine`）
+- **已可用**：反幻觉安全内核（事实五态、状态机仲裁、门禁、脱敏、哈希链审计）、
+  四套 Profile、合规测试、桌面应用外壳；**案件实体与案件级隔离**（多案件切换、
+  跨案件引用编译期 + 门禁双拦截）；**法条检索与文书引用核验**（OpenLaw 进程内
+  SDK，效力状态透传 `effect_status`，OL 错误码原样上浮）；**类案检索**（LocalCases
+  回环手动通道，LC-6 发现文件就绪前 UI 已标注；要旨永不进强态 + 固定标注）；
+  **按案由要件匹配**（要件名封闭候选集，集外一律置空）；文档接入（文本 / 文本型
+  PDF）与阅卷 Agent、时间线与盲区；法条数据应用内分发与自更新（macOS）；
+  BrowserOS 网络查阅与网上立案辅助（两段式，默认禁用）；OpenAI 兼容模型接口
+  （默认禁用）
+- **尚不可用**：扫描件 OCR（接口就位，引擎未接）、Word/docx 解析、模型真机评测、
+  向量混合检索与对抗推演 / 庭审流程 / 审校报告（v0.3 计划，见
+  [docs/roadmap-next.md](docs/roadmap-next.md) M5–M8）、跨部署交换包
+- **未做验收**：开发文档 11.1 的「100 份真实判决书、幻觉率 < 1%、溯源准确率 > 98%」
+  评测尚未执行
+- **请勿用于真实案件**。macOS 构建为自签名，首次打开需右键 → 打开（或
+  `xattr -dr com.apple.quarantine /Applications/OpenCourt.app`）
 
 ## 许可证与合规
 
