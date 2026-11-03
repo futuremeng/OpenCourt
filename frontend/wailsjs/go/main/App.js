@@ -106,6 +106,10 @@ export function ListCaseRefs() {
   return window['go']['main']['App']['ListCaseRefs']();
 }
 
+export function ListSimRounds() {
+  return window['go']['main']['App']['ListSimRounds']();
+}
+
 export function LocalCasesStatus() {
   return window['go']['main']['App']['LocalCasesStatus']();
 }
@@ -158,12 +162,28 @@ export function RunReader(arg1) {
   return window['go']['main']['App']['RunReader'](arg1);
 }
 
+export function RunSimRound(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RunSimRound'](arg1, arg2, arg3, arg4);
+}
+
 export function SearchCaseDocs(arg1, arg2) {
   return window['go']['main']['App']['SearchCaseDocs'](arg1, arg2);
 }
 
 export function SearchLaw(arg1, arg2) {
   return window['go']['main']['App']['SearchLaw'](arg1, arg2);
+}
+
+export function SimReview() {
+  return window['go']['main']['App']['SimReview']();
+}
+
+export function SimStatus() {
+  return window['go']['main']['App']['SimStatus']();
+}
+
+export function SummarizeCaseIssues() {
+  return window['go']['main']['App']['SummarizeCaseIssues']();
 }
 
 export function SwitchCase(arg1) {

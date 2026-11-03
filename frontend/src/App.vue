@@ -8,6 +8,7 @@ import CaseBar from "./components/CaseBar.vue";
 import LawSearch from "./components/LawSearch.vue";
 import SimilarCases from "./components/SimilarCases.vue";
 import CaseSearch from "./components/CaseSearch.vue";
+import SimPanel from "./components/SimPanel.vue";
 
 const info = ref<Record<string, any> | null>(null);
 const facts = ref<domain.Fact[]>([]);
@@ -34,6 +35,7 @@ async function onCaseSwitched() {
     (lawSearchRef.value as any)?.refresh?.();
     (caseSearchRef.value as any)?.refresh?.();
     (docSearchRef.value as any)?.refresh?.();
+    (simPanelRef.value as any)?.refresh?.();
   } catch (e) {
     error.value = String(e);
   }
@@ -41,6 +43,7 @@ async function onCaseSwitched() {
 const lawSearchRef = ref(null);
 const caseSearchRef = ref(null);
 const docSearchRef = ref(null);
+const simPanelRef = ref(null);
 
 onMounted(async () => {
   try {
@@ -522,6 +525,13 @@ async function awaitHuman() {
     <!-- 卷宗检索（v0.3 M5）：仅本案文档；语义召回未启用必须显式标注降级；
          结果是候选不是事实，不进五态 -->
     <CaseSearch ref="docSearchRef" />
+
+    <!-- 对抗推演与庭审流程（v0.3 M6）：全程免责标注；阶段推进由后端硬守卫；
+         被拦截轮次与轨迹抖动告警必须可见；法院 Profile 禁用本面板 -->
+    <section class="panel wide">
+      <h2>对抗推演与庭审流程（模拟推演，非预测）</h2>
+      <SimPanel ref="simPanelRef" />
+    </section>
 
     <section class="panel">
       <h2>录入事实</h2>

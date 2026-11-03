@@ -90,6 +90,19 @@ CREATE TABLE IF NOT EXISTS embeddings (
     UNIQUE (case_id, doc_id, page_num, model)
 );
 CREATE INDEX IF NOT EXISTS idx_embeddings_case ON embeddings(case_id, model);
+-- v0.3 M6 对抗推演：轮次留痕（round_id 与审计日志关联；被拦截轮次也入库，
+-- 拦截必须可追溯，但 blocked=1 的轮次不计入阶段完成度）。
+CREATE TABLE IF NOT EXISTS sim_rounds (
+    round_id      TEXT PRIMARY KEY,
+    phase         TEXT NOT NULL,
+    role          TEXT NOT NULL,
+    text          TEXT NOT NULL,
+    fact_ids_json TEXT NOT NULL DEFAULT '[]',
+    blocked       INTEGER NOT NULL DEFAULT 0,
+    created_at    TIMESTAMP NOT NULL,
+    case_id       TEXT NOT NULL DEFAULT 'CASE-DEFAULT'
+);
+CREATE INDEX IF NOT EXISTS idx_sim_rounds_case ON sim_rounds(case_id, phase);
 `
 
 // configure 连接与并发相关 PRAGMA。桌面端多 goroutine 读写同一库（Wails 每次
@@ -515,4 +528,70 @@ func (sc *CaseScope) ListEmbeddings(model string) ([]EmbeddingInfo, error) {
 func (sc *CaseScope) DeleteDocumentEmbeddings(docID string) error {
 	_, err := sc.db().Exec(`DELETE FROM embeddings WHERE case_id = ? AND doc_id = ?`, sc.caseID, docID)
 	return err
+}
+
+// SimRound 对抗推演一轮留痕（v0.3 M6）。被门禁拦截的轮次同样入库
+// （拦截必须可追溯），但 Blocked 轮不计入阶段完成度。
+type SimRound struct {
+	RoundID   string    `json:"round_id"`
+	Phase     string    `json:"phase"`
+	Role      string    `json:"role"`
+	Text      string    `json:"text"`
+	FactIDs   []string  `json:"fact_ids,omitempty"`
+	Blocked   bool      `json:"blocked"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// AddSimRound 写入一轮推演（round_id 冲突即报错——轮次号由绑定层生成，不得覆盖）。
+func (sc *CaseScope) AddSimRound(r SimRound) error {
+	if r.RoundID == "" || r.Phase == "" {
+		return fmt.Errorf("推演轮次缺少 round_id 或 phase")
+	}
+	ids, err := json.Marshal(r.FactIDs)
+	if err != nil {
+		return err
+	}
+	blocked := 0
+	if r.Blocked {
+		blocked = 1
+	}
+	ts := r.CreatedAt
+	if ts.IsZero() {
+		ts = time.Now().UTC()
+	}
+	_, err = sc.db().Exec(
+		`INSERT INTO sim_rounds (round_id, phase, role, text, fact_ids_json, blocked, created_at, case_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.RoundID, r.Phase, r.Role, r.Text, string(ids), blocked, ts, sc.caseID)
+	return err
+}
+
+// ListSimRounds 本案全部推演轮次（时间正序——轨迹必须按发生顺序重放）。
+func (sc *CaseScope) ListSimRounds() ([]SimRound, error) {
+	rows, err := sc.db().Query(
+		`SELECT round_id, phase, role, text, fact_ids_json, blocked, created_at
+		 FROM sim_rounds WHERE case_id = ? ORDER BY created_at, round_id`, sc.caseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []SimRound{}
+	for rows.Next() {
+		var (
+			r   SimRound
+			ids string
+			bl  int
+		)
+		if err := rows.Scan(&r.RoundID, &r.Phase, &r.Role, &r.Text, &ids, &bl, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		r.Blocked = bl != 0
+		if ids != "" && ids != "[]" {
+			if err := json.Unmarshal([]byte(ids), &r.FactIDs); err != nil {
+				return nil, fmt.Errorf("轮次 %s fact_ids 损坏: %w", r.RoundID, err)
+			}
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }

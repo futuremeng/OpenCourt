@@ -1,3 +1,44 @@
+export namespace adversary {
+
+	export class Attack {
+	    text: string;
+	    fact_ids?: Array<string>;
+	    violations?: Array<gate.Violation>;
+	    blocked: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new Attack(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.text = source["text"];
+	        this.fact_ids = source["fact_ids"];
+	        this.violations = this.convertValues(source["violations"], gate.Violation);
+	        this.blocked = source["blocked"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace domain {
 
 	export class Case {
@@ -234,6 +275,59 @@ export namespace gate {
 
 }
 
+export namespace main {
+
+	export class SimRoundResult {
+	    round_id: string;
+	    phase: string;
+	    attacks: adversary.Attack[];
+	    violations?: gate.Violation[];
+	    blocked: boolean;
+	    drift: boolean;
+	    drift_note?: string;
+	    needs_review: boolean;
+	    review_note?: string;
+	    disclaimer: string;
+
+	    static createFrom(source: any = {}) {
+	        return new SimRoundResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.round_id = source["round_id"];
+	        this.phase = source["phase"];
+	        this.attacks = this.convertValues(source["attacks"], adversary.Attack);
+	        this.violations = this.convertValues(source["violations"], gate.Violation);
+	        this.blocked = source["blocked"];
+	        this.drift = source["drift"];
+	        this.drift_note = source["drift_note"];
+	        this.needs_review = source["needs_review"];
+	        this.review_note = source["review_note"];
+	        this.disclaimer = source["disclaimer"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace neutral {
 	
 	export class Blindspot {
@@ -372,6 +466,58 @@ export namespace neutral {
 	        this.out_path = source["out_path"];
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Issue {
+	    element: string;
+	    fact_ids: string[];
+	    conflict_points?: string[];
+	    has_opponent: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new Issue(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.element = source["element"];
+	        this.fact_ids = source["fact_ids"];
+	        this.conflict_points = source["conflict_points"];
+	        this.has_opponent = source["has_opponent"];
+	    }
+	}
+	export class IssueReport {
+	    issues: Issue[];
+	    gaps: string[];
+	    note: string;
+
+	    static createFrom(source: any = {}) {
+	        return new IssueReport(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.issues = this.convertValues(source["issues"], Issue);
+	        this.gaps = source["gaps"];
+	        this.note = source["note"];
+	    }
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -715,6 +861,49 @@ export namespace redact {
 
 export namespace storage {
 	
+	export class SimRound {
+	    round_id: string;
+	    phase: string;
+	    role: string;
+	    text: string;
+	    fact_ids?: string[];
+	    blocked: boolean;
+	    // Go type: time
+	    created_at: any;
+
+	    static createFrom(source: any = {}) {
+	        return new SimRound(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.round_id = source["round_id"];
+	        this.phase = source["phase"];
+	        this.role = source["role"];
+	        this.text = source["text"];
+	        this.fact_ids = source["fact_ids"];
+	        this.blocked = source["blocked"];
+	        this.created_at = this.convertValues(source["created_at"], null);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class DocumentInfo {
 	    doc_id: string;
 	    file: string;

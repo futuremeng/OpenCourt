@@ -6,6 +6,8 @@ import {gate} from '../models';
 import {domain} from '../models';
 import {storage} from '../models';
 import {redact} from '../models';
+import {adversary} from '../models';
+import {main} from '../models';
 
 export function AppInfo():Promise<Record<string, any>>;
 
@@ -59,6 +61,8 @@ export function ListLawRefs():Promise<Array<domain.LawRef>>;
 
 export function ListCaseRefs():Promise<Array<domain.CaseRef>>;
 
+export function ListSimRounds():Promise<Array<storage.SimRound>>;
+
 export function LocalCasesStatus():Promise<Record<string, any>>;
 
 export function SearchSimilarCases(arg1:string,arg2:string,arg3:string,arg4:number,arg5:number,arg6:number,arg7:Array<string>):Promise<any>;
@@ -85,9 +89,17 @@ export function RunElementMatchByCaseType(arg1:string):Promise<neutral.MatchResu
 
 export function RunReader(arg1:string):Promise<neutral.ReaderReport>;
 
+export function RunSimRound(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<main.SimRoundResult>;
+
 export function SearchCaseDocs(arg1:string,arg2:number):Promise<neutral.DocSearchReport>;
 
 export function SearchLaw(arg1:string,arg2:number):Promise<Array<plugins.LawHit>>;
+
+export function SimReview():Promise<void>;
+
+export function SimStatus():Promise<Record<string, any>>;
+
+export function SummarizeCaseIssues():Promise<neutral.IssueReport>;
 
 export function SwitchCase(arg1:string):Promise<void>;
 
