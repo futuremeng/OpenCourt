@@ -25,11 +25,13 @@ type Registry struct {
 }
 
 // NewRegistry 返回注册了内置解析器的注册表。
-// OCRParser 默认未注入引擎：扫描件/图片会被显式拒绝（安全默认）。
+// OCRParser/DocxParser 默认未注入引擎：扫描件/图片会被显式拒绝（安全默认）；
+// docx 正文无需引擎，仅内嵌图片需 OCR（未配置只拒绝该图，D2）。
 func NewRegistry() *Registry {
 	return &Registry{parsers: []Parser{
 		&TextParser{},
 		&PDFParser{},
+		&DocxParser{},
 		&OCRParser{},
 	}}
 }
@@ -37,6 +39,38 @@ func NewRegistry() *Registry {
 // Register 追加解析器（如后续的 PDFParser、OCRParser）。
 func (r *Registry) Register(p Parser) {
 	r.parsers = append(r.parsers, p)
+}
+
+// SetOCR 向内置解析器注入 OCR 引擎（图片解析器直接注入；PDF 解析器获得
+// 扫描页 OCR 能力）。engine 为 nil = 维持安全默认（扫描件明确拒绝）。
+// 低置信阈值不在解析器上持有——由调用方经 Registry.LowConfidencePages
+// 按配置判定（单一实现）。
+func (r *Registry) SetOCR(engine OCRAdapter, extractImages ImageExtractor) {
+	for _, p := range r.parsers {
+		switch pp := p.(type) {
+		case *OCRParser:
+			pp.Adapter = engine
+		case *PDFParser:
+			pp.OCR = engine
+			pp.ExtractImages = extractImages
+		case *DocxParser:
+			pp.OCR = engine
+		}
+	}
+}
+
+// LowConfidencePages 返回 OCR 文档中低于阈值的页码（供 UI 黄标与审计）。
+func (r *Registry) LowConfidencePages(doc *verify.DocumentText, minConfidence float64) []int {
+	if !doc.OCR {
+		return nil
+	}
+	out := []int{}
+	for page, c := range doc.OCRConf {
+		if minConfidence > 0 && c < minConfidence {
+			out = append(out, page)
+		}
+	}
+	return out
 }
 
 // Parse 选择首个能处理该路径的解析器执行解析。

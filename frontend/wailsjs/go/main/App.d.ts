@@ -4,10 +4,10 @@ import {neutral} from '../models';
 import {plugins} from '../models';
 import {gate} from '../models';
 import {domain} from '../models';
+import {verify} from '../models';
+import {main} from '../models';
 import {storage} from '../models';
 import {redact} from '../models';
-import {adversary} from '../models';
-import {main} from '../models';
 
 export function AppInfo():Promise<Record<string, any>>;
 
@@ -33,13 +33,17 @@ export function CheckLawDataUpdates():Promise<Record<string, any>>;
 
 export function CheckOutput(arg1:string):Promise<Array<gate.Violation>>;
 
-export function CreateFact(arg1:string,arg2:string,arg3:number,arg4:string,arg5:boolean):Promise<domain.Fact>;
-
 export function CreateCase(arg1:string,arg2:string,arg3:string):Promise<domain.Case>;
+
+export function CreateFact(arg1:string,arg2:string,arg3:number,arg4:string,arg5:boolean):Promise<domain.Fact>;
 
 export function CurrentCase():Promise<domain.Case>;
 
+export function DocumentAnnotations(arg1:string):Promise<Array<verify.Annotation>>;
+
 export function DownloadAndInstallLawData(arg1:Array<string>):Promise<Record<string, any>>;
+
+export function ExportReport(arg1:boolean,arg2:boolean,arg3:Array<string>):Promise<main.ExportReportResult>;
 
 export function GetLawRelations(arg1:string):Promise<Array<plugins.Relation>>;
 
@@ -48,6 +52,8 @@ export function IngestDocument(arg1:string):Promise<storage.DocumentInfo>;
 export function InstallAppUpdate():Promise<void>;
 
 export function LawDataStatus():Promise<Record<string, any>>;
+
+export function ListCaseRefs():Promise<Array<domain.CaseRef>>;
 
 export function ListCases():Promise<Array<domain.Case>>;
 
@@ -59,15 +65,11 @@ export function ListFacts():Promise<Array<domain.Fact>>;
 
 export function ListLawRefs():Promise<Array<domain.LawRef>>;
 
-export function ListCaseRefs():Promise<Array<domain.CaseRef>>;
-
 export function ListSimRounds():Promise<Array<storage.SimRound>>;
 
-export function LocalCasesStatus():Promise<Record<string, any>>;
-
-export function SearchSimilarCases(arg1:string,arg2:string,arg3:string,arg4:number,arg5:number,arg6:number,arg7:Array<string>):Promise<any>;
-
 export function LoadLawData(arg1:string):Promise<Record<string, any>>;
+
+export function LocalCasesStatus():Promise<Record<string, any>>;
 
 export function PickDocumentFile():Promise<string>;
 
@@ -78,6 +80,8 @@ export function PickLawDataPackage():Promise<string>;
 export function RedactText(arg1:string,arg2:Array<string>):Promise<redact.Result>;
 
 export function ResearchWebPage(arg1:string,arg2:Array<string>):Promise<neutral.ResearchResult>;
+
+export function ReviewCase():Promise<neutral.ReviewReport>;
 
 export function RunAggregate():Promise<Array<domain.Conflict>>;
 
@@ -94,6 +98,8 @@ export function RunSimRound(arg1:string,arg2:string,arg3:string,arg4:Array<strin
 export function SearchCaseDocs(arg1:string,arg2:number):Promise<neutral.DocSearchReport>;
 
 export function SearchLaw(arg1:string,arg2:number):Promise<Array<plugins.LawHit>>;
+
+export function SearchSimilarCases(arg1:string,arg2:string,arg3:string,arg4:number,arg5:number,arg6:number,arg7:Array<string>):Promise<neutral.CaseSearchReport>;
 
 export function SimReview():Promise<void>;
 

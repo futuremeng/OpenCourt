@@ -61,3 +61,23 @@ func TestBrowserOSDefaultsAndEnv(t *testing.T) {
 		t.Fatalf("环境变量覆盖失败: %+v", s.BrowserOS)
 	}
 }
+
+func TestOCREngineDefaultsAndEnv(t *testing.T) {
+	s := Default()
+	if s.Ingest.OCR.Engine != "none" || s.Ingest.OCR.MinConfidence != 0.6 {
+		t.Fatalf("OCR 默认必须为拒绝态: %+v", s.Ingest.OCR)
+	}
+	_ = os.Setenv("OPENCOURT_OCR_ENGINE", "tesseract")
+	_ = os.Setenv("OPENCOURT_OCR_MIN_CONF", "0.8")
+	defer func() {
+		_ = os.Unsetenv("OPENCOURT_OCR_ENGINE")
+		_ = os.Unsetenv("OPENCOURT_OCR_MIN_CONF")
+	}()
+	s, err := Load("__not_exists__.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Ingest.OCR.Engine != "tesseract" || s.Ingest.OCR.MinConfidence != 0.8 {
+		t.Fatalf("OCR 环境变量覆盖失败: %+v", s.Ingest.OCR)
+	}
+}

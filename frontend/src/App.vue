@@ -79,6 +79,54 @@ const blindspots = ref<any[]>([]);
 const requirements = ref("合同成立, 违约行为");
 const busy = ref("");
 const ingestMsg = ref("");
+const annotations = ref<Record<string, any[]>>({});
+
+async function toggleAnnotations(docID: string) {
+  if (annotations.value[docID]) {
+    const { [docID]: _drop, ...rest } = annotations.value;
+    annotations.value = rest;
+    return;
+  }
+  try {
+    annotations.value = { ...annotations.value, [docID]: await App.DocumentAnnotations(docID) };
+  } catch (e) {
+    error.value = String(e);
+  }
+}
+
+// --- M7：审校与报告 ---
+const reviewReport = ref<any | null>(null);
+const reviewBusy = ref(false);
+const exportPath = ref("");
+const exportErr = ref("");
+const rawConfirm = ref(false);
+
+async function runReview() {
+  reviewErrClear();
+  reviewBusy.value = true;
+  try {
+    reviewReport.value = await App.ReviewCase();
+  } catch (e) {
+    exportErr.value = String(e);
+  } finally {
+    reviewBusy.value = false;
+  }
+}
+
+function reviewErrClear() {
+  exportErr.value = "";
+  exportPath.value = "";
+}
+
+async function exportReport(redacted: boolean) {
+  reviewErrClear();
+  try {
+    const r = await App.ExportReport(redacted, !redacted && rawConfirm.value, nameList());
+    exportPath.value = r.path;
+  } catch (e) {
+    exportErr.value = String(e);
+  }
+}
 
 async function refreshDocs() {
   docs.value = await App.ListDocuments();
@@ -90,7 +138,9 @@ async function pickAndIngest() {
     const path = await App.PickDocumentFile();
     if (!path) return;
     const doc = await App.IngestDocument(path);
-    ingestMsg.value = `已接入 ${doc.file}（${doc.page_count} 页）。扫描件/无文本层 PDF 会被拒绝并要求 OCR。`;
+    ingestMsg.value = doc.ocr_engine
+      ? `已接入 ${doc.file}（${doc.page_count} 页，OCR:${doc.ocr_engine}——封顶弱态，低置信页需人工校对）。`
+      : `已接入 ${doc.file}（${doc.page_count} 页）。扫描件需 OCR 引擎，未配置会被拒绝。`;
     await refreshDocs();
   } catch (e) {
     error.value = String(e);
@@ -571,9 +621,19 @@ async function awaitHuman() {
       <ul class="doc-list">
         <li v-for="d in docs" :key="d.doc_id">
           {{ d.file }}（{{ d.page_count }} 页）
+          <span v-if="d.ocr_engine" class="badge warn" title="文本来自 OCR：入库封顶弱态，低置信页需人工校对">OCR:{{ d.ocr_engine }}</span>
           <button :disabled="busy === d.doc_id" @click="runReader(d.doc_id)">
             {{ busy === d.doc_id ? "阅卷中…" : "阅卷" }}
           </button>
+          <button @click="toggleAnnotations(d.doc_id)">标注</button>
+          <ul v-if="annotations[d.doc_id]?.length" class="annotations">
+            <li v-for="(a, i) in annotations[d.doc_id]" :key="i">
+              <span class="badge">{{ a.kind }}</span>
+              <b v-if="a.author">{{ a.author }}</b>
+              {{ a.text }}
+              <em v-if="a.meta" class="hint">（{{ a.meta }}）</em>
+            </li>
+          </ul>
         </li>
       </ul>
       <div v-if="readerReport" class="reader-report">
@@ -710,6 +770,31 @@ async function awaitHuman() {
     </section>
 
     <section class="panel wide">
+      <h2>审校与报告</h2>
+      <p class="hint">
+        审校为确定性检查（引用核验 / 回原文一致性 / 五态合规 / 推理链完整性），模型不参与判定；
+        报告默认脱敏导出，原样导出须显式二次确认并留审计；报告全文过输出门禁。
+      </p>
+      <div class="row">
+        <button class="primary" :disabled="reviewBusy" @click="runReview">{{ reviewBusy ? "审校中…" : "执行审校" }}</button>
+        <button @click="exportReport(true)">导出报告（脱敏）</button>
+        <label class="hint"><input type="checkbox" v-model="rawConfirm" />我知悉原样导出含未脱敏信息</label>
+        <button :disabled="!rawConfirm" @click="exportReport(false)">原样导出</button>
+      </div>
+      <p v-if="exportErr" class="error">{{ exportErr }}</p>
+      <p v-if="exportPath" class="ok-msg">已导出：{{ exportPath }}</p>
+      <div v-if="reviewReport">
+        <p>标红 <b class="rejected">{{ reviewReport.red }}</b> 项 · 提示 {{ reviewReport.warn }} 项</p>
+        <ul class="blindspots">
+          <li v-for="(iss, i) in reviewReport.issues" :key="i">
+            <b :class="{ rejected: iss.level === 'red' }">{{ iss.level === "red" ? "[标红]" : "[提示]" }}</b>
+            {{ iss.message }}（{{ iss.check }}<template v-if="iss.ref"> · {{ iss.ref }}</template>）
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="panel wide">
       <h2>事实看板（五态）</h2>
       <FactBoard :facts="facts" @changed="refresh" />
     </section>
@@ -747,6 +832,8 @@ async function awaitHuman() {
 .doc-list { font-size: 13px; padding-left: 18px; }
 .doc-list li { margin: 4px 0; }
 .doc-list button { margin-left: 8px; }
+.annotations { margin: 4px 0; padding-left: 16px; font-size: 12px; color: #a06b00; }
+.annotations li { margin: 2px 0; }
 .reader-report { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 12px; font-size: 13px; }
 .reader-report .rejected { color: #b91c1c; }
 .timeline { font-size: 13px; padding-left: 20px; }

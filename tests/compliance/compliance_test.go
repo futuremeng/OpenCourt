@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/futuremeng/OpenCourt/core/domain"
 	"github.com/futuremeng/OpenCourt/core/gate"
@@ -479,5 +480,72 @@ func TestHybridSearchDegradesExplicitly(t *testing.T) {
 	}
 	if rep.Mode != neutral.SearchModeKeywordOnly || !strings.Contains(rep.Note, "未启用语义召回") {
 		t.Errorf("离线默认必须显式标注降级: %+v", rep)
+	}
+}
+
+// OCR 纪律（plan-v0.4 D1/O1）：
+//   - 扫描件绝不绕过 OCR 直接入库（引擎缺失 = 明确拒绝）；
+//   - OCR 文本入库上限弱态（状态机拒绝进入已溯源确认）；
+//   - 引擎不可用不得静默降级到其他引擎。
+func TestOCRCompliance(t *testing.T) {
+	dir := t.TempDir()
+	img := filepath.Join(dir, "scan.png")
+	if err := os.WriteFile(img, []byte("fake-png"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// 1) 引擎缺失：图片必须被拒绝，错误必须指向 OCR。
+	r := ingest.NewRegistry()
+	if _, err := r.Parse(img); err == nil || !strings.Contains(err.Error(), "OCR") {
+		t.Fatalf("未配置引擎时扫描件必须明确拒绝: %v", err)
+	}
+	// 2) 指定引擎不可用：维持拒绝，不降级。
+	if eng, note := ingest.DetectOCR(ingest.OCRConfig{
+		Engine: "tesseract", Path: filepath.Join(dir, "missing-bin"),
+	}); eng != nil || note == "" {
+		t.Errorf("引擎不可用必须维持拒绝并说明: %v %q", eng, note)
+	}
+	// 3) OCR 文本封顶弱态：三条件全满足也进不了强态。
+	err := statemachine.ArbitrateUpgrade(statemachine.UpgradeRequest{
+		Fact:               domain.Fact{FactID: "F1", State: domain.StateSingleSource},
+		Target:             domain.StateTracedConfirmed,
+		EvidenceImported:   true,
+		LocatedInSource:    true,
+		NoInternalConflict: true,
+		SourceFromOCR:      true,
+	})
+	if err == nil {
+		t.Fatal("OCR 来源事实禁止进入已溯源确认")
+	}
+}
+
+// TestReportCompliance 报告导出合规（plan-v0.4 M7/D3）：弱态事实出现在
+// 报告事实段落即失败；免责头部固定；报告全文必过门禁。
+func TestReportCompliance(t *testing.T) {
+	in := neutral.ReportInput{
+		CaseTitle: "合规案", CaseID: "CASE-C", GeneratedAt: time.Unix(0, 0).UTC(),
+		Facts: []domain.Fact{
+			{FactID: "F1", Description: "强态：合同已签订", State: domain.StateTracedConfirmed,
+				Citation: &domain.Citation{SourceFile: "a.txt", PageNum: 1, Snippet: "签订"}},
+			{FactID: "F2", Description: "弱态：单方陈述的交付", State: domain.StateSingleSource},
+			{FactID: "F3", Description: "对方主张：已还款", State: domain.StateOpponentClaim},
+		},
+	}
+	md := neutral.RenderMarkdown(in)
+	factSection := md[strings.Index(md, "## 一、事实清单"):strings.Index(md, "## 二、")]
+	for _, weak := range []string{"单方陈述的交付", "已还款"} {
+		if strings.Contains(factSection, weak) {
+			t.Fatalf("弱态事实进入报告事实段落（合规违例）：%s", weak)
+		}
+	}
+	if !strings.Contains(md, neutral.Disclaimer) {
+		t.Fatal("报告免责头部缺失")
+	}
+	// 报告也是输出：拼装文本含倾向性表述必须被 gate 拦截。
+	tainted := md + "\n综上，被告必然败诉。\n"
+	if v := gate.CheckGuidance(tainted); len(v) == 0 {
+		t.Fatal("报告层门禁未拦截倾向性表述")
+	}
+	if v := gate.CheckGuidance(md); len(v) != 0 {
+		t.Fatalf("合规报告文本不应被门禁误拦: %+v", v)
 	}
 }

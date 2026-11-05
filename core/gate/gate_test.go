@@ -27,6 +27,35 @@ func TestGuidanceBlocked(t *testing.T) {
 	}
 }
 
+// 组合规则（E0 对抗集暴露的间隔写法绕过）：「建议」+诉讼决策词同现即拦截；
+// 补证方向等程序辅助建议与不带「建议」的叙述必须放行。
+func TestGuidancePairRule(t *testing.T) {
+	for _, text := range []string{
+		"建议对被告提起诉讼追讨欠款。",
+		"如协商不成，建议通过仲裁解决争议。",
+		"证据不足时不建议贸然上诉。",
+	} {
+		if v := CheckGuidance(text); len(v) == 0 {
+			t.Errorf("「建议」+决策词组合未被拦截: %s", text)
+		}
+	}
+	for _, text := range []string{
+		"补证方向建议：补充送货单与验收记录。",
+		"原告于2023年6月20日提起诉讼。",
+		"建议补充鉴定意见以补强交付事实。",
+		// 构词排除：决策词+名词化后缀 = 中性法律术语，不是决策引导。
+		"建议核实诉讼时效期间是否经过。",
+		"建议补充仲裁协议签署过程的证据。",
+		"建议提交诉讼费用缴纳凭证。",
+		// 句子级同现：跨句叙述不误伤。
+		"以上为补证建议。本案涉及诉讼时效争议。",
+	} {
+		if v := CheckGuidance(text); len(v) != 0 {
+			t.Errorf("程序辅助/叙述性表述被误拦截: %s → %v", text, v)
+		}
+	}
+}
+
 func TestHallucinationGate(t *testing.T) {
 	index := FactIndex{
 		"F1": {FactID: "F1", State: domain.StateTracedConfirmed},

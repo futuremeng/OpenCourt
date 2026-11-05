@@ -101,14 +101,22 @@ make build      # 产出安装包：build/bin/OpenCourt.app（macOS）/.msi/.App
   SDK，效力状态透传 `effect_status`，OL 错误码原样上浮）；**类案检索**（LocalCases
   回环手动通道，LC-6 发现文件就绪前 UI 已标注；要旨永不进强态 + 固定标注）；
   **按案由要件匹配**（要件名封闭候选集，集外一律置空）；文档接入（文本 / 文本型
-  PDF）与阅卷 Agent、时间线与盲区；法条数据应用内分发与自更新（macOS）；
+  PDF）与阅卷 Agent、时间线与盲区；**扫描件/图片 OCR**（`ingest.ocr.engine`：
+  macOS Vision / Tesseract 本地引擎，默认 none 明确拒绝；OCR 文本入库封顶弱态、
+  低置信页标黄需人工校对，绝不由模型自动改字）；**Word/docx 解析**（纯 Go；
+  修订痕迹与批注作独立标注区块上浮、不作正文引用来源；表格线性化标注；
+  内嵌图片走 OCR 管道）；**审校与报告导出**（五项确定性审校检查，模型零参与；
+  Markdown 报告默认脱敏导出、原样导出需二次确认并留审计；报告全文过输出门禁）；
+  法条数据应用内分发与自更新（macOS）；
   BrowserOS 网络查阅与网上立案辅助（两段式，默认禁用）；OpenAI 兼容模型接口
   （默认禁用）
-- **尚不可用**：扫描件 OCR（接口就位，引擎未接）、Word/docx 解析、模型真机评测、
+- **尚不可用**：模型真机评测、
   向量混合检索与对抗推演 / 庭审流程 / 审校报告（v0.3 计划，见
   [docs/roadmap-next.md](docs/roadmap-next.md) M5–M8）、跨部署交换包
-- **未做验收**：开发文档 11.1 的「100 份真实判决书、幻觉率 < 1%、溯源准确率 > 98%」
-  评测尚未执行
+- **验收进度**：门禁对抗集 runner 已就位（`make eval`，18 条样本，误拦率/漏拦率
+  均 0.00%，报告见 `tests/eval/`）；开发文档 11.1 的模型阅卷指标（100 份真实
+  判决书、幻觉率 < 1%、溯源准确率 > 98%）**尚未运行**——需显式启用模型与
+  LocalCases 后 `make eval`（流程见 `tests/eval/README.md`），结果如实进本清单
 - **请勿用于真实案件**。macOS 构建为自签名，首次打开需右键 → 打开（或
   `xattr -dr com.apple.quarantine /Applications/OpenCourt.app`）
 
@@ -122,6 +130,8 @@ make build      # 产出安装包：build/bin/OpenCourt.app（macOS）/.msi/.App
 - 架构文档：[docs/architecture.md](docs/architecture.md)
 - 下一阶段规划（庭审模拟与案件推演方向，盘点 + 里程碑 M1–M8）：
   [docs/roadmap-next.md](docs/roadmap-next.md)
+- **v0.4 实施方案（提案：评测前置 + 真实卷宗接入 + 报告导出 + 法院场景包）**：
+  [docs/plan-v0.4.md](docs/plan-v0.4.md)
 - **v0.2 实施方案（已定案：案件实体 + 法条链路 + 类案接入）**：
   [docs/plan-v0.2.md](docs/plan-v0.2.md)
 - 跨项目对接契约：[docs/openlaw-integration.md](docs/openlaw-integration.md) ·

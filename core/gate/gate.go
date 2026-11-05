@@ -57,6 +57,15 @@ var blockedGuidance = []struct {
 }
 
 // CheckGuidance 检测文本中的倾向性/预测性/裁判性表述。
+// 组合规则：精确词组可被「建议对被告提起诉讼」这类间隔写法绕过——
+// 同一句内「建议」+决策词同现即拦截（决策词表刻意不含「举证/补证」等
+// 程序辅助词，补证方向是合法输出，不受影响）。两道去误伤约束：
+//  1. 句子级同现——「建议」与决策词必须落在同一句，跨句叙述不误伤；
+//  2. 构词排除——决策词后紧跟名词化后缀（诉讼时效/仲裁协议等）时是
+//     中性法律术语而非决策引导，该处出现不计入同现。
+//
+// 已知残余风险：「建议签订仲裁协议」这类「决策动词+名词化术语」组合
+// 会漏拦——排除表刻意保持最小，宁可漏拦边缘句式，不可误伤正常补证。
 func CheckGuidance(text string) []Violation {
 	violations := make([]Violation, 0)
 	for _, b := range blockedGuidance {
@@ -68,7 +77,93 @@ func CheckGuidance(text string) []Violation {
 			})
 		}
 	}
+	alreadyGuidance := false
+	for _, v := range violations {
+		if v.Rule == "NO_GUIDANCE" {
+			alreadyGuidance = true
+			break
+		}
+	}
+	if !alreadyGuidance {
+		if w := guidancePairWord(text); w != "" {
+			violations = append(violations, Violation{
+				Rule:    "NO_GUIDANCE",
+				Phrase:  "建议…" + w,
+				Message: "检测到「建议」与诉讼决策词同现：系统不引导是否起诉/上诉/调解等决策，必须改写为中立的事实与补证方向陈述",
+			})
+		}
+	}
 	return violations
+}
+
+// adviceDecisionWords 「建议」同现即拦截的诉讼决策词（不含举证/补证等程序辅助词）。
+var adviceDecisionWords = []string{"起诉", "诉讼", "上诉", "撤诉", "调解", "仲裁"}
+
+// decisionWordTermSuffixes 决策词后紧跟这些后缀时构成中性法律术语
+// （诉讼时效/诉讼保全/仲裁协议/仲裁委员会……），该处不算决策引导。
+// 刻意最小化：诉讼程序/调解协议等两读搭配不进排除表，留给拦截侧。
+var decisionWordTermSuffixes = map[string][]string{
+	"起诉": {"状"},
+	"诉讼": {"时效", "保全", "费用", "费", "主体", "地位", "请求", "法"},
+	"仲裁": {"协议", "条款", "委员会", "机构", "规则", "裁决", "法"},
+	"调解": {"委员会"},
+}
+
+// sentenceSplitChars 句子边界（中英标点均覆盖）。
+var sentenceSplitChars = []rune{'。', '！', '？', '；', ';', '!', '?', '\n'}
+
+// guidancePairWord 返回首个在「建议」同句内以决策语义出现的决策词；
+// 无命中返回空串。
+func guidancePairWord(text string) string {
+	for _, sent := range splitSentences(text) {
+		if !strings.Contains(sent, "建议") {
+			continue
+		}
+		for _, w := range adviceDecisionWords {
+			if decisionWordInDecisionSense(sent, w) {
+				return w
+			}
+		}
+	}
+	return ""
+}
+
+func splitSentences(text string) []string {
+	out := []string{}
+	start := 0
+	for i, r := range text {
+		for _, s := range sentenceSplitChars {
+			if r == s {
+				out = append(out, text[start:i])
+				start = i + len(string(r))
+				break
+			}
+		}
+	}
+	return append(out, text[start:])
+}
+
+// decisionWordInDecisionSense 判断决策词是否以决策语义出现：
+// 每一处出现都紧跟名词化后缀 → 纯术语，返回 false；任一处不跟 → true。
+func decisionWordInDecisionSense(text, word string) bool {
+	for i := 0; ; {
+		j := strings.Index(text[i:], word)
+		if j < 0 {
+			return false
+		}
+		k := i + j + len(word)
+		excluded := false
+		for _, suf := range decisionWordTermSuffixes[word] {
+			if strings.HasPrefix(text[k:], suf) {
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			return true
+		}
+		i = k
+	}
 }
 
 // FactIndex 按 ID 索引的事实集合，供门禁做实体落地检查。

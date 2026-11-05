@@ -72,11 +72,13 @@ type FilteredCaseSource interface {
 }
 
 // LocalCasesHealth 就绪探测结果（LC-7 未就绪时 Version 为空 = 版本未知，
-// 功能可用但界面标注）。
+// 功能可用但界面标注；LC-8 未就绪时 CorpusDigest 为空 = 语料快照标识缺失，
+// 评测等场景必须如实标注复现性受限，不得静默）。
 type LocalCasesHealth struct {
 	OK               bool
 	Version          string
 	IndexedDocuments int64
+	CorpusDigest     string // LC-8：语料内容稳定哈希，语料不变则不变
 }
 
 // LocalCasesSource 类案源插件（外部可选组件，默认禁用；与 BrowserOS 同纪律：
@@ -129,11 +131,55 @@ func (s *LocalCasesSource) Health(ctx context.Context) (LocalCasesHealth, error)
 		OK               bool   `json:"ok"`
 		Version          string `json:"version"`
 		IndexedDocuments int64  `json:"indexed_documents"`
+		CorpusDigest     string `json:"corpus_digest"` // LC-8，缺字段 = 未就绪
 	}
 	if err := s.getJSON(ctx, s.baseURL+"/api/health", &resp); err != nil {
 		return LocalCasesHealth{}, err
 	}
-	return LocalCasesHealth{OK: resp.OK, Version: resp.Version, IndexedDocuments: resp.IndexedDocuments}, nil
+	return LocalCasesHealth{OK: resp.OK, Version: resp.Version,
+		IndexedDocuments: resp.IndexedDocuments, CorpusDigest: resp.CorpusDigest}, nil
+}
+
+// CaseTextDoc 整条记录的正文取回结果（GET /api/case/{id}，LC-10）。
+// Text 必须是全文无截断——评测 runner 对 Text 计算 sha256 与 manifest 比对。
+type CaseTextDoc struct {
+	ID     int64
+	CaseID string
+	URL    string
+	Source string
+	Text   string
+}
+
+// GetCaseText 按 LocalCases 内部 id 取文书正文（评测集逐条回源取文，
+// 契约见 docs/localcases-integration.md §8 LC-10）。只读回源：不建本地
+// 语料副本、不再召回。正文缺失（record.text 为空）时报错并指明 LC-10
+// 未就绪，绝不以 preview 截断文冒充全文。
+func (s *LocalCasesSource) GetCaseText(ctx context.Context, id int64) (CaseTextDoc, error) {
+	if !s.Enabled() {
+		return CaseTextDoc{}, fmt.Errorf("%s", LocalCasesGuidance)
+	}
+	var resp struct {
+		Record struct {
+			ID      int64  `json:"id"`
+			CaseID  string `json:"case_id"`
+			URL     string `json:"url"`
+			Source  string `json:"source"`
+			Text    string `json:"text"`
+			TextLen int    `json:"text_len"`
+		} `json:"record"`
+	}
+	u := fmt.Sprintf("%s/api/case/%d", s.baseURL, id)
+	if err := s.getJSON(ctx, u, &resp); err != nil {
+		return CaseTextDoc{}, err
+	}
+	if strings.TrimSpace(resp.Record.Text) == "" {
+		return CaseTextDoc{}, fmt.Errorf(
+			"LocalCases 未返回 %d 的正文全文（record.text 为空）：LC-10 未就绪，拒绝以 preview 截断文冒充全文", id)
+	}
+	return CaseTextDoc{
+		ID: resp.Record.ID, CaseID: resp.Record.CaseID,
+		URL: resp.Record.URL, Source: resp.Record.Source, Text: resp.Record.Text,
+	}, nil
 }
 
 // SearchCases 实现 CaseSourcePlugin：关键词检索（映射到 CaseHit 三字段）。

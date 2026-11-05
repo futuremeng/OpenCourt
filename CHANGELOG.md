@@ -4,7 +4,94 @@
 
 ## Unreleased（v0.3 M6 开发中）
 
+### 加固
+- **v0.4 工作集代码 review 加固轮**：① **D1 生产接线**——`App.UpgradeFact`
+  升级仲裁前经 `storage.IsOCRSource` 反查来源文档 OCR 标记置
+  `SourceFromOCR`（此前该字段只在测试中置位，生产升级路径 OCR 事实可进
+  强态；查询失败 fail-closed 拒绝升级），App 级用例
+  `TestUpgradeFactOCRCapped` 走生产入口锁定；② **门禁组合规则去误伤**——
+  「建议」+决策词改为**同句**同现且决策词后紧跟名词化后缀（诉讼时效/
+  仲裁协议/起诉状等）不计入同现，「建议核实诉讼时效…」等补证方向不再
+  误拦，对抗集补 3 条必放样本（21 条，误拦/漏拦均 0）；③ **审校红项阻断
+  导出落地**——`ExportReport` 兑现「Red>0 必须阻断」不变量（红项拒绝
+  导出 + `REPORT_EXPORT_BLOCKED` 审计；原样导出自身的红项标注发生在阻断
+  之后不受影响），并修正脱敏顺序（先并入复查说明再渲染、对最终全文
+  脱敏）——导出报告必带「脱敏复查」说明；④ **扫描 PDF 取图**——按页
+  归组（同页多内嵌图拼接为一页，不再因取图数≠页数误拒整文档；缺图像层
+  的页明确拒绝），临时目录经 cleanup 回收不再泄漏，页置信度取各图最低值；
+  ⑤ **tesseract 词间拼接**——相邻 ASCII 词补空格（中文逐字不插），
+  中英混排不再粘连且不影响回原文定位；⑥ 收敛近重复：删除
+  `OCRParser.LowConfidencePages` 与各解析器无人消费的 `MinConfidence`
+  字段，低置信判定单一落在 `Registry.LowConfidencePages`；
+  `migrateOCREngine` 列顺序确定化；docx「整档封顶弱态」保守推论注释补全
+
 ### 新增
+- **M7 审校与报告导出（v0.4 方案，plan-v0.4 D3）**：`neutral/review.go` 审校
+  五项**确定性**检查（模型零参与）——法条引用核验透传判定（未核验 warn /
+  核验失败红）、事实引用回原文一致性（`verify.Locate` 失败或强态缺坐标即红）、
+  五态合规（「无依据」事实入库即红）、推理链完整性（轮次结论必须可回溯到
+  存在的事实，被拦截轮除外）、未解决冲突上浮；`neutral/report.go` Markdown
+  报告确定性拼装——固定免责头部「AI 辅助整理，不构成裁判或法律意见」、
+  **强态才进事实段落**（弱态一律进「待人工确认清单」）、缺来源结论显式
+  `**[缺来源]**` 标红、冲突原样并列不消解、盲区只给「无法判断 + 补证方向」、
+  模拟轨迹含被拦截轮标注；绑定 `ReviewCase` / `ExportReport`——**导出默认
+  脱敏**（脱敏零命中时上浮「请确认脱敏名单完整」），原样导出必须显式二次
+  确认（`confirmRaw`）并写 `REPORT_EXPORT_RAW` 审计，两种导出均留痕；
+  **报告也是输出**：导出全文过 `gate.CheckGuidance`，倾向性表述在报告层
+  二次拦截（拒绝导出 + `REPORT_EXPORT_BLOCKED` 审计）；前端「审校与报告」
+  面板（审校结果红/黄分层 + 脱敏导出 + 勾选确认的原样导出）；合规用例
+  `TestReportCompliance` 锁定「弱态事实出现在报告事实段落即失败」
+- **O2 docx 解析（v0.4 方案，plan-v0.4 D2）**：`core/ingest/docx.go` 纯 Go
+  `archive/zip` + `encoding/xml`（零新依赖、零 CGO）——修订痕迹（`w:ins`/`w:del`）
+  与批注（`w:comment`）**保留为独立标注区块**（`verify.DocumentText.Annotations`）
+  上浮，**不进正文文本层**：回原文定位（`verify.Locate`）对标注文本一律失败，
+  标注只能作证据线索、不能作事实的正文引用来源（不自动采信）；表格线性化为
+  文本并标注「表格已线性化」；内嵌图片走 OCR 管道——未配置引擎**只拒绝该图**
+  并标注原因，正文照常入库（图片识别不了不等于文档读不了，但绝不静默丢弃），
+  识别成功进第 2 页起顺排并带置信度；损坏 zip / 缺 `word/document.xml` /
+  空正文一律明确报错，`.doc` 与 OLE 伪装 `.docx` 给出「另存为 .docx」的
+  可执行指引；zip 炸弹防护（单条目 64MB 解压上限）；`documents` 表新增
+  `annotations_json` 列（幂等迁移，存量文档按无标注处理不猜测）、
+  `SaveDocumentFull` 保存解析产出全部语义（OCR 标记 + 标注）往返不丢；
+  前端卷宗行「标注」按钮展开独立标注区块（kind 徽章 + 作者 + 线索说明）；
+  绑定 `DocumentAnnotations`；测试锁定：修订/批注不进正文且 Locate 必失败、
+  正文可定位、表格线性化、损坏/伪装明确报错、内嵌图 OCR 管道与
+  Registry/SetOCR 装配注入
+- **O1 OCR 引擎接入（v0.4 方案，plan-v0.4 D1）**：`core/ingest` 两个本地引擎
+  adapter——`ocr_vision.go`（macOS 系统 Vision，经极小 Swift helper
+  subprocess，`scripts/ocr_helper/main.swift` + `scripts/build-ocr-helper.sh`，
+  本机中文识别冒烟通过）、`ocr_tesseract.go`（本机 tesseract `--tsv`，词级
+  置信度取均值，跨平台兜底）；`ocr_detect.go` 探测顺序 = 显式指定 → Vision
+  helper → PATH tesseract → 无（扫描件维持明确拒绝，**指定引擎不可用绝不
+  降级到其他引擎**）；扫描型 PDF 经 `pdf_images.go`（pdfcpu 纯 Go 抽每页内嵌
+  图，零 CGO/PDFium）逐页 OCR，任一页失败或空白即整体拒绝——部分入库会让
+  回原文定位出现无法解释的空页，比拒绝更危险；`config` 新增
+  `ingest.ocr.engine/path/lang/min_confidence`（默认 engine=none 安全默认，
+  `OPENCOURT_OCR_*` 环境变量覆盖）；`verify.DocumentText` 带 OCR 标记与逐页
+  置信度，`documents` 表新增 `ocr_engine` 列（幂等迁移，存量文档一律按非 OCR
+  处理不猜测）；**D1 硬纪律**：`statemachine` 拒绝 OCR 来源事实进入
+  「已溯源确认」——OCR 文本入库上限「单源未补强」，纠正只允许人工编辑后
+  重新核验，绝不由模型自动改字；低置信页（默认 <0.6）审计留痕并上浮 UI，
+  前端卷宗面板 OCR 徽章；合规用例 `TestOCRCompliance` 锁死三纪律（扫描件
+  不得绕过 OCR / OCR 文本封顶弱态 / 引擎缺失明确报错）。RapidOCR 高精度
+  sidecar 按 D1 决策留 v0.5；helper 随 .app 打包（`Contents/Resources/`）
+  待分发脚本接入
+- **E0 评测 runner 与门禁对抗集（v0.4 方案，roadmap M8 前移）**：`eval/`（新包）
+  门禁对抗集 18 条（必拦 10 / 必放 8，含 D6 固定标注措辞必放用例）对
+  `gate.CheckGuidance` 出**误拦率/漏拦率**数字——离线确定性，`make eval` 即跑，
+  基线报告 `tests/eval/report-2026-11-04.md`：误拦 0.00% / 漏拦 0.00%；模型阅卷
+  指标（逃逸幻觉率 <1%、溯源准确率 >98%）走 **LocalCases 正常对接通道**——
+  manifest 固化 id 清单 + sha256，逐条 `/api/case/{id}` 回源取文（LC-10），
+  语料快照记 `corpus_digest`（LC-8，缺失时如实标注复现性受限）；正文与清单
+  sha256 不一致即**剔除并计数**（评测集改版 evalset vN，不静默换集）；模型/类案源
+  未启用时报告显式「未运行 + 原因」，绝不静默出假数字；`plugins` 补
+  `GetCaseText` 与 health `corpus_digest` 解析；评测器与生产共用同一
+  `verify.Locate`/`gate` 判定，不引入第二套标准。提给 LocalCases 的契约项
+  LC-8/LC-9/LC-10 见 localcases-integration.md §8
+- **gate 组合规则（对抗集暴露的真实缺口）**：「建议」与起诉/诉讼/上诉/撤诉/调解/
+  仲裁同现即拦截——堵住「建议对被告提起诉讼」这类间隔写法绕过精确词表；
+  补证方向类程序建议（不含决策词）与叙述性「原告提起诉讼」明确放行
+  （`TestGuidancePairRule` 正反用例锁定）
 - **对抗推演与庭审流程引擎（v0.3 M6，roadmap-next M6 / 开发文档 2.2、3.6、3.7）**：`core/flow`（新包）庭审阶段状态机（STATEMENT→EVIDENCE→DEBATE→FINAL）——阶段推进由确定性代码硬守卫（`AdvanceGuard`/`CheckPhaseEntry`）：当事人陈述无有效轮次或事实库无任何「有证据支撑」状态即不得进质证（无证据不进质证）、质证/辩论未完成不得进下一阶段、跳跃阶段一律拒绝（`ErrSkipPhase`），不靠提示词约定；`adversary/simulate.go` `Simulator` 实现 `OpponentSimulator`——对方模拟输入按 `Visibility` 硬过滤（`ViewFor`：本方保密材料在数据层进不了 prompt，不是 UI 隐藏；COURT_ONLY 对任何一方模拟不可见），模型未启用显式报错（`ErrModelDisabled`，绝不用模板/规则冒充「AI 模拟对方」），每条攻击点候选必须带 `fact_ids` 且过 `gate.Check`（无来源即拦截，`Blocked` 条目照常上浮不静默丢弃）；`adversary/drift.go` `LexicalDrift` 规则式立场漂移检测（极性词对确定性比对，漂移报警不依赖另一个会漂移的模型）；`neutral/moderator.go` `SummarizeIssues` 中立争点归纳——事实按要件分组、未消解冲突原样并列挂争点下不代作取舍、「对方主张」只标注不采信、要件缺失直通证据缺口不自动补全；App 绑定 `RunSimRound`（阶段守卫→发言门禁→立场漂移比对→对方模拟→轨迹监控；被拦截轮次也入库留痕但不计阶段完成度，审计 `SIM_ROUND`/`SIM_ROUND_BLOCK`/`SIM_GUARD_BLOCK`/`SIM_DRIFT`）、`SimReview`（轨迹抖动停止自动续演后恢复的唯一出口）、`SimStatus`、`ListSimRounds`、`SummarizeCaseIssues`；`core/storage` 新增 `sim_rounds` 表（轮次留痕挂 `case_id`，被拦截轮次可追溯）；`TrajectoryMonitor` 接入——连续翻转且均无新证据即触发人工复核（有新证据支撑的立场变化不触发）；法院/当事人 Profile 经 `disabled_tools: defense_rehearsal` 默认拒绝；全程固定免责标注「这是模拟推演，不是审判结果预测」；前端「推演」面板 `SimPanel.vue`（阶段完成度、轮次轨迹含被拦截轮、攻击点候选 Blocked 标红、漂移/待复核告警、争点归纳并列视图）；合规用例先行：本方保密材料不得进对方 prompt（prompt 捕获断言）、无 fact_ids/引用「无依据」发言拦截、倾向性攻击点拦截待改写、流程硬守卫四态、抖动无新证据必触发人工复核、立场极性翻转报警、争点归纳中立性、法院 Profile 禁用推演工具
 
 - **本案卷宗混合检索（v0.3 M5，roadmap-next M5 / plan-v0.2 V2 收窄落地）**：`core/storage` 新增 `embeddings` 表（页级向量 BLOB + dim + text_hash + model，挂 `case_id`，`(case,doc,page,model)` 唯一——跨案件天然隔离、模型间向量空间不混用）；`core/retrieve` 补暴力余弦 `VectorSearch`（纯 Go，不引外部向量库）与 `FuseRRF`（RRF k=60 只取排名，分数尺度免疫；关键词/向量/融合三处同分一律按 Ref 升序——结果可复现是验收项）；`neutral/caseindex.go`：`IndexCasePages`（text_hash 未变跳过、改文只重嵌缺页）+ `SearchCaseDocs`（关键词榜+向量榜→RRF；降级四态——模型未启用/不支持 embedding/索引未建/运行期失败——一律 `Mode=keyword_only` 并 Note 显式说明原因，绝不静默冒充向量化过）；App 绑定 `SearchCaseDocs`/`CaseIndexStatus`（审计 `DOC_SEARCH`/`DOC_SEARCH_FAIL`，记录实际召回路径与向量新建/复用数）；前端「卷宗检索」面板（语义召回徽章、降级黄标、命中来源 keyword/vector 标注、页码定位）；**范围纪律**：只搜本案卷宗——法条归 OpenLaw、类案归 LocalCases，检索结果只是候选，无任何写事实库路径、永不产生五态变化（合规用例锁死）；单测/合规：RRF 融合可复现、模型/案件双隔离、text_hash 增量、四态降级标注、检索零写事实零改状态

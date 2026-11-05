@@ -22,6 +22,10 @@ func main() {
 	if err := config.LoadDotEnv(".env"); err != nil {
 		log.Fatalf(".env 加载失败: %v", err)
 	}
+	if len(os.Args) > 1 && os.Args[1] == "eval" {
+		runEval(os.Args[2:])
+		return
+	}
 	settings, err := config.Load("config/settings.yaml")
 	if err != nil {
 		log.Fatalf("配置加载失败: %v", err)

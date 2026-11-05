@@ -30,6 +30,7 @@ type UpgradeRequest struct {
 	EvidenceImported   bool // 本方是否导入了新材料
 	LocatedInSource    bool // 核验器是否能在原文定位（verify 模块的确定性结果）
 	NoInternalConflict bool // 汇聚器确认无内部矛盾
+	SourceFromOCR      bool // 来源卷宗为 OCR 产出（D1：OCR 文本永不进强态）
 }
 
 // ArbitrateUpgrade 按“证据驱动升级”规则仲裁状态变更（开发文档 3.2 规则 1）：
@@ -45,6 +46,10 @@ func ArbitrateUpgrade(req UpgradeRequest) error {
 
 	switch req.Target {
 	case domain.StateTracedConfirmed:
+		// D1 纪律：OCR 输出是识别不是识别原文——引擎可能错字，封顶弱态。
+		if req.SourceFromOCR {
+			return fmt.Errorf("拒绝升级到「已溯源确认」：来源文本由 OCR 产出，入库上限为「单源未补强」（D1：不得由模型自动改字，纠正只允许人工编辑后重新核验）")
+		}
 		// 唯一路径：本方导入新材料 且 核验器能在原文定位 且 无内部矛盾。
 		if !req.EvidenceImported {
 			return fmt.Errorf("拒绝升级到「已溯源确认」：未导入新证据，状态只能靠证据升级，不能靠推理升级")

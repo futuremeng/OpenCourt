@@ -202,6 +202,18 @@ func (a *App) startup(ctx context.Context) {
 		settings.Model.Enabled,
 	)
 	a.ingest = ingest.NewRegistry()
+	// OCR 引擎（O1/D1）：默认 none——扫描件明确拒绝；auto 探测
+	// macOS Vision helper → PATH tesseract。引擎缺失绝不静默放行。
+	ocrEngine, ocrNote := ingest.DetectOCR(ingest.OCRConfig{
+		Engine: settings.Ingest.OCR.Engine,
+		Path:   settings.Ingest.OCR.Path,
+		Lang:   settings.Ingest.OCR.Lang,
+	})
+	if ocrNote != "" {
+		log.Println("OCR:", ocrNote)
+		_ = a.auditLog.Log(settings.Profile.Active, "OCR_UNAVAILABLE", "ingest", ocrNote)
+	}
+	a.ingest.SetOCR(ocrEngine, ingest.ExtractEmbeddedImages)
 
 	// OpenLaw 法条源（M4 对接）：进程内 sdk，禁止直连数据库；未配置 → nil 降级。
 	// 打开失败不阻断启动（法条检索不可用 + 审计留痕），其余功能不受影响。

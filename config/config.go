@@ -58,6 +58,17 @@ type Settings struct {
 		TokenEnv string `yaml:"token_env"` // 例 LOCALCASES_TOKEN；token 只经环境变量注入
 		Enabled  bool   `yaml:"enabled"`
 	} `yaml:"localcases"`
+	// Ingest 文档接入。OCR（plan-v0.4 D1）：默认 none——扫描件/图片明确拒绝；
+	// auto = 探测（macOS Vision helper → PATH tesseract）；指定引擎不可用时
+	// 维持拒绝，绝不降级。引擎全部本地进程，无任何网络路径。
+	Ingest struct {
+		OCR struct {
+			Engine        string  `yaml:"engine"`         // none(默认)/auto/vision/tesseract
+			Path          string  `yaml:"path"`           // 引擎二进制/helper 路径（可选）
+			Lang          string  `yaml:"lang"`           // tesseract 语言包（默认 chi_sim+eng）
+			MinConfidence float64 `yaml:"min_confidence"` // 低置信黄标阈值（默认 0.6）
+		} `yaml:"ocr"`
+	} `yaml:"ingest"`
 	// App 程序自身更新（GitHub Releases latest API；空 = 关闭自动检查）。
 	App struct {
 		UpdateAPI string `yaml:"update_api"`
@@ -87,6 +98,9 @@ func Default() *Settings {
 	// （发布流程由 scripts/package-lawdata.sh 生成并上传；镜像用 index_url 覆盖）。
 	s.OpenLaw.IndexURL = "https://github.com/futuremeng/OpenLaw/releases/latest/download/index.json"
 	s.App.UpdateAPI = "https://api.github.com/repos/futuremeng/OpenCourt/releases/latest"
+	// OCR 默认 none：扫描件/图片明确拒绝（安全默认）；黄标阈值 0.6。
+	s.Ingest.OCR.Engine = "none"
+	s.Ingest.OCR.MinConfidence = 0.6
 	return s
 }
 
@@ -181,6 +195,20 @@ func (s *Settings) applyEnv() {
 	}
 	if v, ok := get("LOCALCASES_ENABLED"); ok {
 		s.LocalCases.Enabled = parseBool(v)
+	}
+	if v, ok := get("OCR_ENGINE"); ok {
+		s.Ingest.OCR.Engine = v
+	}
+	if v, ok := get("OCR_PATH"); ok {
+		s.Ingest.OCR.Path = v
+	}
+	if v, ok := get("OCR_LANG"); ok {
+		s.Ingest.OCR.Lang = v
+	}
+	if v, ok := get("OCR_MIN_CONF"); ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			s.Ingest.OCR.MinConfidence = f
+		}
 	}
 	if v, ok := get("OPENLAW_INDEX_URL"); ok {
 		s.OpenLaw.IndexURL = v

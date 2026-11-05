@@ -7,7 +7,7 @@ VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null)
 LD := $(if $(VERSION),-ldflags="-X main.version=$(VERSION)",)
 GOFILES := $(shell git ls-files '*.go')
 
-.PHONY: setup dev build build-all test test-fast lint typecheck fmt clean ci
+.PHONY: setup dev build build-all test test-fast lint typecheck fmt clean ci eval
 
 setup:
 	go install github.com/wailsapp/wails/v2/cmd/wails@$(WAILS_VERSION)
@@ -45,6 +45,11 @@ fmt:
 
 # 与 ci.yml 等价的本地门禁
 ci: lint test typecheck
+
+# E0 评测：门禁对抗集（离线确定性）+ 模型阅卷指标（需显式启用模型与 LocalCases，
+# 未启用时报告如实标注「未运行」）。详见 tests/eval/README.md。
+eval:
+	go run ./scripts/modelcheck eval
 
 clean:
 	rm -rf build/bin frontend/dist/assets

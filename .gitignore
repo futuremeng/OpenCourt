@@ -25,3 +25,6 @@ data/
 .vscode/settings.local.json
 
 .vscode/chrome-profile/
+
+# OCR helper 为本地编译产物（源码 scripts/ocr_helper/main.swift，构建用 scripts/build-ocr-helper.sh）
+scripts/ocr_helper/ocr_helper

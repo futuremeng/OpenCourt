@@ -50,20 +50,28 @@ export function CheckOutput(arg1) {
   return window['go']['main']['App']['CheckOutput'](arg1);
 }
 
-export function CreateFact(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['main']['App']['CreateFact'](arg1, arg2, arg3, arg4, arg5);
-}
-
 export function CreateCase(arg1, arg2, arg3) {
   return window['go']['main']['App']['CreateCase'](arg1, arg2, arg3);
+}
+
+export function CreateFact(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['CreateFact'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function CurrentCase() {
   return window['go']['main']['App']['CurrentCase']();
 }
 
+export function DocumentAnnotations(arg1) {
+  return window['go']['main']['App']['DocumentAnnotations'](arg1);
+}
+
 export function DownloadAndInstallLawData(arg1) {
   return window['go']['main']['App']['DownloadAndInstallLawData'](arg1);
+}
+
+export function ExportReport(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ExportReport'](arg1, arg2, arg3);
 }
 
 export function GetLawRelations(arg1) {
@@ -80,6 +88,10 @@ export function InstallAppUpdate() {
 
 export function LawDataStatus() {
   return window['go']['main']['App']['LawDataStatus']();
+}
+
+export function ListCaseRefs() {
+  return window['go']['main']['App']['ListCaseRefs']();
 }
 
 export function ListCases() {
@@ -102,24 +114,16 @@ export function ListLawRefs() {
   return window['go']['main']['App']['ListLawRefs']();
 }
 
-export function ListCaseRefs() {
-  return window['go']['main']['App']['ListCaseRefs']();
-}
-
 export function ListSimRounds() {
   return window['go']['main']['App']['ListSimRounds']();
 }
 
-export function LocalCasesStatus() {
-  return window['go']['main']['App']['LocalCasesStatus']();
-}
-
-export function SearchSimilarCases(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
-  return window['go']['main']['App']['SearchSimilarCases'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
-}
-
 export function LoadLawData(arg1) {
   return window['go']['main']['App']['LoadLawData'](arg1);
+}
+
+export function LocalCasesStatus() {
+  return window['go']['main']['App']['LocalCasesStatus']();
 }
 
 export function PickDocumentFile() {
@@ -140,6 +144,10 @@ export function RedactText(arg1, arg2) {
 
 export function ResearchWebPage(arg1, arg2) {
   return window['go']['main']['App']['ResearchWebPage'](arg1, arg2);
+}
+
+export function ReviewCase() {
+  return window['go']['main']['App']['ReviewCase']();
 }
 
 export function RunAggregate() {
@@ -172,6 +180,10 @@ export function SearchCaseDocs(arg1, arg2) {
 
 export function SearchLaw(arg1, arg2) {
   return window['go']['main']['App']['SearchLaw'](arg1, arg2);
+}
+
+export function SearchSimilarCases(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['SearchSimilarCases'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
 export function SimReview() {

@@ -60,12 +60,24 @@ func (a *App) UpgradeFact(factID string, targetState string, evidenceImported, l
 	if err != nil {
 		return domain.Fact{}, err
 	}
+	// D1 接线：升级仲裁前反查来源文档的 OCR 标记——OCR 文本永不进强态。
+	// 标记查不到即按非 OCR 处理的前提是查询成功；查询失败一律 fail-closed
+	// 拒绝升级，绝不带着未知来源进强态。
+	sourceFromOCR := false
+	if target == domain.StateTracedConfirmed && f.Citation != nil && f.Citation.SourceFile != "" {
+		ocr, err := a.scope().IsOCRSource(f.Citation.SourceFile)
+		if err != nil {
+			return domain.Fact{}, err
+		}
+		sourceFromOCR = ocr
+	}
 	updated, err := statemachine.ApplyUpgrade(statemachine.UpgradeRequest{
 		Fact:               f,
 		Target:             target,
 		EvidenceImported:   evidenceImported,
 		LocatedInSource:    locatedInSource,
 		NoInternalConflict: noInternalConflict,
+		SourceFromOCR:      sourceFromOCR,
 	})
 	if err != nil {
 		_ = a.auditLog.Log(a.profile.Role, "STATE_UPGRADE_BLOCKED", factID, err.Error())

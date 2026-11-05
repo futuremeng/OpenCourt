@@ -1,15 +1,15 @@
 export namespace adversary {
-
+	
 	export class Attack {
 	    text: string;
-	    fact_ids?: Array<string>;
-	    violations?: Array<gate.Violation>;
+	    fact_ids?: string[];
+	    violations?: gate.Violation[];
 	    blocked: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Attack(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.text = source["text"];
@@ -17,7 +17,7 @@ export namespace adversary {
 	        this.violations = this.convertValues(source["violations"], gate.Violation);
 	        this.blocked = source["blocked"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -40,7 +40,7 @@ export namespace adversary {
 }
 
 export namespace domain {
-
+	
 	export class Case {
 	    case_id: string;
 	    title: string;
@@ -49,11 +49,11 @@ export namespace domain {
 	    visibility: string;
 	    // Go type: time
 	    created_at: any;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Case(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.case_id = source["case_id"];
@@ -63,7 +63,60 @@ export namespace domain {
 	        this.visibility = source["visibility"];
 	        this.created_at = this.convertValues(source["created_at"], null);
 	    }
-
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CaseRef {
+	    ref_id: string;
+	    case_id: string;
+	    source_case_id: string;
+	    source_url?: string;
+	    case_name?: string;
+	    court?: string;
+	    cause?: string;
+	    judgment_date?: string;
+	    legal_basis?: string;
+	    summary?: string;
+	    // Go type: time
+	    retrieved_at: any;
+	    facets_json?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CaseRef(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ref_id = source["ref_id"];
+	        this.case_id = source["case_id"];
+	        this.source_case_id = source["source_case_id"];
+	        this.source_url = source["source_url"];
+	        this.case_name = source["case_name"];
+	        this.court = source["court"];
+	        this.cause = source["cause"];
+	        this.judgment_date = source["judgment_date"];
+	        this.legal_basis = source["legal_basis"];
+	        this.summary = source["summary"];
+	        this.retrieved_at = this.convertValues(source["retrieved_at"], null);
+	        this.facets_json = source["facets_json"];
+	    }
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -186,11 +239,11 @@ export namespace domain {
 	    at_date?: string;
 	    // Go type: time
 	    created_at: any;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new LawRef(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ref_id = source["ref_id"];
@@ -207,7 +260,7 @@ export namespace domain {
 	        this.at_date = source["at_date"];
 	        this.created_at = this.convertValues(source["created_at"], null);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -276,7 +329,25 @@ export namespace gate {
 }
 
 export namespace main {
-
+	
+	export class ExportReportResult {
+	    path: string;
+	    redacted: boolean;
+	    red: number;
+	    warn: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportReportResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.redacted = source["redacted"];
+	        this.red = source["red"];
+	        this.warn = source["warn"];
+	    }
+	}
 	export class SimRoundResult {
 	    round_id: string;
 	    phase: string;
@@ -288,11 +359,11 @@ export namespace main {
 	    needs_review: boolean;
 	    review_note?: string;
 	    disclaimer: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SimRoundResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.round_id = source["round_id"];
@@ -306,7 +377,7 @@ export namespace main {
 	        this.review_note = source["review_note"];
 	        this.disclaimer = source["disclaimer"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -350,6 +421,7 @@ export namespace neutral {
 	    page_num: number;
 	    from_opponent: boolean;
 	    related_element?: string;
+	    reject_reason?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new CandidateFact(source);
@@ -362,20 +434,61 @@ export namespace neutral {
 	        this.page_num = source["page_num"];
 	        this.from_opponent = source["from_opponent"];
 	        this.related_element = source["related_element"];
+	        this.reject_reason = source["reject_reason"];
 	    }
+	}
+	export class CaseSearchReport {
+	    refs: domain.CaseRef[];
+	    facets?: Record<string, Array<plugins.FacetBucket>>;
+	    structured: boolean;
+	    total: number;
+	    disclaimer: string;
+	    redact_count: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CaseSearchReport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.refs = this.convertValues(source["refs"], domain.CaseRef);
+	        this.facets = this.convertValues(source["facets"], Array<plugins.FacetBucket>, true);
+	        this.structured = source["structured"];
+	        this.total = source["total"];
+	        this.disclaimer = source["disclaimer"];
+	        this.redact_count = source["redact_count"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class DocSearchHit {
 	    ref: string;
 	    doc_id: string;
 	    page: number;
 	    score: number;
-	    sources: Array<string>;
+	    sources: string[];
 	    snippet: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DocSearchHit(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ref = source["ref"];
@@ -391,11 +504,11 @@ export namespace neutral {
 	    mode: string;
 	    note: string;
 	    hits: DocSearchHit[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DocSearchReport(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.query = source["query"];
@@ -403,7 +516,7 @@ export namespace neutral {
 	        this.note = source["note"];
 	        this.hits = this.convertValues(source["hits"], DocSearchHit);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -489,11 +602,11 @@ export namespace neutral {
 	    fact_ids: string[];
 	    conflict_points?: string[];
 	    has_opponent: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Issue(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.element = source["element"];
@@ -506,18 +619,18 @@ export namespace neutral {
 	    issues: Issue[];
 	    gaps: string[];
 	    note: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new IssueReport(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.issues = this.convertValues(source["issues"], Issue);
 	        this.gaps = source["gaps"];
 	        this.note = source["note"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -556,6 +669,7 @@ export namespace neutral {
 	    accepted: domain.Fact[];
 	    rejected: CandidateFact[];
 	    elements: extract.Element[];
+	    gate_blocked: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new ReaderReport(source);
@@ -568,6 +682,7 @@ export namespace neutral {
 	        this.accepted = this.convertValues(source["accepted"], domain.Fact);
 	        this.rejected = this.convertValues(source["rejected"], CandidateFact);
 	        this.elements = this.convertValues(source["elements"], extract.Element);
+	        this.gate_blocked = source["gate_blocked"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -609,6 +724,58 @@ export namespace neutral {
 	        this.text = source["text"];
 	        this.fact = this.convertValues(source["fact"], domain.Fact);
 	        this.redact_actions = this.convertValues(source["redact_actions"], redact.Action);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ReviewIssue {
+	    check: string;
+	    level: string;
+	    ref?: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReviewIssue(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.check = source["check"];
+	        this.level = source["level"];
+	        this.ref = source["ref"];
+	        this.message = source["message"];
+	    }
+	}
+	export class ReviewReport {
+	    issues: ReviewIssue[];
+	    red: number;
+	    warn: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReviewReport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.issues = this.convertValues(source["issues"], ReviewIssue);
+	        this.red = source["red"];
+	        this.warn = source["warn"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -724,6 +891,20 @@ export namespace plugins {
 	        this.url = source["url"];
 	    }
 	}
+	export class FacetBucket {
+	    key: string;
+	    doc_count: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new FacetBucket(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.doc_count = source["doc_count"];
+	    }
+	}
 	export class HumanHelpStatus {
 	    status: string;
 	    request_id?: string;
@@ -738,7 +919,6 @@ export namespace plugins {
 	        this.request_id = source["request_id"];
 	    }
 	}
-
 	export class LawHit {
 	    law_id: string;
 	    title: string;
@@ -746,11 +926,11 @@ export namespace plugins {
 	    effective_date: string;
 	    status: string;
 	    confirm_status: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new LawHit(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.law_id = source["law_id"];
@@ -767,11 +947,11 @@ export namespace plugins {
 	    relation_type: string;
 	    based_on_doc_id?: string;
 	    confirm_status: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Relation(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.src_law_id = source["src_law_id"];
@@ -781,6 +961,7 @@ export namespace plugins {
 	        this.confirm_status = source["confirm_status"];
 	    }
 	}
+
 }
 
 export namespace redact {
@@ -861,31 +1042,27 @@ export namespace redact {
 
 export namespace storage {
 	
-	export class SimRound {
-	    round_id: string;
-	    phase: string;
-	    role: string;
-	    text: string;
-	    fact_ids?: string[];
-	    blocked: boolean;
+	export class DocumentInfo {
+	    doc_id: string;
+	    file: string;
+	    page_count: number;
 	    // Go type: time
 	    created_at: any;
-
+	    ocr_engine?: string;
+	
 	    static createFrom(source: any = {}) {
-	        return new SimRound(source);
+	        return new DocumentInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.round_id = source["round_id"];
-	        this.phase = source["phase"];
-	        this.role = source["role"];
-	        this.text = source["text"];
-	        this.fact_ids = source["fact_ids"];
-	        this.blocked = source["blocked"];
+	        this.doc_id = source["doc_id"];
+	        this.file = source["file"];
+	        this.page_count = source["page_count"];
 	        this.created_at = this.convertValues(source["created_at"], null);
+	        this.ocr_engine = source["ocr_engine"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -904,22 +1081,28 @@ export namespace storage {
 		    return a;
 		}
 	}
-	export class DocumentInfo {
-	    doc_id: string;
-	    file: string;
-	    page_count: number;
+	export class SimRound {
+	    round_id: string;
+	    phase: string;
+	    role: string;
+	    text: string;
+	    fact_ids?: string[];
+	    blocked: boolean;
 	    // Go type: time
 	    created_at: any;
 	
 	    static createFrom(source: any = {}) {
-	        return new DocumentInfo(source);
+	        return new SimRound(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.doc_id = source["doc_id"];
-	        this.file = source["file"];
-	        this.page_count = source["page_count"];
+	        this.round_id = source["round_id"];
+	        this.phase = source["phase"];
+	        this.role = source["role"];
+	        this.text = source["text"];
+	        this.fact_ids = source["fact_ids"];
+	        this.blocked = source["blocked"];
 	        this.created_at = this.convertValues(source["created_at"], null);
 	    }
 	
@@ -940,6 +1123,29 @@ export namespace storage {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace verify {
+	
+	export class Annotation {
+	    kind: string;
+	    author?: string;
+	    text: string;
+	    meta?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Annotation(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.author = source["author"];
+	        this.text = source["text"];
+	        this.meta = source["meta"];
+	    }
 	}
 
 }

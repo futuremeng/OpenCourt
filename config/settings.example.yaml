@@ -51,4 +51,15 @@ localcases:
   token_env: ""           # 例 LOCALCASES_TOKEN
   enabled: false
 
+ingest:
+  ocr:
+    # OCR 引擎（O1/D1）：none（默认，扫描件/图片明确拒绝）/ auto / vision / tesseract。
+    # auto 探测顺序：macOS Vision helper → PATH 中 tesseract；皆无 = 维持拒绝。
+    # 指定引擎不可用时**绝不降级**到其他引擎——宁可拒绝，不可猜字。
+    # 引擎全部本地 subprocess，无任何网络路径；OCR 文本入库封顶弱态。
+    engine: none
+    path: ""              # 引擎二进制/helper 路径（可选；Vision 用 ocr_helper，Tesseract 用 tesseract）
+    lang: ""              # tesseract 语言包（默认 chi_sim+eng）
+    min_confidence: 0.6   # 低于此置信度的页标黄「需人工校对」
+
 data_dir: data

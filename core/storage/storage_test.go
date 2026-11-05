@@ -6,6 +6,7 @@ import (
 
 	"github.com/futuremeng/OpenCourt/core/domain"
 	"github.com/futuremeng/OpenCourt/core/extract"
+	"github.com/futuremeng/OpenCourt/core/verify"
 )
 
 func openTestStore(t *testing.T) *Store {
@@ -91,6 +92,79 @@ func TestDocumentCRUD(t *testing.T) {
 	}
 	if _, err := sc.GetDocument("DOC-X"); err == nil {
 		t.Error("不存在的文档必须报错")
+	}
+}
+
+func TestOCREnginePersisted(t *testing.T) {
+	sc := openTestScope(t)
+	if err := sc.SaveDocumentOCR("DOC-OCR", "scan.pdf", "vision", map[int]string{1: "识别文本"}); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := sc.GetDocument("DOC-OCR")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !doc.OCR || doc.OCREngine != "vision" {
+		t.Errorf("OCR 标记与引擎名必须读回: %+v", doc)
+	}
+	list, err := sc.ListDocuments()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].OCREngine != "vision" {
+		t.Errorf("列表必须携带 OCR 引擎供 UI 徽章: %+v", list)
+	}
+	if err := sc.SaveDocumentOCR("DOC-2", "x.pdf", "", nil); err == nil {
+		t.Error("OCR 保存留空引擎名必须拒绝（不得伪装非 OCR）")
+	}
+	// 非 OCR 文档读回不带标记。
+	if err := sc.SaveDocument("DOC-PLAIN", "a.pdf", map[int]string{1: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	plain, err := sc.GetDocument("DOC-PLAIN")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.OCR {
+		t.Error("普通文档不应带 OCR 标记")
+	}
+}
+
+func TestDocxAnnotationsRoundTrip(t *testing.T) {
+	sc := openTestScope(t)
+	doc := &verify.DocumentText{
+		File:  "合同.docx",
+		Pages: map[int]string{1: "正文"},
+		Annotations: []verify.Annotation{
+			{Kind: "revision_insert", Author: "张三", Text: "插入的条款"},
+			{Kind: "comment", Author: "王法官", Text: "请补充凭证"},
+		},
+	}
+	if err := sc.SaveDocumentFull("DOC-DX", doc); err != nil {
+		t.Fatal(err)
+	}
+	back, err := sc.GetDocument("DOC-DX")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(back.Annotations) != 2 || back.Annotations[0].Author != "张三" ||
+		back.Annotations[1].Kind != "comment" {
+		t.Errorf("标注读回不一致: %+v", back.Annotations)
+	}
+	if back.OCR {
+		t.Error("无 OCR 页的 docx 不应带 OCR 标记")
+	}
+	// OCR docx 经 SaveDocumentFull 引擎名不丢。
+	doc2 := &verify.DocumentText{File: "图.docx", Pages: map[int]string{1: "x", 2: "图字"}, OCR: true, OCREngine: "vision"}
+	if err := sc.SaveDocumentFull("DOC-IMG", doc2); err != nil {
+		t.Fatal(err)
+	}
+	back2, err := sc.GetDocument("DOC-IMG")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !back2.OCR || back2.OCREngine != "vision" {
+		t.Errorf("docx OCR 标记读回错误: %+v", back2)
 	}
 }
 

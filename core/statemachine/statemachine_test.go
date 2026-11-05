@@ -1,6 +1,7 @@
 package statemachine
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/futuremeng/OpenCourt/core/domain"
@@ -59,6 +60,28 @@ func TestUpgradeRequiresEvidence(t *testing.T) {
 	}
 	if updated.State != domain.StateTracedConfirmed {
 		t.Fatalf("状态未更新, got %s", updated.State)
+	}
+}
+
+func TestOCRSourceNeverUpgradesToStrong(t *testing.T) {
+	// D1 纪律：OCR 文本入库上限「单源未补强」——即使三条件全满足也拒绝。
+	f := domain.Fact{FactID: "F-OCR", State: domain.StateSingleSource}
+	err := ArbitrateUpgrade(UpgradeRequest{
+		Fact: f, Target: domain.StateTracedConfirmed,
+		EvidenceImported: true, LocatedInSource: true, NoInternalConflict: true,
+		SourceFromOCR: true,
+	})
+	if err == nil {
+		t.Fatal("OCR 来源禁止进入已溯源确认（强态）")
+	}
+	if !strings.Contains(err.Error(), "OCR") {
+		t.Errorf("错误应明确指向 OCR 纪律: %v", err)
+	}
+	// 弱态之间迁移不受 OCR 限制（降级/描述性迁移照常允许）。
+	if err := ArbitrateUpgrade(UpgradeRequest{
+		Fact: f, Target: domain.StateConflicted, SourceFromOCR: true,
+	}); err != nil {
+		t.Errorf("OCR 文档进入冲突态（描述性）应允许: %v", err)
 	}
 }
 

@@ -65,7 +65,9 @@ CREATE TABLE IF NOT EXISTS documents (
     page_count  INTEGER NOT NULL,
     pages_json  TEXT NOT NULL,
     created_at  TIMESTAMP NOT NULL,
-    case_id     TEXT NOT NULL DEFAULT 'CASE-DEFAULT'
+    case_id     TEXT NOT NULL DEFAULT 'CASE-DEFAULT',
+    ocr_engine  TEXT NOT NULL DEFAULT '',
+    annotations_json TEXT NOT NULL DEFAULT '[]'
 );
 CREATE TABLE IF NOT EXISTS elements (
     element_id  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -145,6 +147,10 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("数据库迁移失败: %w", err)
 	}
 	if err := migrateCaseID(db, path); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := migrateOCREngine(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -328,59 +334,119 @@ func scanFact(row scanner) (domain.Fact, error) {
 }
 
 // DocumentInfo 文档接入概况（不含全文，供列表展示）。
+// OCREngine 非空 = 文本来自 OCR（UI 必须显示 OCR 徽章；五态封顶弱态由
+// 状态机按文档 OCR 标记强制）。
 type DocumentInfo struct {
 	DocID     string    `json:"doc_id"`
 	File      string    `json:"file"`
 	PageCount int       `json:"page_count"`
 	CreatedAt time.Time `json:"created_at"`
+	OCREngine string    `json:"ocr_engine,omitempty"`
 }
 
 // SaveDocument 保存已解析文档（页码 → 文本，挂当前案件），供核验器与阅卷 Agent 使用。
 func (sc *CaseScope) SaveDocument(docID, file string, pages map[int]string) error {
+	return sc.saveDocument(docID, file, pages, "", nil)
+}
+
+// SaveDocumentOCR 保存 OCR 产出文档：ocr_engine 落列，GetDocument 读回时
+// 带 OCR 标记——状态机据此拒绝进入强态（D1）。
+func (sc *CaseScope) SaveDocumentOCR(docID, file, ocrEngine string, pages map[int]string) error {
+	if ocrEngine == "" {
+		return fmt.Errorf("OCR 文档保存必须声明引擎名（留空 = 伪装非 OCR）")
+	}
+	return sc.saveDocument(docID, file, pages, ocrEngine, nil)
+}
+
+// SaveDocumentFull 保存解析产出的全部语义（OCR 标记 + 标注区块，D2）：
+// docx 等「正文 + 修订/批注线索」文档走此入口，读回不丢标注。
+func (sc *CaseScope) SaveDocumentFull(docID string, doc *verify.DocumentText) error {
+	engine := ""
+	if doc.OCR {
+		engine = doc.OCREngine
+		if engine == "" {
+			engine = "ocr" // 不允许 OCR 文档以空引擎名入库
+		}
+	}
+	return sc.saveDocument(docID, doc.File, doc.Pages, engine, doc.Annotations)
+}
+
+func (sc *CaseScope) saveDocument(docID, file string, pages map[int]string, ocrEngine string, annotations []verify.Annotation) error {
 	pj, err := json.Marshal(pages)
 	if err != nil {
 		return err
 	}
+	aj := []byte("[]")
+	if len(annotations) > 0 {
+		if aj, err = json.Marshal(annotations); err != nil {
+			return err
+		}
+	}
 	_, err = sc.db().Exec(
-		`INSERT INTO documents (doc_id, file, page_count, pages_json, created_at, case_id)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		docID, file, len(pages), string(pj), time.Now().UTC(), sc.caseID,
+		`INSERT INTO documents (doc_id, file, page_count, pages_json, created_at, case_id, ocr_engine, annotations_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		docID, file, len(pages), string(pj), time.Now().UTC(), sc.caseID, ocrEngine, string(aj),
 	)
 	return err
 }
 
-// GetDocument 读取本案文档全文（返回 core/verify 的可检索文本层）。
+// GetDocument 读取本案文档全文（返回 core/verify 的可检索文本层；OCR 文档带标记，
+// 标注区块读回——标注不进 Pages，回原文定位对其一律失败）。
 func (sc *CaseScope) GetDocument(docID string) (*verify.DocumentText, error) {
-	var file, pj string
+	var file, pj, ocrEngine, aj string
 	row := sc.db().QueryRow(
-		`SELECT file, pages_json FROM documents WHERE doc_id = ? AND case_id = ?`, docID, sc.caseID)
-	if err := row.Scan(&file, &pj); err != nil {
+		`SELECT file, pages_json, ocr_engine, annotations_json FROM documents WHERE doc_id = ? AND case_id = ?`, docID, sc.caseID)
+	if err := row.Scan(&file, &pj, &ocrEngine, &aj); err != nil {
 		return nil, fmt.Errorf("文档不存在: %s", docID)
 	}
 	pages := map[int]string{}
 	if err := json.Unmarshal([]byte(pj), &pages); err != nil {
 		return nil, err
 	}
-	return &verify.DocumentText{File: file, Pages: pages}, nil
+	var annotations []verify.Annotation
+	if aj != "" && aj != "[]" {
+		if err := json.Unmarshal([]byte(aj), &annotations); err != nil {
+			return nil, fmt.Errorf("文档标注解析失败: %w", err)
+		}
+	}
+	return &verify.DocumentText{
+		File: file, Pages: pages,
+		OCR: ocrEngine != "", OCREngine: ocrEngine,
+		Annotations: annotations,
+	}, nil
 }
 
 // GetDocumentInfo 读取本案单个文档的概况。
 func (sc *CaseScope) GetDocumentInfo(docID string) (DocumentInfo, error) {
 	var d DocumentInfo
 	row := sc.db().QueryRow(
-		`SELECT doc_id, file, page_count, created_at FROM documents WHERE doc_id = ? AND case_id = ?`,
+		`SELECT doc_id, file, page_count, created_at, ocr_engine FROM documents WHERE doc_id = ? AND case_id = ?`,
 		docID, sc.caseID)
-	err := row.Scan(&d.DocID, &d.File, &d.PageCount, &d.CreatedAt)
+	err := row.Scan(&d.DocID, &d.File, &d.PageCount, &d.CreatedAt, &d.OCREngine)
 	if err != nil {
 		return DocumentInfo{}, fmt.Errorf("文档不存在: %s", docID)
 	}
 	return d, nil
 }
 
+// IsOCRSource 报告本案内该来源文件是否存在任何 OCR 产出文档（D1 接线）：
+// 状态机升级仲裁据此置 SourceFromOCR。同名文件只要有一份经 OCR 入库即按
+// OCR 来源处理——fail-closed，宁可封顶弱态，不可漏判强态。
+func (sc *CaseScope) IsOCRSource(sourceFile string) (bool, error) {
+	var n int
+	err := sc.db().QueryRow(
+		`SELECT COUNT(*) FROM documents WHERE case_id = ? AND file = ? AND ocr_engine <> ''`,
+		sc.caseID, sourceFile).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("来源 OCR 标记查询失败: %w", err)
+	}
+	return n > 0, nil
+}
+
 // ListDocuments 列出本案全部已接入文档。
 func (sc *CaseScope) ListDocuments() ([]DocumentInfo, error) {
 	rows, err := sc.db().Query(
-		`SELECT doc_id, file, page_count, created_at FROM documents
+		`SELECT doc_id, file, page_count, created_at, ocr_engine FROM documents
 		 WHERE case_id = ? ORDER BY created_at DESC`, sc.caseID)
 	if err != nil {
 		return nil, err
@@ -389,7 +455,7 @@ func (sc *CaseScope) ListDocuments() ([]DocumentInfo, error) {
 	out := []DocumentInfo{}
 	for rows.Next() {
 		var d DocumentInfo
-		if err := rows.Scan(&d.DocID, &d.File, &d.PageCount, &d.CreatedAt); err != nil {
+		if err := rows.Scan(&d.DocID, &d.File, &d.PageCount, &d.CreatedAt, &d.OCREngine); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
