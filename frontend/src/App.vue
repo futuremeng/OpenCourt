@@ -1,14 +1,22 @@
 <script setup lang="ts">
+// App 外壳：顶栏 / 案件切换 / 更新横幅 / 事实录入 / 面板组装。
+// 各功能区已抽出为 components/（distill）；案件切换统一走 onCaseSwitched。
 import { onMounted, ref } from "vue";
 import * as App from "../wailsjs/go/main/App";
 import type { domain } from "../wailsjs/go/models";
 import { EventsOn } from "../wailsjs/runtime/runtime";
+import { humanSize } from "./util";
 import FactBoard from "./components/FactBoard.vue";
 import CaseBar from "./components/CaseBar.vue";
 import LawSearch from "./components/LawSearch.vue";
 import SimilarCases from "./components/SimilarCases.vue";
 import CaseSearch from "./components/CaseSearch.vue";
 import SimPanel from "./components/SimPanel.vue";
+import LawDataPanel from "./components/LawDataPanel.vue";
+import GateCheck from "./components/GateCheck.vue";
+import DocsReader from "./components/DocsReader.vue";
+import ReviewPanel from "./components/ReviewPanel.vue";
+import BrowserOSPanel from "./components/BrowserOSPanel.vue";
 
 const info = ref<Record<string, any> | null>(null);
 const facts = ref<domain.Fact[]>([]);
@@ -17,9 +25,20 @@ const sourceFile = ref("");
 const pageNum = ref(1);
 const snippet = ref("");
 const fromOpponent = ref(false);
-const gateText = ref("");
-const gateResult = ref<string[]>([]);
 const error = ref("");
+
+// 当事人姓名（脱敏替换用）：录入于此，供 BrowserOS 面板与报告导出共用
+const webNames = ref("");
+function nameList(): string[] {
+  return webNames.value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+}
+
+const lawSearchRef = ref(null);
+const caseSearchRef = ref(null);
+const docSearchRef = ref(null);
+const simPanelRef = ref(null);
+const docsReaderRef = ref(null);
+const reviewPanelRef = ref(null);
 
 async function refresh() {
   facts.value = await App.ListFacts();
@@ -29,9 +48,8 @@ async function refresh() {
 async function onCaseSwitched() {
   try {
     await refresh();
-    await refreshDocs();
-    await refreshTimeline();
-    await refreshCurrentCaseType();
+    await (docsReaderRef.value as any)?.refresh?.();
+    await (reviewPanelRef.value as any)?.refresh?.();
     (lawSearchRef.value as any)?.refresh?.();
     (caseSearchRef.value as any)?.refresh?.();
     (docSearchRef.value as any)?.refresh?.();
@@ -40,20 +58,6 @@ async function onCaseSwitched() {
     error.value = String(e);
   }
 }
-const lawSearchRef = ref(null);
-const caseSearchRef = ref(null);
-const docSearchRef = ref(null);
-const simPanelRef = ref(null);
-
-onMounted(async () => {
-  try {
-    info.value = await App.AppInfo();
-    await refresh();
-    await refreshCurrentCaseType();
-  } catch (e) {
-    error.value = String(e);
-  }
-});
 
 async function addFact() {
   error.value = "";
@@ -66,260 +70,12 @@ async function addFact() {
   }
 }
 
-async function checkGate() {
-  const v = await App.CheckOutput(gateText.value);
-  gateResult.value = v.length === 0 ? ["通过：未检测到引导性表述"] : v.map((x) => `[拦截] ${x.message}`);
-}
-
-// --- 阶段二：文档接入与阅卷 ---
-const docs = ref<any[]>([]);
-const readerReport = ref<any | null>(null);
-const timeline = ref<any[]>([]);
-const blindspots = ref<any[]>([]);
-const requirements = ref("合同成立, 违约行为");
-const busy = ref("");
-const ingestMsg = ref("");
-const annotations = ref<Record<string, any[]>>({});
-
-async function toggleAnnotations(docID: string) {
-  if (annotations.value[docID]) {
-    const { [docID]: _drop, ...rest } = annotations.value;
-    annotations.value = rest;
-    return;
-  }
-  try {
-    annotations.value = { ...annotations.value, [docID]: await App.DocumentAnnotations(docID) };
-  } catch (e) {
-    error.value = String(e);
-  }
-}
-
-// --- M7：审校与报告 ---
-const reviewReport = ref<any | null>(null);
-const reviewBusy = ref(false);
-const exportPath = ref("");
-const exportErr = ref("");
-const rawConfirm = ref(false);
-
-async function runReview() {
-  reviewErrClear();
-  reviewBusy.value = true;
-  try {
-    reviewReport.value = await App.ReviewCase();
-  } catch (e) {
-    exportErr.value = String(e);
-  } finally {
-    reviewBusy.value = false;
-  }
-}
-
-function reviewErrClear() {
-  exportErr.value = "";
-  exportPath.value = "";
-}
-
-async function exportReport(redacted: boolean) {
-  reviewErrClear();
-  try {
-    const r = await App.ExportReport(redacted, !redacted && rawConfirm.value, nameList());
-    exportPath.value = r.path;
-  } catch (e) {
-    exportErr.value = String(e);
-  }
-}
-
-async function refreshDocs() {
-  docs.value = await App.ListDocuments();
-}
-
-async function pickAndIngest() {
-  error.value = ""; ingestMsg.value = "";
-  try {
-    const path = await App.PickDocumentFile();
-    if (!path) return;
-    const doc = await App.IngestDocument(path);
-    ingestMsg.value = doc.ocr_engine
-      ? `已接入 ${doc.file}（${doc.page_count} 页，OCR:${doc.ocr_engine}——封顶弱态，低置信页需人工校对）。`
-      : `已接入 ${doc.file}（${doc.page_count} 页）。扫描件需 OCR 引擎，未配置会被拒绝。`;
-    await refreshDocs();
-  } catch (e) {
-    error.value = String(e);
-  }
-}
-
-async function runReader(docID: string) {
-  error.value = ""; readerReport.value = null; busy.value = docID;
-  try {
-    readerReport.value = await App.RunReader(docID);
-    await refresh();
-    await refreshTimeline();
-  } catch (e) {
-    error.value = String(e);
-  } finally {
-    busy.value = "";
-  }
-}
-
-async function refreshTimeline() {
-  timeline.value = await App.BuildTimeline();
-}
-
-async function runBlindspots() {
-  error.value = "";
-  try {
-    const reqs = requirements.value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-    blindspots.value = await App.RunBlindspots(reqs);
-  } catch (e) {
-    error.value = String(e);
-  }
-}
-
-// --- v0.2 M4：按案由要件匹配（要件只来自 OpenLaw 要件库封闭候选集） ---
-const currentCaseType = ref("");
-const elemMatch = ref<{ Covered: string[]; Missing: string[] } | null>(null);
-const elemMsg = ref("");
-const elemBusy = ref(false);
-
-async function refreshCurrentCaseType() {
-  try {
-    const c = await App.CurrentCase();
-    currentCaseType.value = c?.case_type || "";
-  } catch {
-    currentCaseType.value = "";
-  }
-}
-
-async function runElementMatchByCaseType() {
-  error.value = ""; elemMsg.value = ""; elemMatch.value = null; elemBusy.value = true;
-  try {
-    const res = await App.RunElementMatchByCaseType(currentCaseType.value);
-    elemMatch.value = { Covered: res.Covered || [], Missing: res.Missing || [] };
-  } catch (e) {
-    elemMsg.value = String(e); // 无要件库等显式降级提示，绝不静默
-  } finally {
-    elemBusy.value = false;
-  }
-}
-
-onMounted(async () => {
-  try {
-    await refreshDocs();
-    await refreshTimeline();
-  } catch (e) {
-    error.value = String(e);
-  }
-});
-
-// --- 法条数据管理（语料安装 / 证据层补装 / 增量更新包） ---
-const lawStatus = ref<any | null>(null);
-const lawMsgs = ref<string[]>([]);
-const lawBusy = ref(false);
-const lawPkgs = ref<any[]>([]);
-const lawChecked = ref<Record<string, boolean>>({});
-const lawIndexInfo = ref("");
-const lawIndexErr = ref("");
-
-async function refreshLawStatus() {
-  lawStatus.value = await App.LawDataStatus();
-}
-
-async function checkLawUpdates() {
-  lawIndexErr.value = "";
-  try {
-    const res = await App.CheckLawDataUpdates();
-    if (!res.ok) {
-      lawIndexErr.value = res.error || "无法获取数据包索引";
-      return;
-    }
-    lawIndexInfo.value = res.generated || "";
-    lawPkgs.value = res.packages || [];
-    const checked: Record<string, boolean> = {};
-    for (const p of lawPkgs.value) {
-      checked[p.name] = p.action === "install" || p.action === "update";
-    }
-    lawChecked.value = checked;
-  } catch (e) {
-    lawIndexErr.value = String(e);
-  }
-}
-
-async function downloadSelected() {
-  const names = lawPkgs.value.filter((p) => lawChecked.value[p.name]).map((p) => p.name);
-  if (names.length === 0) {
-    error.value = "请先勾选要下载的数据包";
-    return;
-  }
-  error.value = "";
-  lawBusy.value = true;
-  lawMsgs.value = [];
-  try {
-    lawStatus.value = await App.DownloadAndInstallLawData(names);
-    await checkLawUpdates();
-  } catch (e) {
-    error.value = String(e);
-  } finally {
-    lawBusy.value = false;
-  }
-}
-
-const actionLabel: Record<string, string> = {
-  install: "安装", update: "更新", optional: "可重装", skip: "暂不适用",
-};
-
-function humanSize(n: number): string {
-  if (n >= 1 << 30) return (n / (1 << 30)).toFixed(1) + "GB";
-  if (n >= 1 << 20) return Math.round(n / (1 << 20)) + "MB";
-  return n + "B";
-}
-
-async function loadLawDataZip() {
-  error.value = "";
-  try {
-    const path = await App.PickLawDataPackage();
-    if (!path) return;
-    await doLoadLawData(path);
-  } catch (e) {
-    error.value = String(e);
-  }
-}
-
-async function loadLawDataDir() {
-  error.value = "";
-  try {
-    const path = await App.PickLawDataDir();
-    if (!path) return;
-    await doLoadLawData(path);
-  } catch (e) {
-    error.value = String(e);
-  }
-}
-
-async function doLoadLawData(path: string) {
-  lawBusy.value = true;
-  lawMsgs.value = [`已选择: ${path}`];
-  try {
-    lawStatus.value = await App.LoadLawData(path);
-  } catch (e) {
-    error.value = String(e);
-  } finally {
-    lawBusy.value = false;
-  }
-}
-
-onMounted(() => {
-  EventsOn("lawdata:progress", (m: any) => {
-    lawMsgs.value = [...lawMsgs.value.slice(-8), String(Array.isArray(m) ? m[0] : m)];
-  });
-  refreshLawStatus()
-    .then(() => checkLawUpdates())
-    .catch((e) => (error.value = String(e)));
-});
-
-// --- 程序自身更新（横幅 + 一键下载安装重启） ---
+// --- 程序自身更新（横幅 + 一键下载安装重启；高危动作用页内两步确认，不用原生 confirm） ---
 const appUpdate = ref<any | null>(null);
 const appUpdating = ref(false);
 const appUpdateProg = ref<string[]>([]);
 const showUpdateNotes = ref(false);
+const updateConfirm = ref(false);
 
 async function checkAppUpdate() {
   try {
@@ -332,7 +88,6 @@ async function checkAppUpdate() {
 
 async function doAppUpdate() {
   if (!appUpdate.value) return;
-  if (!confirm(`下载并安装 ${appUpdate.value.latest}？下载完成后应用将自动退出并完成替换重启。`)) return;
   appUpdating.value = true;
   appUpdateProg.value = [];
   try {
@@ -343,144 +98,24 @@ async function doAppUpdate() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    info.value = await App.AppInfo();
+    await refresh();
+  } catch (e) {
+    error.value = String(e);
+  }
   EventsOn("appupdate:progress", (m: any) => {
     appUpdateProg.value = [...appUpdateProg.value.slice(-6), String(Array.isArray(m) ? m[0] : m)];
   });
   checkAppUpdate();
 });
-
-// --- BrowserOS 网络查阅与立案辅助（默认禁用；设计见 docs/browseros-integration.md）---
-const webUrl = ref("");
-const webNames = ref("");
-const webBusy = ref(false);
-const webResult = ref<any | null>(null);
-const webErr = ref("");
-
-function nameList(): string[] {
-  return webNames.value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-}
-
-async function runWebResearch() {
-  webErr.value = ""; webResult.value = null; webBusy.value = true;
-  try {
-    webResult.value = await App.ResearchWebPage(webUrl.value.trim(), nameList());
-    await refresh();
-  } catch (e) {
-    webErr.value = String(e);
-  } finally {
-    webBusy.value = false;
-  }
-}
-
-const assistUrl = ref("");
-const govCat = ref("");
-const govPages = ref(20);
-const govStart = ref(1);
-const govBusy = ref(false);
-const govResult = ref<any | null>(null);
-const govErr = ref("");
-
-async function runGovListBrowse() {
-  govErr.value = ""; govResult.value = null; govBusy.value = true;
-  try {
-    govResult.value = await App.BrowseGovList(govCat.value, govPages.value, govStart.value);
-  } catch (e) {
-    govErr.value = String(e);
-  } finally {
-    govBusy.value = false;
-  }
-}
-
-const assistPage = ref<any | null>(null);
-const assistValues = ref("");
-const assistBusy = ref(false);
-const assistCands = ref<any[]>([]);
-const assistReceipts = ref<any[]>([]);
-const assistErr = ref("");
-const humanKind = ref("login");
-const humanReason = ref("需要当事人本人登录/实名");
-const humanStatus = ref("");
-
-async function openAssist() {
-  assistErr.value = ""; assistCands.value = []; assistReceipts.value = [];
-  assistPage.value = null; humanStatus.value = "";
-  try {
-    assistPage.value = await App.BrowserOpenPage(assistUrl.value.trim());
-  } catch (e) {
-    assistErr.value = String(e);
-  }
-}
-
-// parseValues 每行「字段名=值」；值尾缀 ? 表示该值未经确认（弱态，UI 标黄）。
-function parseValues(): [Record<string, string>, Record<string, string>] {
-  const values: Record<string, string> = {};
-  const states: Record<string, string> = {};
-  for (const line of assistValues.value.split("\n")) {
-    const t = line.trim();
-    const i = t.indexOf("=");
-    if (!t || i <= 0) continue;
-    const name = t.slice(0, i).trim();
-    let val = t.slice(i + 1).trim();
-    if (val.endsWith("?")) {
-      val = val.slice(0, -1);
-      states[name] = "待用户确认";
-    }
-    if (name && val) { values[name] = val; }
-  }
-  return [values, states];
-}
-
-async function planFill() {
-  if (!assistPage.value) { assistErr.value = "请先打开页面"; return; }
-  assistErr.value = ""; assistBusy.value = true;
-  try {
-    const [values, states] = parseValues();
-    assistCands.value = await App.BrowserPlanFill(assistPage.value.page_id, values, states);
-  } catch (e) {
-    assistErr.value = String(e);
-  } finally {
-    assistBusy.value = false;
-  }
-}
-
-async function execAction(id: string) {
-  assistErr.value = "";
-  try {
-    const rec = await App.BrowserExecuteAction(id, nameList());
-    assistReceipts.value = [rec, ...assistReceipts.value];
-    assistCands.value = assistCands.value.filter((c) => c.action_id !== id);
-  } catch (e) {
-    assistErr.value = String(e);
-  }
-}
-
-async function handToHuman() {
-  if (!assistPage.value) { assistErr.value = "请先打开页面"; return; }
-  assistErr.value = "";
-  try {
-    const st = await App.BrowserHandToHuman(assistPage.value.page_id, humanKind.value, humanReason.value);
-    humanStatus.value = st.status;
-  } catch (e) {
-    assistErr.value = String(e);
-  }
-}
-
-async function awaitHuman() {
-  assistErr.value = "";
-  try {
-    const st = await App.BrowserAwaitHuman();
-    humanStatus.value = st.status;
-  } catch (e) {
-    assistErr.value = String(e);
-  }
-}
-
 </script>
+
 
 <template>
   <header class="topbar">
-    <h1>⚖️ OpenCourt</h1>
+    <h1><span aria-hidden="true">⚖️</span> OpenCourt</h1>
     <div v-if="info" class="badges">
       <span class="badge">v{{ info.version }}</span>
       <span class="badge profile">Profile: {{ info.profile }}</span>
@@ -500,66 +135,30 @@ async function awaitHuman() {
   <!-- 案件切换器（v0.2 M1）：一切事实/冲突/文档/要素按案件隔离 -->
   <CaseBar @switched="onCaseSwitched" />
 
-  <!-- 程序更新横幅（发现新版才显示） -->
+  <!-- 程序更新横幅（发现新版才显示；两步确认替代原生 confirm） -->
   <div v-if="appUpdate && appUpdate.available" class="update-banner">
     <div class="ub-row">
       <span class="ub-title">新版本 {{ appUpdate.latest }}</span>
       <span class="muted">当前 {{ appUpdate.current }}<template v-if="appUpdate.package"> · {{ appUpdate.package }}（{{ humanSize(appUpdate.size || 0) }}）</template></span>
       <span class="spacer"></span>
       <button class="btn sm" @click="showUpdateNotes = !showUpdateNotes">更新说明</button>
-      <button class="btn primary sm" :disabled="appUpdating" @click="doAppUpdate">{{ appUpdating ? '下载中…' : '下载并更新' }}</button>
+      <template v-if="!updateConfirm">
+        <button class="btn primary sm" :disabled="appUpdating" @click="updateConfirm = true">下载并更新</button>
+      </template>
+      <template v-else>
+        <span class="ub-confirm" role="status">安装将退出并重启应用，确认？</span>
+        <button class="btn primary sm" :disabled="appUpdating" @click="doAppUpdate">{{ appUpdating ? '下载中…' : '确认安装' }}</button>
+        <button class="btn sm" :disabled="appUpdating" @click="updateConfirm = false">取消</button>
+      </template>
     </div>
     <pre v-if="showUpdateNotes" class="ub-notes">{{ appUpdate.notes || '（无说明）' }}</pre>
-    <ul v-if="appUpdateProg.length" class="law-prog">
+    <ul v-if="appUpdateProg.length" class="prog-list" role="status">
       <li v-for="(l, i) in appUpdateProg" :key="i">{{ l }}</li>
     </ul>
   </div>
 
   <main class="layout">
-    <section class="panel wide lawdata">
-      <h2>法条数据</h2>
-      <div v-if="lawStatus && !lawStatus.installed" class="law-notice">
-        尚未安装离线法条库。可从发布页下载 <b>lawdata-core</b> 数据包（解压到「下载」即会自动安装），
-        或直接选择已下载的数据包加载：
-      </div>
-      <div v-else-if="lawStatus" class="law-stats">
-        <span class="badge ok">已安装</span>
-        <span class="badge">{{ lawStatus.docs }} 部文档</span>
-        <span class="badge">{{ lawStatus.articles }} 条法条</span>
-        <span class="badge" :class="lawStatus.evidence_ok ? 'ok' : 'warn'">
-          证据层 {{ lawStatus.evidence_ok ? "完整" : "缺失（详情将显示未验证）" }}
-        </span>
-        <span class="badge" :class="lawStatus.manifest_signed ? 'ok' : 'warn'">
-          签名清单 {{ lawStatus.manifest_signed ? "已签名" : "无（无法验证真伪）" }}
-        </span>
-        <span class="hint" style="width:100%">语料目录: {{ lawStatus.data_dir }}</span>
-        <span class="hint" style="width:100%">{{ lawStatus.license ? '数据许可: ' + lawStatus.license : '数据许可: 该语料未声明（自行确认来源合法性）' }}</span>
-      </div>
-      <div class="row">
-        <button :disabled="lawBusy" @click="loadLawDataZip">
-          {{ lawBusy ? "处理中…" : (lawStatus && lawStatus.installed ? "加载更新数据包（zip）" : "加载数据包（zip）") }}
-        </button>
-        <button :disabled="lawBusy" @click="loadLawDataDir">选择已解压的数据目录</button>
-        <button :disabled="lawBusy" @click="checkLawUpdates">检查可用数据包</button>
-      </div>
-      <div v-if="lawPkgs.length" class="law-pkgs">
-        <p class="hint">发布索引（{{ lawIndexInfo }}）——勾选后一键下载安装（自动校验 sha256 与签名）：</p>
-        <label v-for="p in lawPkgs" :key="p.name" class="law-pkg" :class="p.action">
-          <input type="checkbox" v-model="lawChecked[p.name]" :disabled="p.action === 'skip' || lawBusy" />
-          <b>{{ p.name }}</b>
-          <span class="hint">{{ humanSize(p.size) }} · {{ actionLabel[p.action] || p.action }}</span>
-        </label>
-        <div class="row">
-          <button :disabled="lawBusy" class="primary" @click="downloadSelected">
-            {{ lawBusy ? "下载中…" : "下载并安装所选包" }}
-          </button>
-        </div>
-      </div>
-      <p v-if="lawIndexErr" class="hint">{{ lawIndexErr }}（离线或未发布时可继续用手动加载）</p>
-      <ul v-if="lawMsgs.length" class="law-progress">
-        <li v-for="(m, i) in lawMsgs" :key="i">{{ m }}</li>
-      </ul>
-    </section>
+    <LawDataPanel />
 
     <!-- 法条检索与文书引用核验（v0.2 M2）：核验判定 = OpenLaw 错误码原样透传；
          UNKNOWN/pending/OL-1006 必须显式标出，不得静默通过 -->
@@ -568,16 +167,13 @@ async function awaitHuman() {
       <LawSearch ref="lawSearchRef" />
     </section>
 
-    <!-- 类案检索（v0.2 M3）：LocalCases 外部可选组件默认禁用；要旨强制脱敏；
-         留痕非事实不进五态；facet 分布必须附「不是裁判概率」固定标注 -->
+    <!-- 类案检索（v0.2 M3）：LocalCases 默认禁用；要旨强制脱敏；facet 附「不是裁判概率」标注 -->
     <SimilarCases ref="caseSearchRef" />
 
-    <!-- 卷宗检索（v0.3 M5）：仅本案文档；语义召回未启用必须显式标注降级；
-         结果是候选不是事实，不进五态 -->
+    <!-- 卷宗检索（v0.3 M5）：仅本案文档；降级必须显式标注；结果不进五态 -->
     <CaseSearch ref="docSearchRef" />
 
-    <!-- 对抗推演与庭审流程（v0.3 M6）：全程免责标注；阶段推进由后端硬守卫；
-         被拦截轮次与轨迹抖动告警必须可见；法院 Profile 禁用本面板 -->
+    <!-- 对抗推演与庭审流程（v0.3 M6）：全程免责标注；后端硬守卫；拦截必须可见 -->
     <section class="panel wide">
       <h2>对抗推演与庭审流程（模拟推演，非预测）</h2>
       <SimPanel ref="simPanelRef" />
@@ -586,213 +182,26 @@ async function awaitHuman() {
     <section class="panel">
       <h2>录入事实</h2>
       <p class="hint">初始状态由状态机判定：有引用→单源未补强；对方来源→对方主张；无来源→无依据。</p>
-      <textarea v-model="desc" rows="2" placeholder="事实描述（必填）" style="width:100%"></textarea>
+      <textarea v-model="desc" rows="2" aria-label="事实描述（必填）" placeholder="事实描述（必填）" class="full"></textarea>
       <div class="row">
-        <input v-model="sourceFile" placeholder="来源文件（可空）" />
-        <input v-model.number="pageNum" type="number" min="1" style="width:80px" />
-        <input v-model="snippet" placeholder="原文片段" />
+        <input v-model="sourceFile" aria-label="来源文件（可空）" placeholder="来源文件（可空）" />
+        <input v-model.number="pageNum" type="number" min="1" aria-label="页码" class="num" />
+        <input v-model="snippet" aria-label="原文片段" placeholder="原文片段" />
       </div>
       <div class="row">
         <label><input type="checkbox" v-model="fromOpponent" /> 来自对方文书/陈述</label>
         <button @click="addFact">录入</button>
       </div>
-      <p v-if="error" class="error">{{ error }}</p>
+      <p v-if="error" class="error" role="status">{{ error }}</p>
     </section>
 
-    <section class="panel">
-      <h2>输出门禁自检</h2>
-      <p class="hint">试试输入「建议起诉」或「大概率胜诉」——倾向性表述会被强制拦截。</p>
-      <textarea v-model="gateText" rows="2" placeholder="待检文本" style="width:100%"></textarea>
-      <button @click="checkGate">门禁检查</button>
-      <ul class="gate-result">
-        <li v-for="m in gateResult" :key="m">{{ m }}</li>
-      </ul>
-    </section>
+    <GateCheck />
 
-    <section class="panel wide">
-      <h2>文档接入与阅卷（阶段二）</h2>
-      <p class="hint">
-        阅卷时模型只生成候选事实；每条候选必须回原文定位，定位失败即被拒绝入库（审计留痕）。时间/金额要素由正则确定性抽取。
-      </p>
-      <div class="row">
-        <button @click="pickAndIngest">接入文档（PDF/txt/md）</button>
-        <span v-if="ingestMsg" class="ok-msg">{{ ingestMsg }}</span>
-      </div>
-      <ul class="doc-list">
-        <li v-for="d in docs" :key="d.doc_id">
-          {{ d.file }}（{{ d.page_count }} 页）
-          <span v-if="d.ocr_engine" class="badge warn" title="文本来自 OCR：入库封顶弱态，低置信页需人工校对">OCR:{{ d.ocr_engine }}</span>
-          <button :disabled="busy === d.doc_id" @click="runReader(d.doc_id)">
-            {{ busy === d.doc_id ? "阅卷中…" : "阅卷" }}
-          </button>
-          <button @click="toggleAnnotations(d.doc_id)">标注</button>
-          <ul v-if="annotations[d.doc_id]?.length" class="annotations">
-            <li v-for="(a, i) in annotations[d.doc_id]" :key="i">
-              <span class="badge">{{ a.kind }}</span>
-              <b v-if="a.author">{{ a.author }}</b>
-              {{ a.text }}
-              <em v-if="a.meta" class="hint">（{{ a.meta }}）</em>
-            </li>
-          </ul>
-        </li>
-      </ul>
-      <div v-if="readerReport" class="reader-report">
-        <p>模型 {{ readerReport.model_name }}：入库 {{ readerReport.accepted.length }} 条 ·
-          <b class="rejected">拒绝 {{ readerReport.rejected.length }} 条（回原文失败）</b> ·
-          要素 {{ readerReport.elements.length }} 个</p>
-        <ul>
-          <li v-for="r in readerReport.rejected" :key="r.description">
-            [拒绝] {{ r.description }} —— 声称片段「{{ r.snippet }}」未在原文定位
-          </li>
-        </ul>
-      </div>
+    <DocsReader ref="docsReaderRef" @changed="refresh" />
 
-      <h2 style="margin-top:14px">时间线（按时间要素锚定，不虚构日期）</h2>
-      <ol class="timeline">
-        <li v-for="t in timeline" :key="t.Fact.fact_id">
-          <span class="tdate">{{ t.Date || "日期未定位" }}</span>
-          {{ t.Fact.description }}
-          <span class="tstate">{{ t.Fact.state }}</span>
-        </li>
-      </ol>
+    <BrowserOSPanel :enabled="!!(info && info.browserEnabled)" v-model:names="webNames" @changed="refresh" />
 
-      <h2 style="margin-top:14px">要件匹配与盲区</h2>
-      <div class="row">
-        <input v-model="requirements" placeholder="要件列表（逗号分隔）" style="flex:1" />
-        <button @click="runBlindspots">匹配并生成盲区</button>
-      </div>
-      <div class="row">
-        <button :disabled="elemBusy" class="primary" @click="runElementMatchByCaseType">
-          {{ elemBusy ? "匹配中…" : "按案由匹配（OpenLaw 要件库）" }}
-        </button>
-        <span class="hint">当前案由：{{ currentCaseType || "（未设置）" }}；要件只从要件库封闭候选集取，无库时显式报错不猜</span>
-      </div>
-      <p v-if="elemMsg" class="hint">{{ elemMsg }}</p>
-      <ul v-if="elemMatch" class="blindspots">
-        <li v-for="c in elemMatch.Covered" :key="'cov-' + c">✓ 已覆盖：{{ c }}</li>
-        <li v-for="m in elemMatch.Missing" :key="'mis-' + m">✗ 缺失：{{ m }}</li>
-      </ul>
-      <ul class="blindspots">
-        <li v-for="b in blindspots" :key="b.question">{{ b.question }} —— {{ b.supplement }}</li>
-      </ul>
-    </section>
-
-    <section class="panel wide browseros">
-      <h2>网络查阅与立案辅助（BrowserOS）</h2>
-      <p class="hint">
-        默认禁用；经本机回环 MCP 驱动用户自装的 BrowserOS neo（外部可选组件，不随本应用分发）。
-        抓回内容先强制脱敏再展示/入模型，并以「单源未补强」弱态事实入库；
-        登录/验证码/实名/最终提交一律交人执行——辅助工具只做候选填写，绝不代做最终动作。
-      </p>
-      <div v-if="info && !info.browserEnabled" class="law-notice">
-        BrowserOS 对接未启用：启动 BrowserOS neo 后，在其侧栏 MCP 页复制端点 URL，
-        写入配置 <b>browseros.endpoint</b>（或环境变量 OPENCOURT_BROWSEROS_ENDPOINT）并将
-        <b>browseros.enabled</b> 置 true。本工具不会回退到其他抓取方式。
-      </div>
-
-      <h3>网络资料查阅</h3>
-      <div class="row">
-        <input v-model="webUrl" placeholder="URL（如法院诉讼费标准页面）" style="flex:1" />
-        <input v-model="webNames" placeholder="当事人姓名（逗号分隔，脱敏用）" style="width:220px" />
-        <button class="primary" :disabled="webBusy" @click="runWebResearch">{{ webBusy ? "查阅中…" : "查阅" }}</button>
-      </div>
-      <p v-if="webErr" class="error">{{ webErr }}</p>
-      <div v-if="webResult" class="web-result">
-        <p class="ok-msg">
-          快照哈希 {{ String(webResult.content_sha256 || "").slice(0, 12) }} ·
-          脱敏 {{ (webResult.redact_actions || []).length }} 项 ·
-          事实状态 <b>{{ webResult.fact.state }}</b>（联网源永不进强态）
-        </p>
-        <p class="cite">引用: {{ webResult.fact.citation && webResult.fact.citation.SourceFile }}</p>
-        <pre class="web-text">{{ webResult.text }}</pre>
-      </div>
-
-      <h3 style="margin-top:12px">国家规章库清单浏览（人在环代理浏览）</h3>
-      <div class="row">
-        <select v-model="govCat" style="width:150px">
-          <option value="">全部（混合清单）</option>
-          <option value="部门规章">仅部门规章</option>
-          <option value="地方政府规章">仅地方政府规章</option>
-        </select>
-        <input v-model.number="govStart" type="number" min="1" style="width:70px" title="起始页（跨会话续接：上次停在第 N 页，这里填 N+1）" />
-        <input v-model.number="govPages" type="number" min="1" max="200" style="width:90px" title="单会话翻页上限（≤200）" />
-        <button class="primary" :disabled="govBusy" @click="runGovListBrowse">{{ govBusy ? "浏览中…" : "开始浏览" }}</button>
-      </div>
-      <p class="hint">
-        在你自己的 BrowserOS neo 中浏览国家规章库官方列表页（官方 UI 翻页，≥2s/页，单会话 ≤200 页，全程审计），
-        导出与 OpenLaw 兼容的清单文件；随后由 openlaw-govcn -source gzk 走详情页合规抓取 + 人工确认闸口入库。
-        绝不触碰检索 API 或鉴权接口。
-      </p>
-      <p v-if="govErr" class="error">{{ govErr }}</p>
-      <p v-if="govResult" class="ok-msg">
-        浏览 {{ govResult.pages }} 页 · 收集 {{ (govResult.entries || []).length }} 条（{{ govResult.stopped_at }}）→ {{ govResult.out_path }}
-      </p>
-
-      <h3 style="margin-top:12px">立案表单辅助（两段式：候选 → 逐条确认 → 执行）</h3>
-      <div class="row">
-        <input v-model="assistUrl" placeholder="目标页面 URL（如 zxfw.court.gov.cn 立案页）" style="flex:1" />
-        <button @click="openAssist">打开页面</button>
-        <span v-if="assistPage" class="ok-msg">page={{ assistPage.page_id }}（已在你浏览器中打开）</span>
-      </div>
-      <textarea v-model="assistValues" rows="3" style="width:100%"
-        placeholder="字段名=值（每行一条；值尾缀 ? 表示未经确认将标黄，如：原告姓名=王五?）"></textarea>
-      <div class="row">
-        <button :disabled="assistBusy || !assistPage" @click="planFill">{{ assistBusy ? "规划中…" : "生成填写计划（只产候选，不执行）" }}</button>
-      </div>
-      <p v-if="assistErr" class="error">{{ assistErr }}</p>
-      <ul class="cands">
-        <li v-for="c in assistCands" :key="c.action_id" :class="{ blocked: !c.allowed }">
-          <b>{{ c.label }}</b> ← {{ c.value }}
-          <template v-if="!c.allowed">
-            <span class="block-tag">[拦截 {{ c.rule }}] {{ c.reason }}</span>
-          </template>
-          <template v-else>
-            <span v-if="c.fact_state" class="weak-tag">[{{ c.fact_state }}]</span>
-            <button class="sm" @click="execAction(c.action_id)">确认执行</button>
-          </template>
-        </li>
-      </ul>
-      <div class="row">
-        <select v-model="humanKind">
-          <option value="login">登录</option>
-          <option value="captcha">验证码</option>
-          <option value="identity">实名/人脸</option>
-          <option value="submit">最终提交</option>
-        </select>
-        <input v-model="humanReason" placeholder="交人接管原因" style="flex:1" />
-        <button @click="handToHuman">交人接管</button>
-        <button @click="awaitHuman">等待接管结果</button>
-        <span v-if="humanStatus" class="ok-msg">接管状态: {{ humanStatus }}</span>
-      </div>
-      <ul v-if="assistReceipts.length" class="receipts">
-        <li v-for="r in assistReceipts" :key="r.action_id"><b>{{ r.action_id }}</b> {{ r.diff }}</li>
-      </ul>
-    </section>
-
-    <section class="panel wide">
-      <h2>审校与报告</h2>
-      <p class="hint">
-        审校为确定性检查（引用核验 / 回原文一致性 / 五态合规 / 推理链完整性），模型不参与判定；
-        报告默认脱敏导出，原样导出须显式二次确认并留审计；报告全文过输出门禁。
-      </p>
-      <div class="row">
-        <button class="primary" :disabled="reviewBusy" @click="runReview">{{ reviewBusy ? "审校中…" : "执行审校" }}</button>
-        <button @click="exportReport(true)">导出报告（脱敏）</button>
-        <label class="hint"><input type="checkbox" v-model="rawConfirm" />我知悉原样导出含未脱敏信息</label>
-        <button :disabled="!rawConfirm" @click="exportReport(false)">原样导出</button>
-      </div>
-      <p v-if="exportErr" class="error">{{ exportErr }}</p>
-      <p v-if="exportPath" class="ok-msg">已导出：{{ exportPath }}</p>
-      <div v-if="reviewReport">
-        <p>标红 <b class="rejected">{{ reviewReport.red }}</b> 项 · 提示 {{ reviewReport.warn }} 项</p>
-        <ul class="blindspots">
-          <li v-for="(iss, i) in reviewReport.issues" :key="i">
-            <b :class="{ rejected: iss.level === 'red' }">{{ iss.level === "red" ? "[标红]" : "[提示]" }}</b>
-            {{ iss.message }}（{{ iss.check }}<template v-if="iss.ref"> · {{ iss.ref }}</template>）
-          </li>
-        </ul>
-      </div>
-    </section>
+    <ReviewPanel :names="nameList()" />
 
     <section class="panel wide">
       <h2>事实看板（五态）</h2>
@@ -807,65 +216,40 @@ async function awaitHuman() {
 
 <style scoped>
 .topbar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 24px; background: #111827; color: #fff;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 14px 24px; background: var(--topbar-bg); color: var(--text-inv); flex-wrap: wrap;
 }
-.topbar h1 { font-size: 18px; margin: 0; }
+.topbar h1 { font-size: var(--fs-lg); margin: 0; }
 .badges { display: flex; gap: 8px; flex-wrap: wrap; }
-.badge { background: #374151; border-radius: 999px; padding: 3px 12px; font-size: 12px; }
-.badge.profile { background: #4338ca; }
-.badge.ok { background: #065f46; }
-.badge.warn { background: #92400e; }
-.layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px 24px; }
-.update-banner { margin: 12px 24px 0; border: 1px solid #bcd4f5; background: #eef5ff; border-radius: 10px; padding: 10px 14px; }
-.ub-row { display: flex; align-items: center; gap: 10px; }
-.ub-title { font-weight: 600; color: #1a5fb4; }
-.ub-notes { margin: 8px 0 0; padding: 8px 10px; background: #fff; border-radius: 6px; font-size: 12px; white-space: pre-wrap; }
-.panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
-.panel.wide { grid-column: 1 / -1; }
-.panel h2 { margin: 0 0 8px; font-size: 15px; }
-.hint { color: #6b7280; font-size: 12px; margin: 0 0 10px; }
-.row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
-.error { color: #b91c1c; font-size: 13px; }
-.gate-result { font-size: 13px; padding-left: 18px; }
-.ok-msg { color: #065f46; font-size: 13px; }
-.doc-list { font-size: 13px; padding-left: 18px; }
-.doc-list li { margin: 4px 0; }
-.doc-list button { margin-left: 8px; }
-.annotations { margin: 4px 0; padding-left: 16px; font-size: 12px; color: #a06b00; }
-.annotations li { margin: 2px 0; }
-.reader-report { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 12px; font-size: 13px; }
-.reader-report .rejected { color: #b91c1c; }
-.timeline { font-size: 13px; padding-left: 20px; }
-.timeline li { margin: 4px 0; }
-.tdate { display: inline-block; min-width: 90px; color: #4338ca; font-weight: 600; }
-.tstate { color: #6b7280; font-size: 12px; margin-left: 6px; }
-.blindspots { font-size: 13px; padding-left: 18px; }
-.lawdata .law-notice {
-  background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
-  padding: 8px 12px; font-size: 13px; margin-bottom: 4px;
+.badge { background: var(--topbar-badge); border-radius: var(--r-pill); padding: 3px 12px; font-size: var(--fs-xs); }
+.badge.profile { background: var(--accent); }
+.badge.ok { background: var(--ok); }
+.badge.warn { background: var(--warn); }
+/* 宽屏双栏、窄窗自动单栏（adapt） */
+.layout { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 16px; padding: 20px 24px; }
+@media (max-width: 560px) {
+  .layout { grid-template-columns: 1fr; padding: 12px; }
 }
-.law-stats { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 4px; }
-.law-stats .badge { color: #fff; }
-.law-progress { font-size: 12px; color: #374151; padding-left: 18px; margin: 8px 0 0; }
-.law-pkgs { margin-top: 10px; border-top: 1px dashed #e5e7eb; padding-top: 8px; }
-.law-pkg { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 4px 0; }
-.law-pkg.skip { opacity: 0.5; }
-.law-pkg.update b { color: #b45309; }
-button.primary { background: #4338ca; color: #fff; border-color: #4338ca; }
-.browseros h3 { font-size: 13.5px; margin: 10px 0 4px; color: #374151; }
-.web-result { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 8px 12px; margin-top: 8px; font-size: 13px; }
-.web-result .cite { color: #6b7280; font-size: 12px; word-break: break-all; }
-.web-text { white-space: pre-wrap; word-break: break-word; font-size: 12.5px; max-height: 260px; overflow-y: auto; background: #fff; border-radius: 6px; padding: 8px; }
-.cands { font-size: 13px; padding-left: 18px; margin: 8px 0; }
-.cands li { margin: 5px 0; }
-.cands li.blocked { background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 4px 8px; list-style: none; }
-.block-tag { color: #b91c1c; font-size: 12px; margin-left: 6px; }
-.weak-tag { color: #92400e; background: #fef3c7; border-radius: 4px; padding: 1px 6px; font-size: 12px; margin-left: 6px; }
-.receipts { font-size: 12px; color: #374151; padding-left: 18px; }
-.receipts li { margin: 3px 0; white-space: pre-wrap; word-break: break-word; }
+.update-banner { margin: 12px 24px 0; border: 1px solid var(--info-border); background: var(--info-bg); border-radius: var(--r-3); padding: 10px 14px; }
+.ub-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ub-title { font-weight: 600; color: var(--info); }
+.ub-confirm { font-size: var(--fs-sm); color: var(--info); }
+.ub-notes { margin: 8px 0 0; padding: 8px 10px; background: var(--surface); border-radius: var(--r-1); font-size: var(--fs-xs); white-space: pre-wrap; }
+.prog-list { font-size: var(--fs-xs); color: var(--text-2); padding-left: 18px; margin: 8px 0 0; }
+.spacer { flex: 1; }
+.muted { color: var(--text-3); }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-3); padding: 16px; }
+.panel.wide { grid-column: 1 / -1; }
+.panel h2 { margin: 0 0 8px; font-size: var(--fs-md); }
+.hint { color: var(--text-3); font-size: var(--fs-xs); margin: 0 0 10px; }
+.row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.full { width: 100%; }
+.num { width: 80px; }
+.error { color: var(--bad); font-size: var(--fs-sm); }
 .disclaimer {
-  padding: 12px 24px; font-size: 12px; color: #6b7280;
-  border-top: 1px solid #e5e7eb; background: #fff;
+  padding: 12px 24px; font-size: var(--fs-xs); color: var(--text-3);
+  border-top: 1px solid var(--border); background: var(--surface);
 }
 </style>
+
+

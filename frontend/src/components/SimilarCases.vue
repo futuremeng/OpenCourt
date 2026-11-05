@@ -79,17 +79,17 @@ defineExpose({ refresh: async () => { report.value = null; await refreshRefs(); 
     </p>
 
     <div class="row">
-      <input v-model="search" placeholder="关键词（空格=AND）" style="flex:1" />
-      <input v-model="cause" placeholder="案由（精确）" />
-      <input v-model="court" placeholder="法院（精确）" />
-      <input v-model="yearFrom" placeholder="年起" class="num" />
-      <input v-model="yearTo" placeholder="年至" class="num" />
-      <input v-model="names" placeholder="当事人姓名（脱敏一致替换）" />
+      <input v-model="search" aria-label="类案关键词（空格=AND）" placeholder="关键词（空格=AND）" class="grow" />
+      <input v-model="cause" aria-label="案由（精确）" placeholder="案由（精确）" />
+      <input v-model="court" aria-label="法院（精确）" placeholder="法院（精确）" />
+      <input v-model="yearFrom" aria-label="判决年份起" placeholder="年起" class="num" />
+      <input v-model="yearTo" aria-label="判决年份止" placeholder="年至" class="num" />
+      <input v-model="names" aria-label="当事人姓名（脱敏一致替换）" placeholder="当事人姓名（脱敏一致替换）" />
       <button :disabled="busy || !(status && status.enabled)" class="primary" @click="runSearch">
         {{ busy ? "检索中…" : "检索类案" }}
       </button>
     </div>
-    <p v-if="error" class="err">{{ error }}</p>
+    <p v-if="error" class="err" role="status">{{ error }}</p>
 
     <template v-if="report">
       <p v-if="!report.structured" class="law-notice">
@@ -130,13 +130,16 @@ defineExpose({ refresh: async () => { report.value = null; await refreshRefs(); 
 <style scoped>
 .casesearch input { padding: 6px 8px; }
 .casesearch input.num { width: 70px; }
-.err { color: #b91c1c; font-size: 13px; }
-.warn { color: #b45309; }
-.caselist { font-size: 13px; padding-left: 18px; }
+.err { color: var(--bad); font-size: var(--fs-sm); }
+.warn { color: var(--warn); }
+.caselist { font-size: var(--fs-sm); padding-left: 18px; }
 .caselist li { margin: 8px 0; }
-.meta { color: #6b7280; font-size: 12px; margin-left: 8px; }
+.meta { color: var(--text-3); font-size: var(--fs-xs); margin-left: 8px; }
 .summary { margin-top: 2px; }
-.facet { font-size: 13px; margin: 4px 0; }
-.bucket { margin-right: 8px; color: #374151; }
-.law-notice { background: #fef3c7; border: 1px solid #fbbf24; padding: 8px 10px; font-size: 13px; border-radius: 6px; }
+.facet { font-size: var(--fs-sm); margin: 4px 0; }
+.bucket { margin-right: 8px; color: var(--text-2); }
+.law-notice { background: var(--warn-bg); border: 1px solid var(--warn-border); padding: 8px 10px; font-size: var(--fs-sm); border-radius: var(--r-1); }
+.hint { color: var(--text-3); font-size: var(--fs-xs); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.grow { flex: 1; }
 </style>

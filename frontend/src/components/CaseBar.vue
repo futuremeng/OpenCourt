@@ -83,31 +83,32 @@ defineExpose({ refresh });
     <select
       v-if="cases.length > 1"
       :value="current?.case_id"
+      aria-label="切换案件"
       @change="switchCase(($event.target as HTMLSelectElement).value)"
     >
       <option v-for="c in cases" :key="c.case_id" :value="c.case_id">{{ c.title }}</option>
     </select>
     <span class="spacer"></span>
-    <input v-model="title" placeholder="新案件标题" class="title" />
-    <input v-model="caseType" placeholder="案由/类型（可选）" class="type" />
-    <select v-model="stage">
+    <input v-model="title" aria-label="新案件标题" placeholder="新案件标题" class="title" />
+    <input v-model="caseType" aria-label="案由/类型（可选）" placeholder="案由/类型（可选）" class="type" />
+    <select v-model="stage" aria-label="案件阶段">
       <option v-for="s in stages" :key="s.code" :value="s.code">{{ s.label }}</option>
     </select>
     <button :disabled="creating" @click="createCase">{{ creating ? "创建中…" : "新建案件" }}</button>
-    <span v-if="error" class="err">{{ error }}</span>
+    <span v-if="error" class="err" role="status">{{ error }}</span>
   </div>
 </template>
 
 <style scoped>
 .casebar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 10px 20px; background: #fff; border-bottom: 1px solid #e5e7eb;
-  font-size: 13px;
+  padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
 }
-.current b { font-size: 14px; }
-.meta { color: #6b7280; margin-left: 6px; }
+.current b { font-size: var(--fs-md); }
+.meta { color: var(--text-3); margin-left: 6px; }
 .spacer { flex: 1; }
 input.title { width: 180px; }
 input.type { width: 140px; }
-.err { color: #b91c1c; }
+.err { color: var(--bad); }
 </style>

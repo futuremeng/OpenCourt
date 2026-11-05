@@ -119,22 +119,22 @@ defineExpose({ refresh });
 <template>
   <div class="lawsearch">
     <div class="row">
-      <input v-model="query" placeholder="法条关键词（如：违约责任）" class="q" @keyup.enter="search" />
+      <input v-model="query" aria-label="法条关键词" placeholder="法条关键词（如：违约责任）" class="q" @keyup.enter="search" />
       <button :disabled="searching" @click="search">{{ searching ? "检索中…" : "检索法条" }}</button>
       <span class="spacer"></span>
-      <select v-model="docID">
+      <select v-model="docID" aria-label="选择要核验的文书">
         <option value="">选择文书…</option>
         <option v-for="d in docs" :key="d.doc_id" :value="d.doc_id">{{ d.file_name || d.doc_id }}</option>
       </select>
-      <input v-model="atDate" type="date" title="行为发生时点（版本回溯基准，可留空）" class="date" />
+      <input v-model="atDate" type="date" aria-label="行为发生时点（版本回溯基准，可留空）" title="行为发生时点（版本回溯基准，可留空）" class="date" />
       <button :disabled="verifying" @click="verify">{{ verifying ? "核验中…" : "核验文书引用" }}</button>
     </div>
-    <div v-if="error" class="err">{{ error }}</div>
-    <div v-if="notice" class="muted">{{ notice }}</div>
+    <div v-if="error" class="err" role="status">{{ error }}</div>
+    <div v-if="notice" class="muted" role="status">{{ notice }}</div>
 
     <table v-if="searched" class="tbl">
       <thead>
-        <tr><th>法规</th><th>条文</th><th>生效日期</th><th>效力状态</th><th>文本确认</th></tr>
+        <tr><th scope="col">法规</th><th scope="col">条文</th><th scope="col">生效日期</th><th scope="col">效力状态</th><th scope="col">文本确认</th></tr>
       </thead>
       <tbody>
         <tr v-for="h in hits" :key="h.law_id">
@@ -154,7 +154,7 @@ defineExpose({ refresh });
 
     <table v-if="refs.length" class="tbl">
       <thead>
-        <tr><th>引用（本案留痕）</th><th>核验判定</th><th>效力状态</th><th>文本确认</th><th></th></tr>
+        <tr><th scope="col">引用（本案留痕）</th><th scope="col">核验判定</th><th scope="col">效力状态</th><th scope="col">文本确认</th><th scope="col"></th></tr>
       </thead>
       <tbody>
         <tr v-for="r in refs" :key="r.ref_id">
@@ -192,14 +192,15 @@ defineExpose({ refresh });
 input.q { width: 260px; }
 input.date { width: 150px; }
 .spacer { flex: 1; }
-.err { color: #b91c1c; font-size: 13px; }
-.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
-.tbl th, .tbl td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
-.tbl th { color: #6b7280; font-weight: 500; }
+.err { color: var(--bad); font-size: var(--fs-sm); }
+.muted { color: var(--text-3); }
+.tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.tbl th, .tbl td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.tbl th { color: var(--text-3); font-weight: 500; }
 .clip { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.badge { padding: 1px 8px; border-radius: 10px; font-size: 12px; background: #eef2ff; color: #3730a3; }
-.badge.ok { background: #ecfdf5; color: #047857; }
-.badge.warn { background: #fffbeb; color: #b45309; }
-.badge.bad { background: #fef2f2; color: #b91c1c; }
-.rels ul { margin: 6px 0 0 18px; font-size: 13px; }
+.badge { padding: 1px 8px; border-radius: var(--r-pill); font-size: var(--fs-xs); background: var(--accent-soft); color: var(--accent-ink); }
+.badge.ok { background: var(--ok-bg); color: var(--ok); }
+.badge.warn { background: var(--warn-bg); color: var(--warn); }
+.badge.bad { background: var(--bad-bg); color: var(--bad); }
+.rels ul { margin: 6px 0 0 18px; font-size: var(--fs-sm); }
 </style>

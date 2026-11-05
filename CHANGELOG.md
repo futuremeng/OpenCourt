@@ -4,6 +4,18 @@
 
 ## Unreleased（v0.3 M6 开发中）
 
+### 变更
+- **UI 设计系统落地（Impeccable 审计修复，9/20→Good）**：① **设计令牌唯一来源**——
+  `frontend/src/style.css` `:root` 令牌 + 根目录 `DESIGN.md`（五态/ok-warn-bad 语义色统一，
+  废除此前三套并行反馈色与两套「诚实降级黄标」；组件 scoped 样式只允许 `var(--…)`，
+  硬编码色值清零）；② **App.vue 871→255 行拆分**——法条数据/门禁自检/文档阅卷/
+  审校报告/BrowserOS 五个功能区抽出为独立组件，案件切换统一走各组件 `refresh()` 契约；
+  ③ **可访问性底线**——输入控件补 `aria-label`、错误与拦截反馈 `role="status"`、
+  全局 `:focus-visible` 焦点环、触控目标 ≥28px、表头 `scope`、`prefers-reduced-motion`；
+  ④ 主布局与事实看板改 `auto-fit` 网格（窄窗自动单栏）；FactBoard 模板内重复
+  `filter` 收敛为 computed 一次分组；高危确认（应用安装）由原生 `confirm()` 统一为
+  页内两步式，与「原样导出」范式一致；`vue-tsc` 0 错误、`vite build` 通过
+
 ### 加固
 - **v0.4 工作集代码 review 加固轮**：① **D1 生产接线**——`App.UpgradeFact`
   升级仲裁前经 `storage.IsOCRSource` 反查来源文档 OCR 标记置

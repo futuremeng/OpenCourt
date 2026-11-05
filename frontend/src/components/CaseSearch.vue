@@ -60,12 +60,12 @@ defineExpose({ refresh: refreshStatus });
       </span>
     </div>
     <div class="row">
-      <input v-model="query" placeholder="关键词（空格分词）" style="flex:1" @keyup.enter="runSearch" />
+      <input v-model="query" aria-label="卷宗关键词（空格分词）" placeholder="关键词（空格分词）" class="grow" @keyup.enter="runSearch" />
       <button class="primary" :disabled="busy || !query.trim()" @click="runSearch">
         {{ busy ? "检索中…" : "检索卷宗" }}
       </button>
     </div>
-    <p v-if="error" class="hint bad">{{ error }}</p>
+    <p v-if="error" class="hint bad" role="status">{{ error }}</p>
     <template v-if="report">
       <p class="row">
         <span :class="report.mode === 'hybrid' ? 'badge ok' : 'badge warn'">{{ modeLabel(report.mode) }}</span>
@@ -84,12 +84,15 @@ defineExpose({ refresh: refreshStatus });
 </template>
 
 <style scoped>
-.badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; }
-.badge.ok { background: #e6f6ec; color: #1a7f37; }
-.badge.warn { background: #fff4e5; color: #9a6700; }
-.hint.warn { color: #9a6700; }
-.hint.bad { color: #c0392b; }
+.badge { padding: 2px 8px; border-radius: var(--r-pill); font-size: var(--fs-xs); }
+.badge.ok { background: var(--ok-bg); color: var(--ok); }
+.badge.warn { background: var(--warn-bg); color: var(--warn); }
+.hint { color: var(--text-3); font-size: var(--fs-xs); }
+.hint.warn { color: var(--warn); }
+.hint.bad { color: var(--bad); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.grow { flex: 1; }
 ul.hits { list-style: none; padding: 0; }
-ul.hits li { padding: 6px 0; border-bottom: 1px dashed #ddd; }
-.snippet { color: #444; font-size: 13px; margin-top: 2px; }
+ul.hits li { padding: 6px 0; border-bottom: 1px dashed var(--border); }
+.snippet { color: var(--text-2); font-size: var(--fs-sm); margin-top: 2px; }
 </style>

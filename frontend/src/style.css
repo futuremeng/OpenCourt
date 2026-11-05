@@ -1,15 +1,78 @@
+/* OpenCourt 设计令牌（唯一来源；组件 scoped 样式只允许引用 var(--…)，禁止硬编码色值）
+   语义与规则见仓库根目录 DESIGN.md */
 :root {
   font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  color: #1f2937;
-  background: #f6f7f9;
+
+  /* 表面与线 */
+  --bg: #f6f7f9;
+  --surface: #fff;
+  --surface-sunken: #f3f4f6;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+
+  /* 文字 */
+  --text-1: #1f2937;
+  --text-2: #374151;
+  --text-3: #6b7280;
+  --text-inv: #fff;
+
+  /* 品牌强调（靛蓝） */
+  --accent: #4338ca;
+  --accent-soft: #eef2ff;
+  --accent-ink: #3730a3;
+
+  /* 反馈语义（全局唯一，任何组件不得另立色值） */
+  --ok: #047857;   --ok-bg: #ecfdf5;
+  --warn: #b45309; --warn-bg: #fffbeb; --warn-border: #fde68a;
+  --bad: #b91c1c;  --bad-bg: #fef2f2;  --bad-border: #fecaca;
+  --info: #1a5fb4; --info-bg: #eef5ff; --info-border: #bcd4f5;
+  --neutral-bg: #eef0f3;
+
+  /* 事实五态（产品核心语义） */
+  --state-confirmed: #ecfdf5;
+  --state-single: #eff6ff;
+  --state-opponent: #fffbeb;
+  --state-conflicted: #fef2f2;
+  --state-unsupported: #f3f4f6;
+
+  /* 顶栏 */
+  --topbar-bg: #111827;
+  --topbar-badge: #374151;
+
+  /* 圆角 */
+  --r-1: 6px; --r-2: 8px; --r-3: 10px; --r-pill: 999px;
+
+  /* 字号阶梯（归一后：12/13/14/16/20） */
+  --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 20px;
 }
+
 * { box-sizing: border-box; }
-body { margin: 0; }
+body { margin: 0; color: var(--text-1); background: var(--bg); }
+
 button {
-  border: 1px solid #d1d5db; background: #fff; border-radius: 6px;
-  padding: 6px 14px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: var(--surface);
+  border-radius: var(--r-1); padding: 6px 14px; min-height: 32px;
+  cursor: pointer; color: var(--text-1); font: inherit;
 }
-button:hover { background: #eef2ff; }
+button:hover:not(:disabled) { background: var(--accent-soft); }
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+button.primary { background: var(--accent); color: var(--text-inv); border-color: var(--accent); }
+button.primary:hover:not(:disabled) { background: var(--accent-ink); }
+button.sm { min-height: 28px; padding: 3px 10px; font-size: var(--fs-xs); }
+
 input, textarea, select {
-  border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 10px; font: inherit;
+  border: 1px solid var(--border-strong); border-radius: var(--r-1);
+  padding: 6px 10px; min-height: 32px; font: inherit;
+  color: var(--text-1); background: var(--surface);
+}
+
+/* 统一键盘焦点环 */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
