@@ -126,6 +126,10 @@ export function LocalCasesStatus() {
   return window['go']['main']['App']['LocalCasesStatus']();
 }
 
+export function OpenDataDir() {
+  return window['go']['main']['App']['OpenDataDir']();
+}
+
 export function PickDocumentFile() {
   return window['go']['main']['App']['PickDocumentFile']();
 }

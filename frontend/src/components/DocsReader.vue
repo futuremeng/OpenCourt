@@ -3,6 +3,7 @@
 // 纪律：模型只产候选事实，回原文定位失败即拒绝入库；时间/金额要素正则确定性抽取。
 import { onMounted, ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
+import { EventsOn } from "../../wailsjs/runtime/runtime";
 
 const emit = defineEmits<{ (e: "changed"): void }>();
 
@@ -108,11 +109,25 @@ async function refresh() {
   await Promise.all([refreshDocs(), refreshTimeline(), refreshCurrentCaseType()]);
 }
 
+// 拖放导入结果（Go 侧 OnFileDrop → IngestDocument 后经 docs:ingest 回报）
+EventsOn("docs:ingest", (r: any) => {
+  if (r?.ok) {
+    ingestMsg.value = r.ocr_engine
+      ? `拖入已接入 ${r.file}（${r.pages} 页，OCR:${r.ocr_engine}——封顶弱态）。`
+      : `拖入已接入 ${r.file}（${r.pages} 页）。`;
+    refreshDocs().catch((e) => (error.value = String(e)));
+    emit("changed");
+  } else {
+    error.value = `拖入文件导入失败：${r?.error || "未知错误"}`;
+  }
+});
+
 onMounted(() => {
   refresh().catch((e) => (error.value = String(e)));
 });
 
-defineExpose({ refresh });
+// 菜单「文件→导入卷宗文档…」(Cmd+O) 的落点
+defineExpose({ refresh, importFile: pickAndIngest });
 </script>
 
 <template>

@@ -19,6 +19,7 @@ import (
 	wails "github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/futuremeng/OpenCourt/config"
 	"github.com/futuremeng/OpenCourt/core/audit"
@@ -148,6 +149,9 @@ func (a *App) setLawDataDir(dir string) {
 // 数据全部位于用户本机应用数据目录，不出域。
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// 拖放导入回调（EnableFileDrop）：与菜单/按钮共用 IngestDocument 管道。
+	wailsRuntime.OnFileDrop(ctx, a.onFileDrop)
 
 	dataDir, err := appDataDir()
 	if err != nil {
@@ -303,6 +307,7 @@ func loadSettings(appDir string) (*config.Settings, error) {
 
 // shutdown 关闭资源。
 func (a *App) shutdown(ctx context.Context) {
+	a.saveWindow() // 窗口几何持久化（macOS 状态恢复惯例），须在关资源前记录
 	a.closeLawSource()
 	if a.store != nil {
 		a.store.Close()
@@ -339,15 +344,26 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:     "OpenCourt — 中立法律信息整理与逻辑推演辅助",
+		// 标题只放产品名（macOS 标题栏惯例；标语在窗口内页脚与关于面板呈现）
+		Title:     "OpenCourt",
 		Width:     1280,
 		Height:    800,
-		MinWidth:  960,
-		MinHeight: 600,
+		MinWidth:  minWindowWidth,
+		MinHeight: minWindowHeight,
+		Menu:      buildMenu(app),
+		// 拖放导入：拖入文件回绝对路径（desktop.go onFileDrop → IngestDocument
+		// 同一管道）；DisableWebViewDrop 防 WebView 默认行为把文件当链接打开
+		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true, DisableWebViewDrop: true},
+		// 单实例锁：双击第二次启动唤起既有窗口，绝不双进程争抢同一数据目录
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId:               "com.futuremeng.opencourt.desktop",
+			OnSecondInstanceLaunch: app.onSecondInstance,
+		},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
 		OnStartup:  app.startup,
+		OnDomReady: app.restoreWindow,
 		OnShutdown: app.shutdown,
 		Bind: []any{
 			app,

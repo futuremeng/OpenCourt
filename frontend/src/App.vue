@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // App 外壳：顶栏 / 案件切换 / 更新横幅 / 事实录入 / 面板组装。
 // 各功能区已抽出为 components/（distill）；案件切换统一走 onCaseSwitched。
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import * as App from "../wailsjs/go/main/App";
 import type { domain } from "../wailsjs/go/models";
 import { EventsOn } from "../wailsjs/runtime/runtime";
@@ -17,6 +17,7 @@ import GateCheck from "./components/GateCheck.vue";
 import DocsReader from "./components/DocsReader.vue";
 import ReviewPanel from "./components/ReviewPanel.vue";
 import BrowserOSPanel from "./components/BrowserOSPanel.vue";
+import SettingsPanel from "./components/SettingsPanel.vue";
 
 const info = ref<Record<string, any> | null>(null);
 const facts = ref<domain.Fact[]>([]);
@@ -39,6 +40,44 @@ const docSearchRef = ref(null);
 const simPanelRef = ref(null);
 const docsReaderRef = ref(null);
 const reviewPanelRef = ref(null);
+const caseBarRef = ref(null);
+
+// --- 桌面集成：设置面板（Cmd+,）与全局快捷键（与菜单栏同一落点） ---
+const settingsOpen = ref(false);
+const settingsMode = ref<"settings" | "about">("settings");
+
+// 拖放遮罩：文件拖入窗口时提示落点（macOS 原生 drop 由 Go 侧 OnFileDrop
+// 接管，这里只做视觉反馈，best-effort：WebView 不派发 DOM 拖拽事件时不显示）
+const dragging = ref(false);
+let dragDepth = 0;
+function onDragEnter(e: DragEvent) {
+  if (e.dataTransfer?.types.includes("Files")) {
+    dragDepth++;
+    dragging.value = true;
+  }
+}
+function onDragLeave() {
+  if (--dragDepth <= 0) {
+    dragDepth = 0;
+    dragging.value = false;
+  }
+}
+function onDragEnd() {
+  dragDepth = 0;
+  dragging.value = false;
+}
+
+function onGlobalKey(e: KeyboardEvent) {
+  if (e.key === "Escape" && settingsOpen.value) {
+    settingsOpen.value = false;
+    return;
+  }
+  // 与菜单栏同快捷键的浏览器兜底（wails dev 纯浏览器调试时菜单不可用）
+  if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "k") return;
+  e.preventDefault();
+  if (e.shiftKey) (caseSearchRef.value as any)?.focusInput?.();
+  else (lawSearchRef.value as any)?.focusInput?.();
+}
 
 async function refresh() {
   facts.value = await App.ListFacts();
@@ -108,7 +147,31 @@ onMounted(async () => {
   EventsOn("appupdate:progress", (m: any) => {
     appUpdateProg.value = [...appUpdateProg.value.slice(-6), String(Array.isArray(m) ? m[0] : m)];
   });
+  // 菜单栏动作（desktop.go buildMenu → EventsEmit）：菜单与 UI 同一落点
+  EventsOn("menu:settings", () => {
+    settingsMode.value = "settings";
+    settingsOpen.value = true;
+  });
+  EventsOn("menu:about", () => {
+    settingsMode.value = "about";
+    settingsOpen.value = true;
+  });
+  EventsOn("menu:new-case", () => (caseBarRef.value as any)?.focusNewCase?.());
+  EventsOn("menu:import-doc", () => (docsReaderRef.value as any)?.importFile?.());
+  EventsOn("menu:law-search", () => (lawSearchRef.value as any)?.focusInput?.());
+  EventsOn("menu:case-search", () => (caseSearchRef.value as any)?.focusInput?.());
+  document.addEventListener("dragenter", onDragEnter);
+  document.addEventListener("dragleave", onDragLeave);
+  document.addEventListener("dragend", onDragEnd);
+  window.addEventListener("keydown", onGlobalKey);
   checkAppUpdate();
+});
+
+onUnmounted(() => {
+  document.removeEventListener("dragenter", onDragEnter);
+  document.removeEventListener("dragleave", onDragLeave);
+  document.removeEventListener("dragend", onDragEnd);
+  window.removeEventListener("keydown", onGlobalKey);
 });
 </script>
 
@@ -133,7 +196,7 @@ onMounted(async () => {
   </header>
 
   <!-- 案件切换器（v0.2 M1）：一切事实/冲突/文档/要素按案件隔离 -->
-  <CaseBar @switched="onCaseSwitched" />
+  <CaseBar ref="caseBarRef" @switched="onCaseSwitched" />
 
   <!-- 程序更新横幅（发现新版才显示；两步确认替代原生 confirm） -->
   <div v-if="appUpdate && appUpdate.available" class="update-banner">
@@ -209,6 +272,14 @@ onMounted(async () => {
     </section>
   </main>
 
+  <!-- 拖放导入遮罩（文件拖入窗口时的落点提示；导入经 Go 侧同一管道） -->
+  <div v-if="dragging" class="drop-overlay" role="status">
+    <div class="drop-card">松开以导入卷宗文档（PDF / txt / md / docx；图片需 OCR 引擎）</div>
+  </div>
+
+  <!-- 设置 / 关于面板（Cmd+,） -->
+  <SettingsPanel v-if="settingsOpen" :mode="settingsMode" :info="info" @close="settingsOpen = false" />
+
   <footer class="disclaimer">
     OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。最终裁判权与诉讼决策权归属人类。
   </footer>
@@ -249,6 +320,17 @@ onMounted(async () => {
 .disclaimer {
   padding: 12px 24px; font-size: var(--fs-xs); color: var(--text-3);
   border-top: 1px solid var(--border); background: var(--surface);
+}
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 40; --wails-drop-target: drop;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 3px dashed var(--accent); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; pointer-events: none;
+}
+.drop-card {
+  background: var(--surface); color: var(--accent-ink); border: 1px solid var(--accent);
+  border-radius: var(--r-pill); padding: 10px 22px; font-size: var(--fs-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 </style>
 

@@ -113,13 +113,20 @@ function verifyLabel(v: string): string {
 }
 
 onMounted(refresh);
-defineExpose({ refresh });
+// 全局快捷键 Cmd+K / 菜单「检索→法条检索」的落点：聚焦本面板输入框
+const qInput = ref<HTMLInputElement | null>(null);
+function focusInput() {
+  qInput.value?.focus();
+  qInput.value?.select();
+}
+
+defineExpose({ refresh, focusInput });
 </script>
 
 <template>
   <div class="lawsearch">
     <div class="row">
-      <input v-model="query" aria-label="法条关键词" placeholder="法条关键词（如：违约责任）" class="q" @keyup.enter="search" />
+      <input ref="qInput" v-model="query" aria-label="法条关键词" placeholder="法条关键词（如：违约责任）" class="q" @keyup.enter="search" />
       <button :disabled="searching" @click="search">{{ searching ? "检索中…" : "检索法条" }}</button>
       <span class="spacer"></span>
       <select v-model="docID" aria-label="选择要核验的文书">

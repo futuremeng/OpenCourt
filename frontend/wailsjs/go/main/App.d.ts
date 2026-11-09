@@ -71,6 +71,8 @@ export function LoadLawData(arg1:string):Promise<Record<string, any>>;
 
 export function LocalCasesStatus():Promise<Record<string, any>>;
 
+export function OpenDataDir():Promise<void>;
+
 export function PickDocumentFile():Promise<string>;
 
 export function PickLawDataDir():Promise<string>;

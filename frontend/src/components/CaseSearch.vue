@@ -40,7 +40,14 @@ function modeLabel(m: string): string {
 
 onMounted(refreshStatus);
 
-defineExpose({ refresh: refreshStatus });
+// 全局快捷键 Cmd+K / 菜单「检索→法条检索」的落点：聚焦本面板输入框
+const qInput = ref<HTMLInputElement | null>(null);
+function focusInput() {
+  qInput.value?.focus();
+  qInput.value?.select();
+}
+
+defineExpose({ refresh: refreshStatus, focusInput });
 </script>
 
 <template>
@@ -60,7 +67,7 @@ defineExpose({ refresh: refreshStatus });
       </span>
     </div>
     <div class="row">
-      <input v-model="query" aria-label="卷宗关键词（空格分词）" placeholder="关键词（空格分词）" class="grow" @keyup.enter="runSearch" />
+      <input ref="qInput" v-model="query" aria-label="卷宗关键词（空格分词）" placeholder="关键词（空格分词）" class="grow" @keyup.enter="runSearch" />
       <button class="primary" :disabled="busy || !query.trim()" @click="runSearch">
         {{ busy ? "检索中…" : "检索卷宗" }}
       </button>

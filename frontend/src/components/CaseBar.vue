@@ -68,7 +68,15 @@ async function createCase() {
 }
 
 onMounted(refresh);
-defineExpose({ refresh });
+
+// 全局快捷键 Cmd+N / 菜单「文件→新建案件…」的落点：聚焦新案件标题输入框
+const titleInput = ref<HTMLInputElement | null>(null);
+function focusNewCase() {
+  titleInput.value?.focus();
+  titleInput.value?.select();
+}
+
+defineExpose({ refresh, focusNewCase });
 </script>
 
 <template>
@@ -89,7 +97,7 @@ defineExpose({ refresh });
       <option v-for="c in cases" :key="c.case_id" :value="c.case_id">{{ c.title }}</option>
     </select>
     <span class="spacer"></span>
-    <input v-model="title" aria-label="新案件标题" placeholder="新案件标题" class="title" />
+    <input ref="titleInput" v-model="title" aria-label="新案件标题" placeholder="新案件标题" class="title" />
     <input v-model="caseType" aria-label="案由/类型（可选）" placeholder="案由/类型（可选）" class="type" />
     <select v-model="stage" aria-label="案件阶段">
       <option v-for="s in stages" :key="s.code" :value="s.code">{{ s.label }}</option>
