@@ -59,7 +59,12 @@ scoped 样式只允许引用 `var(--…)`，禁止硬编码十六进制色值。
 
 ## 布局
 
-- 主区 `repeat(auto-fit, minmax(460px, 1fr))`：宽屏双栏、窄窗自动单栏。
+- 主区按办案阶段组织（v0.4 P3，docs/design-workflow.md）：阶段导航常驻，
+  每阶段内部 `repeat(auto-fit, minmax(460px, 1fr))`：宽屏双栏、窄窗自动单栏；
+  非当前阶段 v-show 隐藏（保留面板状态与暴露方法）。
+- 顶栏只留对办案有后果的状态（角色/智能模型/外网检索/使用统计）；
+  已启用=accent，离线/未启用=中性，仅使用统计开启显 warn；其余系统状态
+  迁入「工具与数据 → 运行状态」。
 - 事实看板 `repeat(auto-fit, minmax(180px, 1fr))`。
 - 控件最小高度 32px（`.sm` 28px），满足 WCAG 2.5.8。
 

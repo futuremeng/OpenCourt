@@ -5,7 +5,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import * as App from "../wailsjs/go/main/App";
 import { EventsOn } from "../wailsjs/runtime/runtime";
-import { humanSize } from "./util";
+import { humanSize, profileLabel } from "./util";
 import CaseBar from "./components/CaseBar.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import Workspace from "./views/Workspace.vue";
@@ -17,6 +17,10 @@ const error = ref("");
 const guide = computed<any[]>(() =>
   Array.isArray(info.value?.guide) ? info.value!.guide : []
 );
+
+// 顶栏只留对办案有后果的状态（v0.4 P3，docs/design-workflow.md）：
+// 已启用不再用告警黄；使用统计（隐私相关）开启才显 warn；脱敏级别迁入工具区。
+const roleLabel = computed(() => profileLabel(info.value?.profile));
 
 const caseBarRef = ref(null);
 const workspaceRef = ref(null);
@@ -139,20 +143,18 @@ onUnmounted(() => {
 
 <template>
   <header class="topbar">
-    <h1><span aria-hidden="true">⚖️</span> OpenCourt</h1>
+    <h1><span aria-hidden="true">⚖️</span> OpenCourt<span v-if="info" class="ver">v{{ info.version }}</span></h1>
     <div v-if="info" class="badges">
-      <span class="badge">v{{ info.version }}</span>
-      <span class="badge profile">Profile: {{ info.profile }}</span>
-      <span class="badge" :class="info.telemetry ? 'warn' : 'ok'">
-        遥测 {{ info.telemetry ? "开启" : "关闭" }}
+      <span class="badge profile">使用角色：{{ roleLabel }}</span>
+      <span class="badge" :class="info.modelEnabled ? 'on' : ''">
+        智能模型 {{ info.modelEnabled ? "已启用" : "离线" }}
       </span>
-      <span class="badge" :class="info.modelEnabled ? 'warn' : 'ok'">
-        模型 {{ info.modelEnabled ? "已启用" : "离线" }}
+      <span class="badge" :class="info.browserEnabled ? 'on' : ''">
+        外网检索 {{ info.browserEnabled ? "已启用" : "未启用" }}
       </span>
-      <span class="badge" :class="info.browserEnabled ? 'warn' : 'ok'">
-        BrowserOS {{ info.browserEnabled ? "已启用" : "禁用" }}
+      <span class="badge" :class="info.telemetry ? 'warn' : ''">
+        使用统计 {{ info.telemetry ? "开启" : "关闭" }}
       </span>
-      <span class="badge">脱敏级别: {{ info.redactLevel }}</span>
     </div>
   </header>
   <p v-if="error" class="error" role="status">{{ error }}</p>
@@ -203,10 +205,10 @@ onUnmounted(() => {
   padding: 14px 24px; background: var(--topbar-bg); color: var(--text-inv); flex-wrap: wrap;
 }
 .topbar h1 { font-size: var(--fs-lg); margin: 0; }
+.ver { margin-left: 8px; font-size: var(--fs-xs); font-weight: 400; opacity: 0.7; }
 .badges { display: flex; gap: 8px; flex-wrap: wrap; }
 .badge { background: var(--topbar-badge); border-radius: var(--r-pill); padding: 3px 12px; font-size: var(--fs-xs); }
-.badge.profile { background: var(--accent); }
-.badge.ok { background: var(--ok); }
+.badge.profile, .badge.on { background: var(--accent); }
 .badge.warn { background: var(--warn); }
 .update-banner { margin: 12px 24px 0; border: 1px solid var(--info-border); background: var(--info-bg); border-radius: var(--r-3); padding: 10px 14px; }
 .ub-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

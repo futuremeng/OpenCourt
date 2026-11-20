@@ -55,7 +55,7 @@ function label(action: string): string | null {
 </template>
 
 <style scoped>
-.guide { margin: 16px 24px 0; border: 1px solid var(--border); border-radius: var(--r-3);
+.guide { margin: 0 0 16px; border: 1px solid var(--border); border-radius: var(--r-3);
   background: var(--surface); padding: 14px 16px; }
 .guide-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .guide-head h2 { margin: 0; font-size: var(--fs-md); }

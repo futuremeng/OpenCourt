@@ -2,17 +2,12 @@
 import { computed, ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
 import type { domain } from "../../wailsjs/go/models";
+import { FACT_STATE_NAMES } from "../util";
 
 const props = defineProps<{ facts: domain.Fact[] }>();
 const emit = defineEmits<{ (e: "changed"): void }>();
 
-const stateNames: Record<string, string> = {
-  TRACED_CONFIRMED: "已溯源确认",
-  SINGLE_SOURCE: "单源未补强",
-  OPPONENT_CLAIM: "对方主张未验证",
-  CONFLICTED: "存在冲突",
-  UNSUPPORTED: "无依据",
-};
+const stateNames = FACT_STATE_NAMES;
 
 // 按五态一次分组（optimize：避免模板内反复 filter）
 const grouped = computed<Record<string, domain.Fact[]>>(() => {
