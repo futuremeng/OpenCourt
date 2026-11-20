@@ -2,7 +2,8 @@
 // 卷宗混合检索面板（v0.3 M5）：本案卷宗内关键词 + 向量召回 → RRF 融合。
 // 纪律：范围只有本案文档（法条归 OpenLaw、类案归 LocalCases，见对应面板）；
 // 语义召回未启用/不可用时必须显式黄标降级说明，绝不冒充混合；
-// 结果是候选不是事实——本面板没有任何写事实库入口。
+// 结果是候选不是事实——本面板不直接写事实库：「存为事实」只预填录入表单，
+// 仍需人工核对提交，由录入侧 fail-closed 回原文定位。
 import { onMounted, ref } from "vue";
 import { baseName, errText, sourceLabel } from "../util";
 import * as App from "../../wailsjs/go/main/App";
@@ -14,15 +15,21 @@ const report = ref<any>(null);
 const status = ref<any>(null);
 // doc_id→文书短名：检索结果展示文件名而不是内部编号
 const docNames = ref<Record<string, string>>({});
+// doc_id→文件路径：供「存为事实」预填录入表单（只有路径能作 CreateFact 的来源参数）
+const docFiles = ref<Record<string, string>>({});
+const emit = defineEmits<{ (e: "save-fact", hit: { file: string; page: number; snippet: string }): void }>();
 
 async function refreshDocNames() {
   try {
     const docs = await App.ListDocuments();
     const m: Record<string, string> = {};
-    for (const d of docs) m[d.doc_id] = baseName(d.file);
+    const f: Record<string, string> = {};
+    for (const d of docs) { m[d.doc_id] = baseName(d.file); f[d.doc_id] = d.file; }
     docNames.value = m;
+    docFiles.value = f;
   } catch {
     docNames.value = {};
+    docFiles.value = {};
   }
 }
 
@@ -100,6 +107,11 @@ defineExpose({ refresh: async () => { await Promise.all([refreshStatus(), refres
           <b>{{ docNames[h.doc_id] || h.doc_id }} 第 {{ h.page }} 页</b>
           <span class="hint">（{{ h.sources.map(sourceLabel).join("+") }}；相关度 {{ h.score.toFixed(2) }}）</span>
           <div class="snippet">{{ h.snippet }}</div>
+          <button
+            v-if="docFiles[h.doc_id]"
+            class="hit-save"
+            @click="emit('save-fact', { file: docFiles[h.doc_id], page: h.page, snippet: h.snippet })"
+          >存为事实</button>
         </li>
       </ul>
     </template>
@@ -118,4 +130,5 @@ defineExpose({ refresh: async () => { await Promise.all([refreshStatus(), refres
 ul.hits { list-style: none; padding: 0; }
 ul.hits li { padding: 6px 0; border-bottom: 1px dashed var(--border); }
 .snippet { color: var(--text-2); font-size: var(--fs-sm); margin-top: 2px; }
+.hit-save { font-size: var(--fs-xs); margin-top: 4px; min-height: 26px; }
 </style>

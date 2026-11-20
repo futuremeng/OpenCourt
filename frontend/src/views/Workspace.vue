@@ -16,7 +16,7 @@ import GateCheck from "../components/GateCheck.vue";
 import DocsReader from "../components/DocsReader.vue";
 import ReviewPanel from "../components/ReviewPanel.vue";
 import BrowserOSPanel from "../components/BrowserOSPanel.vue";
-import EmptyState from "../components/EmptyState.vue";
+
 import Onboard from "./Onboard.vue";
 
 const props = defineProps<{
@@ -106,10 +106,24 @@ async function addFact() {
   try {
     await App.CreateFact(desc.value, sourceFile.value, pageNum.value, snippet.value, fromOpponent.value);
     desc.value = ""; snippet.value = "";
+    prefillNote.value = "";
     await refresh();
   } catch (e) {
     error.value = errText(e);
   }
+}
+
+// 检索命中→预填事实表单（v0.4 P9）：只预填不写入；提交仍走录入侧 fail-closed
+// 回原文定位，片段与原文核对不上不会入库。命中片段可能被检索截短，提示人工核对。
+const prefillNote = ref("");
+function prefillFromHit(h: { file: string; page: number; snippet: string }) {
+  if (!h.file) return;
+  sourceFile.value = h.file;
+  pageNum.value = h.page || 1;
+  snippet.value = h.snippet || "";
+  prefillNote.value = "已从卷宗检索命中预填：请在文书中核对上下文后再提交；命中片段可能被检索截短，核对不上不会入库。";
+  switchStage("facts");
+  scrollTo("sec-fact-form");
 }
 
 // 文档接入（拖放或导入）后同步向导计数
@@ -230,41 +244,37 @@ onMounted(async () => {
       <div class="stage-grid">
         <section class="panel wide">
           <h2>本案进展</h2>
-          <template v-if="currentCase">
-            <p class="progress-line">{{ progressLine }}</p>
-            <ol class="flow-steps" aria-label="案件进度">
-              <li
-                v-for="(s, i) in flowSteps"
-                :key="s.id"
-                :class="{ done: s.done, current: i === currentStep }"
-                :aria-current="i === currentStep ? 'step' : undefined"
-              >
-                <span class="flow-mark" aria-hidden="true">{{ s.done ? "✓" : i === currentStep ? "▶" : "·" }}</span>
-                <span>{{ s.label }}</span>
-                <span v-if="s.done && s.meta" class="step-meta">{{ s.meta }}</span>
-              </li>
-            </ol>
-            <p class="mrow">
-              <button class="btn primary" @click="stepAction(nextStep.action)">{{ nextStep.actionLabel }}</button>
-            </p>
-            <details class="pro">
-              <summary>专业细节：案件计数与事实可靠程度五态</summary>
-              <div class="mrow">
-                <span class="badge on">当前案件：{{ currentCase.title }}</span>
-                <span class="badge">本案文档 {{ docCount }} 份</span>
-                <span class="badge">本案事实 {{ facts.length }} 条</span>
-              </div>
-              <div class="mrow states">
-                <span v-for="c in stateCounts" :key="c.key" class="state-chip" :class="c.key.toLowerCase()">
-                  {{ c.label }} {{ c.n }}
-                </span>
-              </div>
-              <p class="hint">以上计数来自当前案件的真实数据。五态即事实的可靠程度，由系统按来源情况自动判定：原文核对通过且多来源交叉一致才能进入最高档。</p>
-            </details>
-          </template>
-          <EmptyState v-else text="尚未选择案件。事实与文档都以案件为边界。">
-            <button v-if="!guide.length" class="btn primary" @click="emit('focus-new-case')">新建案件</button>
-          </EmptyState>
+          <p class="progress-line">{{ progressLine }}</p>
+          <ol class="flow-steps" aria-label="案件进度">
+            <li
+              v-for="(s, i) in flowSteps"
+              :key="s.id"
+              :class="{ done: s.done, current: i === currentStep }"
+              :aria-current="i === currentStep ? 'step' : undefined"
+            >
+              <span class="flow-mark" aria-hidden="true">{{ s.done ? "✓" : i === currentStep ? "▶" : "·" }}</span>
+              <span>{{ s.label }}</span>
+              <span v-if="s.done && s.meta" class="step-meta">{{ s.meta }}</span>
+            </li>
+          </ol>
+          <p class="mrow">
+            <button class="btn primary" @click="stepAction(nextStep.action)">{{ nextStep.actionLabel }}</button>
+          </p>
+          <details v-if="currentCase" class="pro">
+            <summary>专业细节：案件计数与事实可靠程度五态</summary>
+            <div class="mrow">
+              <span class="badge on">当前案件：{{ currentCase.title }}</span>
+              <span class="badge">本案文档 {{ docCount }} 份</span>
+              <span class="badge">本案事实 {{ facts.length }} 条</span>
+            </div>
+            <div class="mrow states">
+              <span v-for="c in stateCounts" :key="c.key" class="state-chip" :class="c.key.toLowerCase()">
+                {{ c.label }} {{ c.n }}
+              </span>
+            </div>
+            <p class="hint">以上计数来自当前案件的真实数据。五态即事实的可靠程度，由系统按来源情况自动判定：原文核对通过且多来源交叉一致才能进入最高档。</p>
+          </details>
+          <p v-else class="hint">事实与文档都以案件为边界：建好案件后，接入卷宗、录入事实都会归入本案。</p>
           <p v-if="error" class="error" role="status">{{ error }}</p>
         </section>
       </div>
@@ -273,13 +283,14 @@ onMounted(async () => {
     <!-- 阅卷：文档接入（主行动：导入卷宗文档）与本案卷宗检索 -->
     <div v-show="activeStage === 'review'" class="stage-grid">
       <DocsReader ref="docsReaderRef" @changed="onDocsChanged" />
-      <CaseSearch ref="docSearchRef" />
+      <CaseSearch ref="docSearchRef" @save-fact="prefillFromHit" />
     </div>
 
     <!-- 事实：录入（主行动）与五态看板 -->
     <div v-show="activeStage === 'facts'" class="stage-grid">
-      <section class="panel">
+      <section class="panel" id="sec-fact-form">
         <h2>录入事实</h2>
+        <p v-if="prefillNote" class="hint" role="status">{{ prefillNote }}</p>
         <p class="hint">录入后系统按来源自动标注可靠程度：能回原文定位→「单源未补强」；来自对方陈述→「对方主张未验证」；两者皆无→「无依据」。手工填写的原文片段会立即回原文核对，核对不上不会入库，并留下记录。</p>
         <textarea v-model="desc" rows="2" aria-label="事实描述（必填）" placeholder="事实描述（必填）" class="full"></textarea>
         <div class="row">
