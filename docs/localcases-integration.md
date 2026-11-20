@@ -144,7 +144,7 @@ facet 是**唯一合法的概率类输出**，且必须：
 | **LC-5** | **不需要** LocalCases 做脱敏、相关性重排、案件上下文理解 | 边界不扩散 | OpenCourt 自己过 `core/redact` |
 | **LC-6** | serve 启动时写发现文件 `<state dir>/localcases.json`：`{addr, token, pid, version, schema, indexed_documents}`，权限 0600，退出时删除 | **修复 H3**：桌面版 `random_token()` 每次随机且不落盘（`desktop/src/main.rs:56`），一并安装场景 OpenCourt 永远拿不到 token | 降级为「手动填 `base_url` + `token_env`」，UI 说明这是临时通道 |
 | **LC-7** | `/api/health` 返回 `version` 与索引 `schema` | 契约不匹配时报错而非误解析 | 缺字段时按「版本未知」处理，功能可用但标注 |
-| **LC-8** | `/api/health` 返回 `corpus_digest`（语料内容稳定哈希，语料不变则不变） | **E0 评测报告钉快照**：报告注明「本评测运行于语料快照 corpus_digest=X」，他人可在同快照上复现 | 评测报告退化为记 `indexed_documents` + 运行日期，并如实标注「语料快照标识缺失，复现性受限」 |
+| **LC-8** | `/api/health` 返回 `corpus_digest`（语料内容稳定哈希，语料不变则不变；**已具备**：LocalCases 按 id 顺序对全部存储记录取 SHA-256，convert 完成时记录，check 每次复验；未记录时返回 `null`） | **E0 评测报告钉快照**：报告注明「本评测运行于语料快照 corpus_digest=X」，他人可在同快照上复现 | 评测报告退化为记 `indexed_documents` + 运行日期，并如实标注「语料快照标识缺失，复现性受限」 |
 | **LC-9** | 同一 `corpus_digest` 下，`sort=id` + `id_gt` 游标遍历结果稳定可复现（同查询同序同集，不因索引重建抖动） | **评测集确定性圈定**：100 份 = 给定过滤条件（案由/年份）+ `sort=id` 升序取前 N，任何人可复跑同一集合 | OpenCourt 侧 `tests/eval/corpus_manifest.jsonl` 固化 id 清单 + 每份 sha256，按清单逐条回源取文；语料变更时评测集显式改版（evalset v1/v2） |
 | **LC-10** | `/api/case/{id}` 的 `record` 返回正文全文（`text`/`html`）、`source` 与正文 `sha256`（或可由 OpenCourt 对返回正文自行计算且正文**全文无截断**） | 评测取文完整性校验：入库评测的原文与 LocalCases 当时提供的内容逐字节一致，报告可溯源 | OpenCourt 自行对返回正文计算 sha256 写入 manifest；若正文被截断（长度与 `text_len` 不符），该份剔除出评测集并如实记录剔除数 |
 
