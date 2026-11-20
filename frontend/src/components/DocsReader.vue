@@ -132,7 +132,7 @@ defineExpose({ refresh, importFile: pickAndIngest });
 
 <template>
   <section class="panel wide">
-    <h2>文档接入与阅卷（阶段二）</h2>
+    <h2>文档接入与阅卷</h2>
     <p class="hint">
       阅卷时模型只生成候选事实；每条候选必须回原文定位，定位失败即被拒绝入库（审计留痕）。时间/金额要素由正则确定性抽取。
     </p>

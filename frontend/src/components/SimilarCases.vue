@@ -65,7 +65,7 @@ defineExpose({ refresh: async () => { report.value = null; await refreshRefs(); 
 
 <template>
   <section class="panel wide casesearch">
-    <h2>类案检索（LocalCases，外部可选组件）</h2>
+    <h2>类案检索（外部可选组件）</h2>
     <p v-if="status && !status.enabled" class="law-notice">
       {{ status.guidance }}<br />
       <b>临时通道标注</b>：LC-6 发现文件未就绪前需手动填 base_url + token_env；

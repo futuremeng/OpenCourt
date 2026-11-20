@@ -287,7 +287,7 @@ onMounted(async () => {
         <dl class="status-list">
           <div><dt>使用角色</dt><dd>{{ roleLabel }}</dd></div>
           <div><dt>智能模型</dt><dd>{{ info && info.modelEnabled ? "已启用" : "离线" }}</dd></div>
-          <div><dt>外网检索（BrowserOS）</dt><dd>{{ info && info.browserEnabled ? "已启用" : "未启用" }}</dd></div>
+          <div><dt>外网检索</dt><dd>{{ info && info.browserEnabled ? "已启用" : "未启用" }}</dd></div>
           <div><dt>使用统计（遥测）</dt><dd>{{ info && info.telemetry ? "开启" : "关闭" }}</dd></div>
           <div><dt>脱敏级别</dt><dd>{{ info ? info.redactLevel : "未知" }}</dd></div>
         </dl>

@@ -36,7 +36,7 @@ document / report），代码仍不判断 role（D4 契约不变），阶段完�
 | 阅卷 | DocsReader（文档接入与阅卷）、CaseSearch（卷宗检索·本案） | 导入卷宗文档 | `rule/one-primary-action` |
 | 事实 | 录入事实表单、事实看板（五态） | 录入 | `rule/one-primary-action` |
 | 核验 | LawSearch（法条检索与引用核验）、SimilarCases（类案检索） | 核验 | 同上 |
-| 报告 | GateCheck（输出门禁自检）、ReviewPanel（审校与报告，锚点 sec-report） | 审校 | 同上 |
+| 报告 | GateCheck（出报告前检查）、ReviewPanel（审校与报告，锚点 sec-report） | 审校 | 同上 |
 | 工具与数据 | LawDataPanel（法条数据）、BrowserOSPanel、SimPanel（对抗推演，court 如实禁用）、运行状态 | 面板各自 | 渐进披露：非办案主链的工具折叠到一处（`rule/smallest-intervention`） |
 
 - 阶段切换用常驻按钮（`aria-current="page"`，键盘可达、Tab+Enter 可切换），

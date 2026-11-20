@@ -44,7 +44,7 @@ async function runRound() {
   error.value = ""; notice.value = ""; lastResult.value = null;
   const ids = factIDs.value.split(/[,，\s]+/).map((s) => s.trim()).filter(Boolean);
   if (!conclusion.value.trim()) { error.value = "本轮发言不能为空"; return; }
-  if (ids.length === 0) { error.value = "必须填写 fact_ids：不带来源的发言会被门禁拦截"; return; }
+  if (ids.length === 0) { error.value = "必须填写发言来源：不带来源的发言会被发言检查拦截"; return; }
   running.value = true;
   try {
     lastResult.value = await App.RunSimRound(phase.value, stance.value, conclusion.value, ids);
@@ -92,7 +92,7 @@ defineExpose({ refresh });
     <div v-if="status" class="disclaimer-bar">{{ disclaimer() }}</div>
 
     <div v-if="status && !status.tool_enabled" class="warnbox">
-      当前立场（{{ status.role }}）已禁用对抗推演（defense_rehearsal）——法院/当事人 Profile 不开放本功能。
+      当前使用角色已禁用对抗推演——法院/当事人角色不开放本功能。
     </div>
 
     <div class="phases">
@@ -109,7 +109,7 @@ defineExpose({ refresh });
       <button class="sm" @click="review">人工复核确认</button>
     </div>
     <div v-if="status && !status.model_enabled" class="warnbox">
-      模型未启用：对方模拟不可用（不会用模板冒充「AI 模拟对方」），发言门禁与流程守卫仍正常工作。
+      模型未启用：对方模拟不可用（不会用模板冒充「AI 模拟对方」），发言检查与流程守卫仍正常工作。
     </div>
 
     <div class="row">
@@ -119,7 +119,7 @@ defineExpose({ refresh });
       <input v-model="stance" aria-label="本方立场" placeholder="本方立场（每轮重新注入并做漂移比对）" class="stance" />
     </div>
     <div class="row">
-      <input v-model="factIDs" aria-label="fact_ids（逗号分隔，必填）" placeholder="fact_ids（逗号分隔，必填，如 FACT-1, FACT-2）" class="facts" />
+      <input v-model="factIDs" aria-label="本轮发言的事实依据编号（逗号分隔，必填）" placeholder="事实依据编号，逗号分隔，如 FACT-1, FACT-2" class="facts" />
     </div>
     <div class="row">
       <textarea v-model="conclusion" aria-label="本轮发言" placeholder="本轮发言（必须可落地到上述卷宗事实）" rows="3" class="concl"></textarea>
@@ -134,7 +134,7 @@ defineExpose({ refresh });
     <div v-if="lastResult" class="result">
       <div class="muted">轮次 {{ lastResult.round_id }}（{{ phaseLabel(lastResult.phase) }}）</div>
       <div v-if="lastResult.blocked" class="badbox">
-        本轮发言被门禁拦截，不得展示为有效轮次（已留痕，待改写）：
+        本轮发言被发言检查拦截，不得展示为有效轮次（已留痕，待改写）：
         <ul>
           <li v-for="(v, i) in lastResult.violations || []" :key="i">[{{ v.rule }}] {{ v.message }}</li>
         </ul>

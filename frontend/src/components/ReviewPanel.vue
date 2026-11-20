@@ -54,7 +54,7 @@ defineExpose({ refresh });
     <h2>审校与报告</h2>
     <p class="hint">
       审校为确定性检查（引用核验 / 回原文一致性 / 五态合规 / 推理链完整性），模型不参与判定；
-      报告默认脱敏导出，原样导出须显式二次确认并留审计；报告全文过输出门禁。
+      报告默认脱敏导出，原样导出须显式二次确认并留审计；报告全文过出报告前检查。
     </p>
     <div class="row">
       <button class="primary" :disabled="reviewBusy" @click="runReview">{{ reviewBusy ? "审校中…" : "执行审校" }}</button>

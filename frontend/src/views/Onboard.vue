@@ -27,7 +27,7 @@ function label(action: string): string | null {
   <section class="guide" aria-label="引导动线">
     <div class="guide-head">
       <h2>开始使用</h2>
-      <span class="guide-note">按当前 Profile 声明的动线推进；完成状态来自实际数据，不是勾选</span>
+      <span class="guide-note">按当前使用角色的动线推进；完成状态来自实际数据，不是勾选</span>
     </div>
     <ol class="steps">
       <li v-for="(s, i) in steps" :key="s.action || i" class="step">

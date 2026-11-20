@@ -135,7 +135,7 @@ async function awaitHuman() {
 
 <template>
   <section class="panel wide browseros">
-    <h2>网络查阅与立案辅助（BrowserOS）</h2>
+    <h2>网络查阅与立案辅助</h2>
     <p class="hint">
       默认禁用；经本机回环 MCP 驱动用户自装的 BrowserOS neo（外部可选组件，不随本应用分发）。
       抓回内容先强制脱敏再展示/入模型，并以「单源未补强」弱态事实入库；

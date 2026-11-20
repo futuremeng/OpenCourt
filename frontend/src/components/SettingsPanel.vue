@@ -3,6 +3,7 @@
 // 模态呈现但仅用于「查看+打开数据目录」这类轻任务，Esc 关闭。
 import { ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
+import { profileLabel, toolLabel } from "../util";
 
 defineProps<{ mode: "settings" | "about"; info: Record<string, any> | null }>();
 const emit = defineEmits<{ (e: "close"): void }>();
@@ -38,7 +39,7 @@ async function openDataDir() {
 
       <dl v-else class="kv">
         <dt>版本</dt><dd>{{ info?.version }}</dd>
-        <dt>Profile</dt><dd>{{ info?.profile }}（{{ info?.role }}）</dd>
+        <dt>使用角色</dt><dd>{{ profileLabel(info?.profile) }}</dd>
         <dt>数据目录</dt>
         <dd>
           <code>{{ info?.dataDir }}</code>
@@ -46,10 +47,10 @@ async function openDataDir() {
         </dd>
         <dt>配置文件</dt><dd class="hint">数据目录下 settings.yaml（编辑后重启生效）；开发模式亦可用仓库 config/settings.yaml</dd>
         <dt>脱敏级别</dt><dd>{{ info?.redactLevel }}</dd>
-        <dt>遥测</dt><dd>{{ info?.telemetry ? "开启" : "关闭" }}</dd>
-        <dt>模型</dt><dd>{{ info?.modelEnabled ? "已启用" : "离线（未启用模型）" }}</dd>
-        <dt>BrowserOS</dt><dd>{{ info?.browserEnabled ? "已启用" : "禁用" }}</dd>
-        <dt>禁用工具</dt><dd>{{ (info?.disabledTools || []).join("、") || "无" }}</dd>
+        <dt>使用统计（遥测）</dt><dd>{{ info?.telemetry ? "开启" : "关闭" }}</dd>
+        <dt>智能模型</dt><dd>{{ info?.modelEnabled ? "已启用" : "离线" }}</dd>
+        <dt>外网检索</dt><dd>{{ info?.browserEnabled ? "已启用" : "未启用" }}</dd>
+        <dt>已禁用的功能</dt><dd>{{ (info?.disabledTools || []).map((t: string) => toolLabel(t)).join("、") || "无" }}</dd>
       </dl>
     </div>
   </div>
