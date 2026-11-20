@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/futuremeng/OpenCourt/core/domain"
 )
 
 func readAudit(t *testing.T, a *App) string {
@@ -114,7 +116,13 @@ func TestReviewCaseSurfacesBrokenLinks(t *testing.T) {
 	if _, err := a.CreateCase("测试案", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.CreateFact("有引用但原文缺失", "missing.pdf", 3, "不存在的片段", false); err != nil {
+	// 库层直插：GUI 路径的 CreateFact 已强制引用回原文定位，断链只可能
+	// 来自存量数据——审校仍必须将其标红。
+	if err := a.scope().CreateFact(domain.Fact{
+		FactID: "FACT-BROKEN", Description: "有引用但原文缺失",
+		State: domain.StateSingleSource, Visibility: domain.VisBoth,
+		Citation: &domain.Citation{SourceFile: "missing.pdf", PageNum: 3, Snippet: "不存在的片段"},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	rep, err := a.ReviewCase()

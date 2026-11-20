@@ -5,7 +5,7 @@
 import { computed, onMounted, ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
 import type { domain } from "../../wailsjs/go/models";
-import { errText, FACT_STATE_NAMES, profileLabel } from "../util";
+import { baseName, errText, FACT_STATE_NAMES, profileLabel } from "../util";
 import FactBoard from "../components/FactBoard.vue";
 import LawSearch from "../components/LawSearch.vue";
 import SimilarCases from "../components/SimilarCases.vue";
@@ -38,6 +38,8 @@ const error = ref("");
 // 向导进度取真实状态（当前案件 / 本案文档数），不是点击计数
 const currentCase = ref<any | null>(null);
 const docCount = ref(0);
+// 本案已接入文档列表：事实录入与向导计数共用，下拉展示短名不泄露长路径
+const docs = ref<any[]>([]);
 
 // 办案阶段（v0.4 P3）：常驻导航，键盘 Tab+Enter 可达；切换不销毁面板（v-show）
 type StageId = "overview" | "review" | "facts" | "verify" | "report" | "tools";
@@ -75,7 +77,8 @@ async function refresh() {
 async function refreshWizard() {
   try {
     currentCase.value = await App.CurrentCase();
-    docCount.value = currentCase.value ? (await App.ListDocuments()).length : 0;
+    docs.value = currentCase.value ? await App.ListDocuments() : [];
+    docCount.value = docs.value.length;
   } catch {
     currentCase.value = null;
     docCount.value = 0;
@@ -235,13 +238,17 @@ onMounted(async () => {
     <div v-show="activeStage === 'facts'" class="stage-grid">
       <section class="panel">
         <h2>录入事实</h2>
-        <p class="hint">初始状态由状态机判定：有引用→单源未补强；对方来源→对方主张；无来源→无依据。</p>
+        <p class="hint">初始状态由状态机判定：有引用→单源未补强；对方来源→对方主张；无来源→无依据。手工录入的引用会立即回原文定位，定位失败拒绝入库并留审计。</p>
         <textarea v-model="desc" rows="2" aria-label="事实描述（必填）" placeholder="事实描述（必填）" class="full"></textarea>
         <div class="row">
-          <input v-model="sourceFile" aria-label="来源文件（可空）" placeholder="来源文件（可空）" />
-          <input v-model.number="pageNum" type="number" min="1" aria-label="页码" class="num" />
-          <input v-model="snippet" aria-label="原文片段" placeholder="原文片段" />
+          <select v-model="sourceFile" aria-label="来源文书（可空）">
+            <option value="">无来源</option>
+            <option v-for="d in docs" :key="d.doc_id" :value="d.file">{{ baseName(d.file) }}（{{ d.page_count }} 页）</option>
+          </select>
+          <input v-model.number="pageNum" type="number" min="1" aria-label="页码" class="num" :disabled="!sourceFile" />
+          <input v-model="snippet" aria-label="原文片段" placeholder="原文片段" :disabled="!sourceFile" />
         </div>
+        <p v-if="!docs.length" class="hint">本案尚未接入文书：可先在「阅卷」接入卷宗；无来源的事按状态机判为「无依据」。</p>
         <div class="row">
           <label><input type="checkbox" v-model="fromOpponent" /> 来自对方文书/陈述</label>
           <button class="primary" @click="addFact">录入</button>
@@ -270,7 +277,7 @@ onMounted(async () => {
     <!-- 报告：输出门禁自检 + 审校与报告 -->
     <div v-show="activeStage === 'report'" class="stage-grid">
       <GateCheck />
-      <ReviewPanel id="sec-report" :names="nameList()" />
+      <ReviewPanel id="sec-report" :names="nameList()" :facts-count="facts.length" />
     </div>
 
     <!-- 工具与数据：非办案主链的工具与系统状态（渐进披露，逐项如实） -->

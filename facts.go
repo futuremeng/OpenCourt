@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/futuremeng/OpenCourt/core/gate"
 	"github.com/futuremeng/OpenCourt/core/redact"
 	"github.com/futuremeng/OpenCourt/core/statemachine"
+	"github.com/futuremeng/OpenCourt/core/verify"
 	"github.com/futuremeng/OpenCourt/neutral"
 	"github.com/futuremeng/OpenCourt/plugins"
 )
@@ -28,7 +30,8 @@ func (a *App) ListFacts() ([]domain.Fact, error) {
 
 // CreateFact 录入一条事实。初始状态由 statemachine.InitialState 判定：
 // 有可定位引用→单源未补强；对方来源→对方主张未验证；无来源→无依据。
-// 「已溯源确认」只能通过 UpgradeFact 的证据驱动路径达成。
+// 手工录入的引用同样必须回原文定位（与阅卷候选同一纪律）：定位失败
+// 拒绝入库并留审计；「已溯源确认」只能通过 UpgradeFact 的证据驱动路径达成。
 func (a *App) CreateFact(description, sourceFile string, pageNum int, snippet string, fromOpponent bool) (domain.Fact, error) {
 	if description == "" {
 		return domain.Fact{}, fmt.Errorf("事实描述不能为空")
@@ -39,7 +42,21 @@ func (a *App) CreateFact(description, sourceFile string, pageNum int, snippet st
 		Visibility:  domain.VisBoth,
 	}
 	if sourceFile != "" {
-		f.Citation = &domain.Citation{SourceFile: sourceFile, PageNum: pageNum, Snippet: snippet}
+		c := domain.Citation{SourceFile: sourceFile, PageNum: pageNum, Snippet: snippet}
+		if !c.Valid() {
+			return domain.Fact{}, fmt.Errorf("引用不完整：填了来源文书就必须给页码与原文片段，否则无法回原文定位")
+		}
+		docs := a.documentTexts()
+		if _, ok := docs[sourceFile]; !ok {
+			_ = a.auditLog.Log(a.profile.Role, "CREATE_REJECTED", filepath.Base(sourceFile), "来源文书不在本案已接入文档中")
+			return domain.Fact{}, fmt.Errorf("来源文书《%s》尚未接入本案：先在「阅卷」接入该文书，或留空来源按「无依据」录入", filepath.Base(sourceFile))
+		}
+		if !verify.Locate(c, docs) {
+			_ = a.auditLog.Log(a.profile.Role, "CREATE_REJECTED", filepath.Base(sourceFile),
+				fmt.Sprintf("引用片段未能在第 %d 页原文定位", pageNum))
+			return domain.Fact{}, fmt.Errorf("引用片段未能在来源文书第 %d 页原文中定位：请核对片段与页码（未入库）", pageNum)
+		}
+		f.Citation = &c
 	}
 	f.State = statemachine.InitialState(f, fromOpponent)
 	if err := a.scope().CreateFact(f); err != nil {

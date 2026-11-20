@@ -5,7 +5,7 @@ import { ref } from "vue";
 import { errText } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
-const props = defineProps<{ names: string[] }>();
+const props = defineProps<{ names: string[]; factsCount: number }>();
 
 const reviewReport = ref<any | null>(null);
 const reviewBusy = ref(false);
@@ -66,6 +66,7 @@ defineExpose({ refresh });
     <p v-if="exportErr" class="error" role="status">{{ exportErr }}</p>
     <p v-if="exportPath" class="ok-msg" role="status">已导出：{{ exportPath }}</p>
     <div v-if="reviewReport" role="status">
+      <p class="hint">审校对象来自本案存储：事实 {{ factsCount }} 条；法条引用、冲突与推演轮次留痕一并检查。</p>
       <p>标红 <b class="rejected">{{ reviewReport.red }}</b> 项 · 提示 {{ reviewReport.warn }} 项</p>
       <ul class="blindspots">
         <li v-for="(iss, i) in reviewReport.issues" :key="i">

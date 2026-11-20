@@ -4,7 +4,7 @@
 // （OK / OL-1001..OL-1006）；UNKNOWN（效力待确认）与 pending（待人工确认）
 // 必须显式标出——不得静默通过；断链（OL-1006）标「无法溯源」。
 import { onMounted, ref } from "vue";
-import { errText } from "../util";
+import { baseName, errText } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
 const query = ref("");
@@ -132,7 +132,7 @@ defineExpose({ refresh, focusInput });
       <span class="spacer"></span>
       <select v-model="docID" aria-label="选择要核验的文书">
         <option value="">选择文书…</option>
-        <option v-for="d in docs" :key="d.doc_id" :value="d.doc_id">{{ d.file_name || d.doc_id }}</option>
+        <option v-for="d in docs" :key="d.doc_id" :value="d.doc_id">{{ baseName(d.file) }}（{{ d.page_count }} 页）</option>
       </select>
       <input v-model="atDate" type="date" aria-label="行为发生时点（版本回溯基准，可留空）" title="行为发生时点（版本回溯基准，可留空）" class="date" />
       <button :disabled="verifying" @click="verify">{{ verifying ? "核验中…" : "核验文书引用" }}</button>

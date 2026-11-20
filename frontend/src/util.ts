@@ -25,6 +25,11 @@ export function toolLabel(t: string): string {
   return labels[t] || t;
 }
 
+// 路径→短文件名：列表/下拉只展示文件名，不把长路径搬进界面。
+export function baseName(p: string): string {
+  return p.split("/").filter(Boolean).pop() || p;
+}
+
 // Wails 绑定把 Go 侧错误包成「Error: <原文>」。UI 只展示错误原文（语言规范：
 // 技术前缀不进界面），原文一字不改、不另编；剥的只是包裹前缀本身。
 export function errText(e: unknown): string {
