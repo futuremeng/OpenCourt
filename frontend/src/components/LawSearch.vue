@@ -100,6 +100,14 @@ function statusLabel(s: string): string {
 function verifyClass(v: string): string {
   return v === "OK" ? "ok" : "bad";
 }
+// 法条关系类型中文名；未收录的如实回退原值。
+function relationLabel(t: string): string {
+  const m: Record<string, string> = {
+    amends: "修改", amended_by: "被修改", repeals: "废止", repealed_by: "被废止",
+    interprets: "解释", implements: "实施配套", related: "相关",
+  };
+  return m[t] || t;
+}
 function verifyLabel(v: string): string {
   if (!v) return "未核验";
   if (v === "OK") return "核验通过";
@@ -166,7 +174,7 @@ defineExpose({ refresh, focusInput });
       </thead>
       <tbody>
         <tr v-for="r in refs" :key="r.ref_id">
-          <td>《{{ r.law_name }}》{{ r.article_no }}<template v-if="r.at_date"> @{{ r.at_date }}</template></td>
+          <td>《{{ r.law_name }}》{{ r.article_no }}<template v-if="r.at_date">（{{ r.at_date }} 当时版本）</template></td>
           <td><span class="badge" :class="verifyClass(r.verify_result)">{{ verifyLabel(r.verify_result) }}</span></td>
           <td><span class="badge" :class="statusClass(r.status)">{{ statusLabel(r.status) }}</span></td>
           <td>
@@ -180,10 +188,10 @@ defineExpose({ refresh, focusInput });
     </table>
 
     <div v-if="relRefID" class="rels">
-      <span class="muted">引用 {{ relRefID }} 的法条关系（修改/废止/解释/配套；机器不自动判定废止）：</span>
+      <span class="muted">引用 {{ relRefID }} 的法条关系（修改/废止/解释/配套；是否废止以人工确认为准）：</span>
       <ul v-if="relations.length">
         <li v-for="(rel, i) in relations" :key="i">
-          {{ rel.src_law_id }} —{{ rel.relation_type }}→ {{ rel.dst_law_id }}
+          {{ rel.src_law_id }} —{{ relationLabel(rel.relation_type) }}→ {{ rel.dst_law_id }}
           <span class="badge" :class="rel.confirm_status === 'confirmed' ? 'ok' : 'warn'">
             {{ rel.confirm_status === "confirmed" ? "已确认" : "待人工确认" }}
           </span>

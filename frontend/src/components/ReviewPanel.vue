@@ -2,7 +2,7 @@
 // 审校与报告——自 App.vue 抽出（distill）。
 // 审校为确定性检查，模型不参与判定；原样导出须显式勾选确认并留审计。
 import { ref } from "vue";
-import { errText } from "../util";
+import { checkLabel, errText } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
 const props = defineProps<{ names: string[]; factsCount: number }>();
@@ -66,12 +66,12 @@ defineExpose({ refresh });
     <p v-if="exportErr" class="error" role="status">{{ exportErr }}</p>
     <p v-if="exportPath" class="ok-msg" role="status">已导出：{{ exportPath }}</p>
     <div v-if="reviewReport" role="status">
-      <p class="hint">审校对象来自本案存储：事实 {{ factsCount }} 条；法条引用、冲突与推演轮次留痕一并检查。</p>
+      <p class="hint">审校对象来自本案存储：事实 {{ factsCount }} 条；法条引用、冲突与推演轮次记录一并检查。</p>
       <p>标红 <b class="rejected">{{ reviewReport.red }}</b> 项 · 提示 {{ reviewReport.warn }} 项</p>
       <ul class="blindspots">
         <li v-for="(iss, i) in reviewReport.issues" :key="i">
           <b :class="{ rejected: iss.level === 'red' }">{{ iss.level === "red" ? "[标红]" : "[提示]" }}</b>
-          {{ iss.message }}（{{ iss.check }}<template v-if="iss.ref"> · {{ iss.ref }}</template>）
+          {{ iss.message }}（检查项：{{ checkLabel(iss.check) }}<template v-if="iss.ref"> · {{ iss.ref }}</template>）
         </li>
       </ul>
     </div>

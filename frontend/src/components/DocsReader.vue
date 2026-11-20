@@ -2,7 +2,7 @@
 // 文档接入与阅卷（阶段二）——自 App.vue 抽出（distill）。
 // 纪律：模型只产候选事实，回原文定位失败即拒绝入库；时间/金额要素正则确定性抽取。
 import { onMounted, ref } from "vue";
-import { errText } from "../util";
+import { baseName, errText, FACT_STATE_NAMES, kindLabel } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 
@@ -60,8 +60,8 @@ async function pickAndIngest() {
     if (!path) return;
     const doc = await App.IngestDocument(path);
     ingestMsg.value = doc.ocr_engine
-      ? `已接入 ${doc.file}（${doc.page_count} 页，OCR:${doc.ocr_engine}——封顶弱态，低置信页需人工校对）。`
-      : `已接入 ${doc.file}（${doc.page_count} 页）。扫描件需 OCR 引擎，未配置会被拒绝。`;
+      ? `已接入 ${baseName(doc.file)}（${doc.page_count} 页）：文本由扫描识别而来，扫描质量低的页会标注待人工校对。`
+      : `已接入 ${baseName(doc.file)}（${doc.page_count} 页）。`;
     await refreshDocs();
   } catch (e) {
     error.value = errText(e);
@@ -114,8 +114,8 @@ async function refresh() {
 EventsOn("docs:ingest", (r: any) => {
   if (r?.ok) {
     ingestMsg.value = r.ocr_engine
-      ? `拖入已接入 ${r.file}（${r.pages} 页，OCR:${r.ocr_engine}——封顶弱态）。`
-      : `拖入已接入 ${r.file}（${r.pages} 页）。`;
+      ? `拖入已接入 ${baseName(r.file)}（${r.pages} 页）：文本由扫描识别而来，扫描质量低的页会标注待人工校对。`
+      : `拖入已接入 ${baseName(r.file)}（${r.pages} 页）。`;
     refreshDocs().catch((e) => (error.value = errText(e)));
     emit("changed");
   } else {
@@ -135,7 +135,7 @@ defineExpose({ refresh, importFile: pickAndIngest });
   <section class="panel wide">
     <h2>文档接入与阅卷</h2>
     <p class="hint">
-      阅卷时模型只生成候选事实；每条候选必须回原文定位，定位失败即被拒绝入库（审计留痕）。时间/金额要素由正则确定性抽取。
+      系统阅读文书时只会生成候选事实；每条候选都必须能在原文对应页找到原句，找不到即拒绝入库（留下记录）。日期与金额按固定规则自动提取，不由模型改写。标记「扫描识别文本」的文书来自扫描件识别，系统会自动降低其可靠程度，扫描质量低的页需人工校对。
     </p>
     <div class="row">
       <button @click="pickAndIngest">接入文档（PDF/txt/md）</button>
@@ -144,15 +144,15 @@ defineExpose({ refresh, importFile: pickAndIngest });
     <p v-if="error" class="error" role="status">{{ error }}</p>
     <ul class="doc-list">
       <li v-for="d in docs" :key="d.doc_id">
-        {{ d.file }}（{{ d.page_count }} 页）
-        <span v-if="d.ocr_engine" class="badge warn" title="文本来自 OCR：入库封顶弱态，低置信页需人工校对">OCR:{{ d.ocr_engine }}</span>
+        {{ baseName(d.file) }}（{{ d.page_count }} 页）
+        <span v-if="d.ocr_engine" class="badge warn" title="文本由扫描识别而来；低置信页已标注，需人工校对">扫描识别文本</span>
         <button :disabled="busy === d.doc_id" @click="runReader(d.doc_id)">
           {{ busy === d.doc_id ? "阅卷中…" : "阅卷" }}
         </button>
         <button @click="toggleAnnotations(d.doc_id)">标注</button>
         <ul v-if="annotations[d.doc_id]?.length" class="annotations">
           <li v-for="(a, i) in annotations[d.doc_id]" :key="i">
-            <span class="badge">{{ a.kind }}</span>
+            <span class="badge">{{ kindLabel(a.kind) }}</span>
             <b v-if="a.author">{{ a.author }}</b>
             {{ a.text }}
             <em v-if="a.meta" class="hint">（{{ a.meta }}）</em>
@@ -161,12 +161,12 @@ defineExpose({ refresh, importFile: pickAndIngest });
       </li>
     </ul>
     <div v-if="readerReport" class="reader-report" role="status">
-      <p>模型 {{ readerReport.model_name }}：入库 {{ readerReport.accepted.length }} 条 ·
-        <b class="rejected">拒绝 {{ readerReport.rejected.length }} 条（回原文失败）</b> ·
-        要素 {{ readerReport.elements.length }} 个</p>
+      <p>智能模型 {{ readerReport.model_name }}：入库 {{ readerReport.accepted.length }} 条 ·
+        <b class="rejected">拒绝 {{ readerReport.rejected.length }} 条</b> ·
+        提取时间/金额 {{ readerReport.elements.length }} 处</p>
       <ul>
         <li v-for="r in readerReport.rejected" :key="r.description">
-          [拒绝] {{ r.description }} —— 声称片段「{{ r.snippet }}」未在原文定位
+          未入库：{{ r.description }} —— 所称原文「{{ r.snippet }}」在原文中找不到
         </li>
       </ul>
     </div>
@@ -176,7 +176,7 @@ defineExpose({ refresh, importFile: pickAndIngest });
       <li v-for="t in timeline" :key="t.Fact.fact_id">
         <span class="tdate">{{ t.Date || "日期未定位" }}</span>
         {{ t.Fact.description }}
-        <span class="tstate">{{ t.Fact.state }}</span>
+        <span class="tstate">{{ FACT_STATE_NAMES[t.Fact.state] || t.Fact.state }}</span>
       </li>
     </ol>
 
@@ -187,9 +187,9 @@ defineExpose({ refresh, importFile: pickAndIngest });
     </div>
     <div class="row">
       <button :disabled="elemBusy" class="primary" @click="runElementMatchByCaseType">
-        {{ elemBusy ? "匹配中…" : "按案由匹配（OpenLaw 要件库）" }}
+        {{ elemBusy ? "匹配中…" : "按案由匹配要件库" }}
       </button>
-      <span class="hint">当前案由：{{ currentCaseType || "（未设置）" }}；要件只从要件库封闭候选集取，无库时显式报错不猜</span>
+      <span class="hint">当前案由：{{ currentCaseType || "（未设置）" }}；要件只从已导入的要件库中选取，要件库缺失时会明确提示，不会猜测。</span>
     </div>
     <p v-if="elemMsg" class="hint" role="status">{{ elemMsg }}</p>
     <ul v-if="elemMatch" class="blindspots" role="status">

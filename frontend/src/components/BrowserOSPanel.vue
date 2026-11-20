@@ -2,7 +2,7 @@
 // 网络查阅与立案辅助（BrowserOS）——自 App.vue 抽出（distill）。默认禁用；
 // 抓回内容先脱敏；登录/验证码/实名/最终提交一律交人执行。
 import { ref } from "vue";
-import { errText } from "../util";
+import { baseName, errText, FACT_STATE_NAMES, ruleLabel } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
 defineProps<{ enabled: boolean }>();
@@ -138,12 +138,12 @@ async function awaitHuman() {
   <section class="panel wide browseros">
     <h2>网络查阅与立案辅助</h2>
     <p class="hint">
-      默认禁用；经本机回环 MCP 驱动用户自装的 BrowserOS neo（外部可选组件，不随本应用分发）。
-      抓回内容先强制脱敏再展示/入模型，并以「单源未补强」弱态事实入库；
-      登录/验证码/实名/最终提交一律交人执行——辅助工具只做候选填写，绝不代做最终动作。
+      默认禁用；启用后由本机自装的外网检索组件 BrowserOS neo（外部可选组件，不随本应用分发）代为浏览。
+      抓回内容先隐去姓名等敏感信息再展示；产生的事实只按「单源未补强」入库；
+      登录/验证码/实名/最终提交一律由人亲自完成——工具只准备候选填写内容，绝不代做最终动作。
     </p>
     <div v-if="!enabled" class="notice">
-      BrowserOS 对接未启用：启动 BrowserOS neo 后，在其侧栏 MCP 页复制端点 URL，
+      外网检索未启用：启动 BrowserOS neo 后，在其侧栏的 MCP 页复制端点地址，
       写入配置 <b>browseros.endpoint</b>（或环境变量 OPENCOURT_BROWSEROS_ENDPOINT）并将
       <b>browseros.enabled</b> 置 true。本工具不会回退到其他抓取方式。
     </div>
@@ -157,11 +157,11 @@ async function awaitHuman() {
     <p v-if="webErr" class="error" role="status">{{ webErr }}</p>
     <div v-if="webResult" class="web-result" role="status">
       <p class="ok-msg">
-        快照哈希 {{ String(webResult.content_sha256 || "").slice(0, 12) }} ·
-        脱敏 {{ (webResult.redact_actions || []).length }} 项 ·
-        事实状态 <b>{{ webResult.fact.state }}</b>（联网源永不进强态）
+        内容指纹 {{ String(webResult.content_sha256 || "").slice(0, 12) }} ·
+        隐去敏感信息 {{ (webResult.redact_actions || []).length }} 处 ·
+        事实可靠程度 <b>{{ FACT_STATE_NAMES[webResult.fact.state] || webResult.fact.state }}</b>（来自网络的内容永不计入最高档）
       </p>
-      <p class="cite">引用: {{ webResult.fact.citation && webResult.fact.citation.SourceFile }}</p>
+      <p class="cite">来源：{{ webResult.fact.citation ? baseName(webResult.fact.citation.SourceFile) + ' 第 ' + webResult.fact.citation.PageNum + ' 页' : '无' }}</p>
       <pre class="web-text">{{ webResult.text }}</pre>
     </div>
 
@@ -179,7 +179,7 @@ async function awaitHuman() {
       <button class="primary" :disabled="govBusy" @click="runGovListBrowse">{{ govBusy ? "浏览中…" : "开始浏览" }}</button>
     </div>
     <p class="hint">
-      在你自己的 BrowserOS neo 中浏览国家规章库官方列表页（官方 UI 翻页，≥2s/页，单会话 ≤200 页，全程审计），
+      在你自己的 BrowserOS neo 中浏览国家规章库官方列表页（官方页面翻页，每页间隔≥2秒，单次≤200 页，全程留记录），
       导出与 OpenLaw 兼容的清单文件；随后由 openlaw-govcn -source gzk 走详情页合规抓取 + 人工确认闸口入库。
       绝不触碰检索 API 或鉴权接口。
     </p>
@@ -192,7 +192,7 @@ async function awaitHuman() {
     <div class="row">
       <input v-model="assistUrl" aria-label="目标页面 URL" placeholder="目标页面 URL（如 zxfw.court.gov.cn 立案页）" class="grow" />
       <button @click="openAssist">打开页面</button>
-      <span v-if="assistPage" class="ok-msg" role="status">page={{ assistPage.page_id }}（已在你浏览器中打开）</span>
+      <span v-if="assistPage" class="ok-msg" role="status">已在你的浏览器中打开该页面</span>
     </div>
     <textarea v-model="assistValues" rows="3" class="full" aria-label="填写字段（字段名=值，每行一条）"
       placeholder="字段名=值（每行一条；值尾缀 ? 表示未经确认将标黄，如：原告姓名=王五?）"></textarea>
@@ -204,7 +204,7 @@ async function awaitHuman() {
       <li v-for="c in assistCands" :key="c.action_id" :class="{ blocked: !c.allowed }">
         <b>{{ c.label }}</b> ← {{ c.value }}
         <template v-if="!c.allowed">
-          <span class="block-tag">[拦截 {{ c.rule }}] {{ c.reason }}</span>
+          <span class="block-tag">[已拦截：{{ ruleLabel(c.rule) }}] {{ c.reason }}</span>
         </template>
         <template v-else>
           <span v-if="c.fact_state" class="weak-tag">[{{ c.fact_state }}]</span>

@@ -82,11 +82,10 @@ defineExpose({ refresh, focusNewCase });
 
 <template>
   <div class="casebar">
-    <span v-if="current" class="current">
+    <span v-if="current" class="current" :title="'案件编号（核对用）：' + current.case_id">
       当前案件：<b>{{ current.title }}</b>
       <span class="meta">
-        {{ current.case_id }}<template v-if="current.case_type"> · {{ current.case_type }}</template>
-        · {{ stageLabel(current.stage) }}
+        <template v-if="current.case_type">{{ current.case_type }} · </template>{{ stageLabel(current.stage) }}
       </span>
     </span>
     <select

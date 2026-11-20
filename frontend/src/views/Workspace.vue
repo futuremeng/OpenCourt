@@ -5,7 +5,7 @@
 import { computed, onMounted, ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
 import type { domain } from "../../wailsjs/go/models";
-import { baseName, errText, FACT_STATE_NAMES, profileLabel } from "../util";
+import { baseName, errText, FACT_STATE_NAMES, profileLabel, redactLabel } from "../util";
 import FactBoard from "../components/FactBoard.vue";
 import LawSearch from "../components/LawSearch.vue";
 import SimilarCases from "../components/SimilarCases.vue";
@@ -218,7 +218,7 @@ onMounted(async () => {
                 {{ c.label }} {{ c.n }}
               </span>
             </div>
-            <p class="hint">以上计数来自当前案件的真实数据；五态由状态机判定，前端不改判。</p>
+            <p class="hint">以上计数来自当前案件的真实数据。五态即事实的可靠程度，由系统按来源情况自动判定：原文核对通过且多来源交叉一致才能进入最高档。</p>
           </template>
           <EmptyState v-else text="尚未选择案件。事实与文档都以案件为边界。">
             <button v-if="!guide.length" class="btn primary" @click="emit('focus-new-case')">新建案件</button>
@@ -238,7 +238,7 @@ onMounted(async () => {
     <div v-show="activeStage === 'facts'" class="stage-grid">
       <section class="panel">
         <h2>录入事实</h2>
-        <p class="hint">初始状态由状态机判定：有引用→单源未补强；对方来源→对方主张；无来源→无依据。手工录入的引用会立即回原文定位，定位失败拒绝入库并留审计。</p>
+        <p class="hint">录入后系统按来源自动标注可靠程度：能回原文定位→「单源未补强」；来自对方陈述→「对方主张未验证」；两者皆无→「无依据」。手工填写的原文片段会立即回原文核对，核对不上不会入库，并留下记录。</p>
         <textarea v-model="desc" rows="2" aria-label="事实描述（必填）" placeholder="事实描述（必填）" class="full"></textarea>
         <div class="row">
           <select v-model="sourceFile" aria-label="来源文书（可空）">
@@ -248,7 +248,7 @@ onMounted(async () => {
           <input v-model.number="pageNum" type="number" min="1" aria-label="页码" class="num" :disabled="!sourceFile" />
           <input v-model="snippet" aria-label="原文片段" placeholder="原文片段" :disabled="!sourceFile" />
         </div>
-        <p v-if="!docs.length" class="hint">本案尚未接入文书：可先在「阅卷」接入卷宗；无来源的事按状态机判为「无依据」。</p>
+        <p v-if="!docs.length" class="hint">本案尚未接入文书：可先在「阅卷」接入卷宗；无来源的事实会标注为「无依据」。</p>
         <div class="row">
           <label><input type="checkbox" v-model="fromOpponent" /> 来自对方文书/陈述</label>
           <button class="primary" @click="addFact">录入</button>
@@ -257,7 +257,8 @@ onMounted(async () => {
       </section>
 
       <section class="panel wide" id="sec-facts">
-        <h2>事实看板（五态）</h2>
+        <h2>事实看板（按可靠程度分列）</h2>
+        <p class="hint">只有同时满足原文核对通过、多来源一致、人工确认，才能升级为「已溯源确认」；不满足会被拒绝并说明原因。</p>
         <FactBoard :facts="facts" @changed="refresh" />
       </section>
     </div>
@@ -295,8 +296,8 @@ onMounted(async () => {
           <div><dt>使用角色</dt><dd>{{ roleLabel }}</dd></div>
           <div><dt>智能模型</dt><dd>{{ info && info.modelEnabled ? "已启用" : "离线" }}</dd></div>
           <div><dt>外网检索</dt><dd>{{ info && info.browserEnabled ? "已启用" : "未启用" }}</dd></div>
-          <div><dt>使用统计（遥测）</dt><dd>{{ info && info.telemetry ? "开启" : "关闭" }}</dd></div>
-          <div><dt>脱敏级别</dt><dd>{{ info ? info.redactLevel : "未知" }}</dd></div>
+          <div><dt>使用统计</dt><dd>{{ info && info.telemetry ? "开启" : "关闭" }}</dd></div>
+          <div><dt>脱敏级别</dt><dd>{{ redactLabel(info ? info.redactLevel : "") }}</dd></div>
         </dl>
         <p class="hint">以上状态影响数据来源与隐私边界，以设置与后端实际配置为准。</p>
       </section>

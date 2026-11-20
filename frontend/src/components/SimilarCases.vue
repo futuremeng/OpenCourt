@@ -69,14 +69,14 @@ defineExpose({ refresh: async () => { report.value = null; await refreshRefs(); 
     <h2>类案检索（外部可选组件）</h2>
     <p v-if="status && !status.enabled" class="law-notice">
       {{ status.guidance }}<br />
-      <b>临时通道标注</b>：LC-6 发现文件未就绪前需手动填 base_url + token_env；
-      OpenCourt 不会启动 LocalCases 进程，也不会改用其他来源。
+      在语料库自动发现就绪前，需在配置中手动填写语料库地址与凭证环境变量；
+      OpenCourt 不会代为启动外部服务，也不会改用其他来源。
     </p>
     <p v-else-if="status" class="hint">
-      语料规模：<b>{{ status.indexed_docs }}</b> 篇（必须同显，防小样本误读）；
-      版本：{{ status.version || "未知（LC-7 未就绪）" }}；
-      <template v-if="!status.health_ok">探测失败：{{ status.health_error }}</template>
-      <template v-if="!status.token_set"><b class="warn">token 未注入</b>（检查 token_env 环境变量）；</template>
+      语料规模：<b>{{ status.indexed_docs }}</b> 篇（需同时关注，避免小样本误读）；
+      版本：{{ status.version || "未知（语料库未就绪）" }}；
+      <template v-if="!status.health_ok">连接语料库失败：{{ status.health_error }}</template>
+      <template v-if="!status.token_set"><b class="warn">访问凭证未配置</b>（请在环境变量中配置后重启）；</template>
     </p>
 
     <div class="row">
@@ -94,7 +94,7 @@ defineExpose({ refresh: async () => { report.value = null; await refreshRefs(); 
 
     <template v-if="report">
       <p v-if="!report.structured" class="law-notice">
-        当前索引不支持精确过滤，以下结果<b>未按法院/案由等条件筛选</b>（LocalCases 诚实降级）；分布统计已隐藏。
+        当前语料库索引不支持按条件精确过滤，以下结果<b>未按法院/案由等条件筛选</b>；分布统计已隐藏。
       </p>
       <p class="hint">命中 {{ report.refs.length }} 条（语料内共 {{ report.total }}）；要旨已强制脱敏 {{ report.redact_count }} 项。</p>
       <ul class="caselist">
@@ -115,15 +115,15 @@ defineExpose({ refresh: async () => { report.value = null; await refreshRefs(); 
       </template>
     </template>
 
-    <h3>本案类案留痕（引用，非事实）</h3>
-    <p class="hint">类案要旨不进事实五态；跨案件天然隔离。</p>
+    <h3>本案类案记录（参考，非事实）</h3>
+    <p class="hint">类案要旨不计入事实可靠程度；不同案件之间天然隔离。</p>
     <ul class="caselist">
       <li v-for="r in refs" :key="r.ref_id">
         <b>{{ r.case_name || r.source_case_id }}</b>
         <span class="meta">{{ r.court }} · {{ r.cause }} · {{ r.judgment_date }}</span>
         <div class="summary">{{ r.summary }}</div>
       </li>
-      <li v-if="refs.length === 0" class="hint">（暂无留痕）</li>
+      <li v-if="refs.length === 0" class="hint">（暂无记录）</li>
     </ul>
   </section>
 </template>

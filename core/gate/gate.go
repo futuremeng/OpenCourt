@@ -203,7 +203,7 @@ func CheckGrounding(out OutputDraft, index FactIndex, refs RefIndex) []Violation
 				violations = append(violations, Violation{
 					Rule:    "HALLUCINATION",
 					Phrase:  id,
-					Message: fmt.Sprintf("引用的实体 %s 在当前案件的引用留痕中不存在（跨案件引用同样拦截），直接拦截", id),
+					Message: fmt.Sprintf("引用的实体 %s 在当前案件的引用记录中不存在（跨案件引用同样拦截），直接拦截", id),
 				})
 				continue
 			}
@@ -229,7 +229,7 @@ func CheckGrounding(out OutputDraft, index FactIndex, refs RefIndex) []Violation
 			violations = append(violations, Violation{
 				Rule:    "HALLUCINATION",
 				Phrase:  id,
-				Message: fmt.Sprintf("引用的事实 %s 状态为「无依据」，模型生成此类内容直接被门禁拦截", id),
+				Message: fmt.Sprintf("引用的事实 %s 状态为「无依据」，模型生成此类内容直接被检查拦截", id),
 			})
 		}
 		if f.State == domain.StateOpponentClaim {

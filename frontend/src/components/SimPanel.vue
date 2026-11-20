@@ -6,7 +6,7 @@
 //   - 被门禁拦截的轮次同样出现在轮次视图（拦截必须可见）；
 //   - 轨迹抖动待复核时后端拒绝续演，此处只提供 SimReview 唯一恢复出口。
 import { onMounted, ref } from "vue";
-import { errText } from "../util";
+import { errText, ruleLabel } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 import type { neutral, storage } from "../../wailsjs/go/models";
 
@@ -115,9 +115,9 @@ defineExpose({ refresh });
 
     <div class="row">
       <select v-model="phase" aria-label="庭审阶段">
-        <option v-for="p in PHASES" :key="p.code" :value="p.code">{{ p.label }}（{{ p.code }}）</option>
+        <option v-for="p in PHASES" :key="p.code" :value="p.code">{{ p.label }}</option>
       </select>
-      <input v-model="stance" aria-label="本方立场" placeholder="本方立场（每轮重新注入并做漂移比对）" class="stance" />
+      <input v-model="stance" aria-label="本方立场" placeholder="本方立场（每轮据此校验发言是否偏离）" class="stance" />
     </div>
     <div class="row">
       <input v-model="factIDs" aria-label="本轮发言的事实依据编号（逗号分隔，必填）" placeholder="事实依据编号，逗号分隔，如 FACT-1, FACT-2" class="facts" />
@@ -135,9 +135,9 @@ defineExpose({ refresh });
     <div v-if="lastResult" class="result">
       <div class="muted">轮次 {{ lastResult.round_id }}（{{ phaseLabel(lastResult.phase) }}）</div>
       <div v-if="lastResult.blocked" class="badbox">
-        本轮发言被发言检查拦截，不得展示为有效轮次（已留痕，待改写）：
+        本轮发言被发言检查拦截，不得展示为有效轮次（已记录在案，待改写）：
         <ul>
-          <li v-for="(v, i) in lastResult.violations || []" :key="i">[{{ v.rule }}] {{ v.message }}</li>
+          <li v-for="(v, i) in lastResult.violations || []" :key="i">[{{ ruleLabel(v.rule) }}] {{ v.message }}</li>
         </ul>
       </div>
       <div v-if="lastResult.drift" class="badbox">⚠ {{ lastResult.drift_note }}</div>
@@ -170,7 +170,7 @@ defineExpose({ refresh });
       <div v-if="(issues.gaps || []).length" class="gaps">证据缺口：{{ issues.gaps.join("、") }}（不自动补全）</div>
     </div>
 
-    <h3>轮次轨迹（含被拦截轮——拦截必须可追溯）</h3>
+    <h3>轮次轨迹（含被拦截轮次，全程可追溯）</h3>
     <table class="tbl">
       <thead><tr><th scope="col">轮次</th><th scope="col">阶段</th><th scope="col">立场</th><th scope="col">发言</th><th scope="col">状态</th></tr></thead>
       <tbody>

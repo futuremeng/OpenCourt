@@ -3,7 +3,7 @@
 // 模态呈现但仅用于「查看+打开数据目录」这类轻任务，Esc 关闭。
 import { ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
-import { profileLabel, toolLabel } from "../util";
+import { profileLabel, redactLabel, toolLabel } from "../util";
 
 defineProps<{ mode: "settings" | "about"; info: Record<string, any> | null }>();
 const emit = defineEmits<{ (e: "close"): void }>();
@@ -46,8 +46,8 @@ async function openDataDir() {
           <button class="sm" :disabled="openingDir" @click="openDataDir">打开</button>
         </dd>
         <dt>配置文件</dt><dd class="hint">数据目录下 settings.yaml（编辑后重启生效）；开发模式亦可用仓库 config/settings.yaml</dd>
-        <dt>脱敏级别</dt><dd>{{ info?.redactLevel }}</dd>
-        <dt>使用统计（遥测）</dt><dd>{{ info?.telemetry ? "开启" : "关闭" }}</dd>
+        <dt>脱敏级别</dt><dd>{{ redactLabel(info?.redactLevel || "") }}</dd>
+        <dt>使用统计</dt><dd>{{ info?.telemetry ? "开启" : "关闭" }}</dd>
         <dt>智能模型</dt><dd>{{ info?.modelEnabled ? "已启用" : "离线" }}</dd>
         <dt>外网检索</dt><dd>{{ info?.browserEnabled ? "已启用" : "未启用" }}</dd>
         <dt>已禁用的功能</dt><dd>{{ (info?.disabledTools || []).map((t: string) => toolLabel(t)).join("、") || "无" }}</dd>

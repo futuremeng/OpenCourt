@@ -4,7 +4,7 @@
 // 语义召回未启用/不可用时必须显式黄标降级说明，绝不冒充混合；
 // 结果是候选不是事实——本面板没有任何写事实库入口。
 import { onMounted, ref } from "vue";
-import { errText } from "../util";
+import { baseName, errText, sourceLabel } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
 const query = ref("");
@@ -12,6 +12,19 @@ const busy = ref(false);
 const error = ref("");
 const report = ref<any>(null);
 const status = ref<any>(null);
+// doc_id→文书短名：检索结果展示文件名而不是内部编号
+const docNames = ref<Record<string, string>>({});
+
+async function refreshDocNames() {
+  try {
+    const docs = await App.ListDocuments();
+    const m: Record<string, string> = {};
+    for (const d of docs) m[d.doc_id] = baseName(d.file);
+    docNames.value = m;
+  } catch {
+    docNames.value = {};
+  }
+}
 
 async function refreshStatus() {
   try {
@@ -27,7 +40,7 @@ async function runSearch() {
   report.value = null;
   try {
     report.value = await App.SearchCaseDocs(query.value.trim(), 10);
-    await refreshStatus();
+    await Promise.all([refreshStatus(), refreshDocNames()]);
   } catch (e) {
     error.value = errText(e);
   } finally {
@@ -36,10 +49,13 @@ async function runSearch() {
 }
 
 function modeLabel(m: string): string {
-  return m === "hybrid" ? "混合召回（关键词+向量）" : "仅关键词召回";
+  return m === "hybrid" ? "综合检索（关键词+语义）" : "仅关键词检索";
 }
 
-onMounted(refreshStatus);
+onMounted(() => {
+  refreshStatus().catch(() => {});
+  refreshDocNames();
+});
 
 // 全局快捷键 Cmd+K / 菜单「检索→法条检索」的落点：聚焦本面板输入框
 const qInput = ref<HTMLInputElement | null>(null);
@@ -48,7 +64,7 @@ function focusInput() {
   qInput.value?.select();
 }
 
-defineExpose({ refresh: refreshStatus, focusInput });
+defineExpose({ refresh: async () => { await Promise.all([refreshStatus(), refreshDocNames()]); }, focusInput });
 </script>
 
 <template>
@@ -60,11 +76,10 @@ defineExpose({ refresh: refreshStatus, focusInput });
     </p>
     <div v-if="status" class="row">
       <span :class="status.model_enabled ? 'badge ok' : 'badge warn'">
-        {{ status.model_enabled ? "语义召回已启用" : "语义召回未启用（离线/默认）" }}
+        {{ status.model_enabled ? "语义检索已启用" : "语义检索未启用（离线/默认）" }}
       </span>
       <span v-if="status.model_enabled" class="hint">
-        向量索引 {{ status.indexed_pages }}/{{ status.total_pages }} 页
-        （模型 {{ status.embedding_model || "默认" }}，仅本案）
+        语义索引 {{ status.indexed_pages }}/{{ status.total_pages }} 页（仅本案）
       </span>
     </div>
     <div class="row">
@@ -79,11 +94,11 @@ defineExpose({ refresh: refreshStatus, focusInput });
         <span :class="report.mode === 'hybrid' ? 'badge ok' : 'badge warn'">{{ modeLabel(report.mode) }}</span>
         <span v-if="report.note" class="hint warn">{{ report.note }}</span>
       </p>
-      <p v-if="!report.hits.length" class="hint">卷宗内无命中（「卷宗里没有」≠ 检索失败）。</p>
+      <p v-if="!report.hits.length" class="hint">卷宗内无命中（卷宗里没有 ≠ 检索失败）。</p>
       <ul class="hits">
         <li v-for="h in report.hits" :key="h.ref">
-          <b>{{ h.doc_id }} 第 {{ h.page }} 页</b>
-          <span class="hint">（{{ h.sources.join("+") }}，{{ h.score.toFixed(4) }}）</span>
+          <b>{{ docNames[h.doc_id] || h.doc_id }} 第 {{ h.page }} 页</b>
+          <span class="hint">（{{ h.sources.map(sourceLabel).join("+") }}；相关度 {{ h.score.toFixed(2) }}）</span>
           <div class="snippet">{{ h.snippet }}</div>
         </li>
       </ul>

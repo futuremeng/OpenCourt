@@ -90,7 +90,7 @@ func (a *App) ExportReport(redacted bool, confirmRaw bool, names []string) (Expo
 	if v := gate.CheckGuidance(md); len(v) > 0 {
 		_ = a.auditLog.Log(a.profile.Role, "REPORT_EXPORT_BLOCKED", a.caseID(),
 			fmt.Sprintf("报告文本门禁拦截 %d 项", len(v)))
-		return ExportReportResult{}, fmt.Errorf("报告文本被输出门禁拦截（%d 项），未导出", len(v))
+		return ExportReportResult{}, fmt.Errorf("报告文本未通过出报告前检查（%d 项），未导出", len(v))
 	}
 
 	dir := filepath.Join(a.dataDir, "reports")

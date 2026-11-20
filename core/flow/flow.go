@@ -22,6 +22,22 @@ const (
 	PhaseFinal     Phase = "FINAL"     // 最后陈述
 )
 
+// PhaseName 阶段的法言法语显示名（报告与界面用）；未收录的如实回退原码。
+func PhaseName(p Phase) string {
+	switch p {
+	case PhaseStatement:
+		return "法庭调查·当事人陈述"
+	case PhaseEvidence:
+		return "法庭调查·举证质证"
+	case PhaseDebate:
+		return "法庭辩论"
+	case PhaseFinal:
+		return "最后陈述"
+	default:
+		return string(p)
+	}
+}
+
 // order 阶段固定顺序：任何跳跃都必须被 AdvanceGuard 拒绝。
 var order = []Phase{PhaseStatement, PhaseEvidence, PhaseDebate, PhaseFinal}
 

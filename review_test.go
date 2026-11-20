@@ -103,7 +103,7 @@ func TestReportLayerGateSecondIntercept(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := a.ExportReport(true, false, nil); err == nil ||
-		!strings.Contains(err.Error(), "门禁") {
+		!strings.Contains(err.Error(), "检查") {
 		t.Fatalf("报告全文必须过 gate.Check: %v", err)
 	}
 	if !strings.Contains(readAudit(t, a), "REPORT_EXPORT_BLOCKED") {

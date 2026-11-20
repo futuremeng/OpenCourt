@@ -14,7 +14,7 @@ async function checkGate() {
   checking.value = true;
   try {
     const v = await App.CheckOutput(gateText.value);
-    gateResult.value = v.length === 0 ? ["通过：未检测到引导性表述"] : v.map((x) => `[拦截] ${x.message}`);
+    gateResult.value = v.length === 0 ? ["通过：未检测到引导性表述"] : v.map((x) => `已拦截：${x.message}`);
   } catch (e) {
     error.value = errText(e);
     gateResult.value = [];

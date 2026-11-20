@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/futuremeng/OpenCourt/core/domain"
+	"github.com/futuremeng/OpenCourt/core/flow"
 )
 
 // Disclaimer 固定免责标注——每份报告头部必带，不可由调用方移除。
@@ -85,10 +86,10 @@ func RenderMarkdown(in ReportInput) string {
 	}
 	for _, r := range in.SimRounds {
 		if r.Blocked {
-			fmt.Fprintf(&b, "- [%s] %s：**[已被门禁拦截]**（内容未采信入库）\n", r.RoundID, r.Phase)
+			fmt.Fprintf(&b, "- [%s] %s：**[已被检查拦截]**（内容未采信入库）\n", r.RoundID, flow.PhaseName(flow.Phase(r.Phase)))
 			continue
 		}
-		fmt.Fprintf(&b, "- [%s] %s · 依据事实：%s\n", r.RoundID, r.Phase, strings.Join(r.FactIDs, "、"))
+		fmt.Fprintf(&b, "- [%s] %s · 依据事实：%s\n", r.RoundID, flow.PhaseName(flow.Phase(r.Phase)), strings.Join(r.FactIDs, "、"))
 	}
 
 	b.WriteString("\n## 五、法条引用留痕\n\n")

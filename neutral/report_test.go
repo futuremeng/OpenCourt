@@ -40,7 +40,7 @@ func TestReportWeakStateNeverInFactSection(t *testing.T) {
 	if !strings.Contains(md, "**[缺来源]**") {
 		t.Error("缺来源结论必须显式标红")
 	}
-	if !strings.Contains(md, "[已被门禁拦截]") {
+	if !strings.Contains(md, "[已被检查拦截]") {
 		t.Error("被拦截轮次必须可见")
 	}
 	if !strings.Contains(md, "交付时间") || !strings.Contains(md, "补充签收单") {

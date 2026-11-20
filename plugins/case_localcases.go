@@ -15,8 +15,8 @@ import (
 
 // LocalCasesGuidance 类案源不可用时的固定指引（plan-v0.2 D3）：
 // OpenCourt 绝不启动 LocalCases 进程、绝不降级到其他抓取方式，只给指引。
-const LocalCasesGuidance = "类案源不可用：请自行启动 LocalCases（serve，回环地址）并在配置中启用 localcases（base_url + token_env）。" +
-	"LC-6 发现文件未就绪前此为手动临时通道——OpenCourt 不会启动外部进程，也不会改用其他来源"
+const LocalCasesGuidance = "类案源不可用：请自行启动类案语料服务（LocalCases serve，本机回环地址），并在配置中启用 localcases（填写 base_url，并在 token_env 填写访问凭证所在环境变量名）。" +
+	"在语料服务自动发现就绪前，手动配置是临时接入通道——OpenCourt 不会启动外部进程，也不会改用其他来源"
 
 // CaseQuery 类案检索参数（契约见 docs/localcases-integration.md §4）。
 // 注意：没有 Limit——LocalCases 每页固定 20 条，分页走 Offset 或 IDAfter 游标。
@@ -317,9 +317,9 @@ func (s *LocalCasesSource) getJSON(ctx context.Context, u string, out any) error
 	}
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
-		return fmt.Errorf("LocalCases 拒绝（401）：token 缺失或不匹配——请检查 token_env 指向的环境变量")
+		return fmt.Errorf("类案语料服务拒绝访问（401）：访问凭证缺失或不匹配——请检查 token_env 指向的环境变量")
 	case http.StatusBadRequest:
-		return fmt.Errorf("LocalCases 拒绝（400，坏参数不自动改写重试）: %s", strings.TrimSpace(string(body)))
+		return fmt.Errorf("类案语料服务拒绝请求（400，参数有误时不会自动改写重试）: %s", strings.TrimSpace(string(body)))
 	case http.StatusOK:
 	default:
 		return fmt.Errorf("LocalCases 返回 %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
