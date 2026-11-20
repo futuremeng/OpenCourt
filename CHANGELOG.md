@@ -2,7 +2,7 @@
 
 本项目遵循 Semantic Versioning，版本语义见开发文档 10.4。
 
-## Unreleased（v0.3 M6 开发中）
+## v0.3.0（2026-11-20）
 
 ### 变更
 - **UI 设计系统落地（Impeccable 审计修复，9/20→Good）**：① **设计令牌唯一来源**——
@@ -107,6 +107,15 @@
 - **对抗推演与庭审流程引擎（v0.3 M6，roadmap-next M6 / 开发文档 2.2、3.6、3.7）**：`core/flow`（新包）庭审阶段状态机（STATEMENT→EVIDENCE→DEBATE→FINAL）——阶段推进由确定性代码硬守卫（`AdvanceGuard`/`CheckPhaseEntry`）：当事人陈述无有效轮次或事实库无任何「有证据支撑」状态即不得进质证（无证据不进质证）、质证/辩论未完成不得进下一阶段、跳跃阶段一律拒绝（`ErrSkipPhase`），不靠提示词约定；`adversary/simulate.go` `Simulator` 实现 `OpponentSimulator`——对方模拟输入按 `Visibility` 硬过滤（`ViewFor`：本方保密材料在数据层进不了 prompt，不是 UI 隐藏；COURT_ONLY 对任何一方模拟不可见），模型未启用显式报错（`ErrModelDisabled`，绝不用模板/规则冒充「AI 模拟对方」），每条攻击点候选必须带 `fact_ids` 且过 `gate.Check`（无来源即拦截，`Blocked` 条目照常上浮不静默丢弃）；`adversary/drift.go` `LexicalDrift` 规则式立场漂移检测（极性词对确定性比对，漂移报警不依赖另一个会漂移的模型）；`neutral/moderator.go` `SummarizeIssues` 中立争点归纳——事实按要件分组、未消解冲突原样并列挂争点下不代作取舍、「对方主张」只标注不采信、要件缺失直通证据缺口不自动补全；App 绑定 `RunSimRound`（阶段守卫→发言门禁→立场漂移比对→对方模拟→轨迹监控；被拦截轮次也入库留痕但不计阶段完成度，审计 `SIM_ROUND`/`SIM_ROUND_BLOCK`/`SIM_GUARD_BLOCK`/`SIM_DRIFT`）、`SimReview`（轨迹抖动停止自动续演后恢复的唯一出口）、`SimStatus`、`ListSimRounds`、`SummarizeCaseIssues`；`core/storage` 新增 `sim_rounds` 表（轮次留痕挂 `case_id`，被拦截轮次可追溯）；`TrajectoryMonitor` 接入——连续翻转且均无新证据即触发人工复核（有新证据支撑的立场变化不触发）；法院/当事人 Profile 经 `disabled_tools: defense_rehearsal` 默认拒绝；全程固定免责标注「这是模拟推演，不是审判结果预测」；前端「推演」面板 `SimPanel.vue`（阶段完成度、轮次轨迹含被拦截轮、攻击点候选 Blocked 标红、漂移/待复核告警、争点归纳并列视图）；合规用例先行：本方保密材料不得进对方 prompt（prompt 捕获断言）、无 fact_ids/引用「无依据」发言拦截、倾向性攻击点拦截待改写、流程硬守卫四态、抖动无新证据必触发人工复核、立场极性翻转报警、争点归纳中立性、法院 Profile 禁用推演工具
 
 - **本案卷宗混合检索（v0.3 M5，roadmap-next M5 / plan-v0.2 V2 收窄落地）**：`core/storage` 新增 `embeddings` 表（页级向量 BLOB + dim + text_hash + model，挂 `case_id`，`(case,doc,page,model)` 唯一——跨案件天然隔离、模型间向量空间不混用）；`core/retrieve` 补暴力余弦 `VectorSearch`（纯 Go，不引外部向量库）与 `FuseRRF`（RRF k=60 只取排名，分数尺度免疫；关键词/向量/融合三处同分一律按 Ref 升序——结果可复现是验收项）；`neutral/caseindex.go`：`IndexCasePages`（text_hash 未变跳过、改文只重嵌缺页）+ `SearchCaseDocs`（关键词榜+向量榜→RRF；降级四态——模型未启用/不支持 embedding/索引未建/运行期失败——一律 `Mode=keyword_only` 并 Note 显式说明原因，绝不静默冒充向量化过）；App 绑定 `SearchCaseDocs`/`CaseIndexStatus`（审计 `DOC_SEARCH`/`DOC_SEARCH_FAIL`，记录实际召回路径与向量新建/复用数）；前端「卷宗检索」面板（语义召回徽章、降级黄标、命中来源 keyword/vector 标注、页码定位）；**范围纪律**：只搜本案卷宗——法条归 OpenLaw、类案归 LocalCases，检索结果只是候选，无任何写事实库路径、永不产生五态变化（合规用例锁死）；单测/合规：RRF 融合可复现、模型/案件双隔离、text_hash 增量、四态降级标注、检索零写事实零改状态
+
+### 已知限制
+- **模型阅卷指标未运行**：开发文档 11.1 的幻觉率 <1%、溯源准确率 >98% 需显式启用
+  模型与 LocalCases 后 `make eval`；当前报告仅含门禁对抗集（21 条，误拦率/漏拦率
+  均 0.00%，见 `tests/eval/`）。LocalCases LC-8（`corpus_digest`）未就绪，评测
+  复现性按降级路径如实标注（记 `indexed_documents` + 运行日期）。
+- **法院场景包（P1）未做**：首屏向导「≤3 步到事实板」验收属 v0.4（plan-v0.4 §P1）。
+- **分发**：macOS 构建自签名（首次打开需右键 → 打开）；OCR helper 尚未随 .app
+  打包进 `Contents/Resources/`（分发脚本待接入）。
 
 ## v0.2.0（2026-11-02）
 
