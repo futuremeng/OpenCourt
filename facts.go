@@ -88,6 +88,39 @@ func (a *App) UpgradeFact(factID string, targetState string, evidenceImported, l
 		}
 		sourceFromOCR = ocr
 	}
+	// v0.4 P13：进强态三条件由后端确定性重算——前端声明只作报报，
+	// 重算只能收紧不能放宽（fail-closed）：引用必须回原文定位得上、
+	// 来源文书必须仍在本案、本案不得有涉及该事实的未解决冲突；
+	// 查询失败一律按不满足处理，绝不带着未知进强态。
+	if target == domain.StateTracedConfirmed {
+		if f.Citation != nil && f.Citation.SourceFile != "" {
+			docs := a.documentTexts()
+			if _, ok := docs[f.Citation.SourceFile]; !ok {
+				evidenceImported = false // 来源文书已不在本案，等于证据缺失
+			} else {
+				locatedInSource = locatedInSource && verify.Locate(*f.Citation, docs)
+			}
+		} else {
+			evidenceImported = false
+			locatedInSource = false
+		}
+		conflicts, cerr := a.scope().ListConflicts()
+		if cerr != nil {
+			noInternalConflict = false
+		} else {
+			for _, c := range conflicts {
+				if c.IsResolved {
+					continue
+				}
+				for _, id := range c.FactIDs {
+					if id == f.FactID {
+						noInternalConflict = false
+						break
+					}
+				}
+			}
+		}
+	}
 	updated, err := statemachine.ApplyUpgrade(statemachine.UpgradeRequest{
 		Fact:               f,
 		Target:             target,

@@ -1,0 +1,179 @@
+version: 1
+title: 办案动线（双受众）
+subtitle: OpenCourt 桌面端 · 建案→阅卷→事实→核验→报告 · v0.4 P7–P12 体验盘点
+viewport: { width: 1440, height: 900 }
+style: |
+  <style>
+  :root{
+    --bg:#f6f7f9; --surface:#fff; --surface-sunken:#f3f4f6;
+    --border:#e5e7eb; --border-strong:#d1d5db;
+    --text-1:#1f2937; --text-2:#374151; --text-3:#6b7280; --text-inv:#fff;
+    --accent:#4338ca; --accent-soft:#eef2ff; --accent-ink:#3730a3;
+    --ok:#047857; --ok-bg:#ecfdf5; --warn:#b45309; --warn-bg:#fffbeb; --warn-border:#fde68a;
+    --bad:#b91c1c; --bad-bg:#fef2f2; --bad-border:#fecaca; --info:#1a5fb4; --info-bg:#eef5ff; --info-border:#bcd4f5;
+    --state-confirmed:#ecfdf5; --state-single:#eff6ff; --state-opponent:#fffbeb; --state-conflicted:#fef2f2; --state-unsupported:#f3f4f6;
+    --fs-xs:12px; --fs-sm:13px; --fs-md:14px; --fs-lg:16px; --fs-xl:20px; --r:8px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text-1);font:13px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+  .shell{min-height:100vh;display:flex;flex-direction:column}
+  .topbar{display:flex;gap:18px;align-items:center;padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:var(--fs-xs);color:var(--text-2)}
+  .topbar .logo{font-weight:700;color:var(--accent);font-size:var(--fs-md)}
+  .badge{padding:2px 10px;border-radius:999px;font-size:var(--fs-xs);background:var(--surface-sunken);color:var(--text-2)}
+  .badge.on{background:var(--accent-soft);color:var(--accent-ink)}
+  .badge.ok{background:var(--ok-bg);color:var(--ok)}
+  .badge.warn{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-border)}
+  .badge.bad{background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad-border)}
+  .caseline{padding:8px 16px;font-size:var(--fs-sm);color:var(--text-2);border-bottom:1px solid var(--border);background:var(--surface)}
+  .tabs{display:flex;gap:6px;padding:10px 16px 0}
+  .tab{padding:7px 16px;border-radius:8px 8px 0 0;border:1px solid var(--border);border-bottom:none;background:var(--surface-sunken);color:var(--text-2);font-size:var(--fs-sm)}
+  .tab.on{background:var(--surface);color:var(--accent);font-weight:700;border-color:var(--border-strong)}
+  main{flex:1;margin:0 16px;padding:16px;background:var(--surface);border:1px solid var(--border-strong);border-radius:0 8px 8px 8px}
+  footer{padding:8px 16px;font-size:var(--fs-xs);color:var(--text-3);text-align:center}
+  h1{font-size:var(--fs-xl);margin:0 0 10px}
+  h2{font-size:var(--fs-md);margin:0 0 8px}
+  p{margin:0 0 8px}
+  .muted{color:var(--text-3);font-size:var(--fs-xs)}
+  .btn{display:inline-block;padding:8px 18px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-1);font:inherit;min-height:32px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--text-inv);font-weight:600}
+  .btn.link{border:none;background:none;color:var(--accent);padding:2px 6px;font-size:var(--fs-xs)}
+  .receipt{padding:12px 14px;border-radius:8px;font-size:var(--fs-md);margin:10px 0}
+  .receipt.ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bg)}
+  .receipt.bad{background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad-border)}
+  .receipt.warn{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-border)}
+  .receipt.info{background:var(--info-bg);color:var(--info);border:1px solid var(--info-border)}
+  .stepper{display:flex;gap:8px;margin:14px 0}
+  .step{flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-sunken);font-size:var(--fs-sm)}
+  .step b{display:block;font-size:var(--fs-md)}
+  .step.done{border-color:var(--ok);background:var(--ok-bg)}
+  .step.now{border-color:var(--accent);background:var(--accent-soft)}
+  .drop{border:1.5px dashed var(--border-strong);border-radius:8px;padding:38px;text-align:center;background:var(--surface-sunken);margin:12px 0}
+  table{border-collapse:collapse;width:100%;font-size:var(--fs-sm)}
+  td,th{border:1px solid var(--border);padding:7px 10px;text-align:left}
+  th{background:var(--surface-sunken);font-weight:600}
+  .list .row{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--surface)}
+  input,textarea{font:inherit;padding:7px 10px;border:1px solid var(--border-strong);border-radius:8px;width:100%;background:var(--surface);color:var(--text-1)}
+  label{display:block;font-size:var(--fs-xs);color:var(--text-3);margin:10px 0 4px}
+  .board{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .col{border:1px solid var(--border);border-radius:8px;padding:10px;min-height:150px}
+  .col h3{margin:0 0 2px;font-size:var(--fs-sm)}
+  .col .sub{font-size:var(--fs-xs);color:var(--text-3);margin:0 0 8px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:8px;font-size:var(--fs-sm)}
+  .c1{background:var(--state-confirmed)} .c2{background:var(--state-single)} .c3{background:var(--state-opponent)} .c4{background:var(--state-conflicted)} .c5{background:var(--state-unsupported)}
+  .hit{padding:10px 12px;border:1px solid var(--info-border);border-radius:8px;background:var(--info-bg);margin-bottom:8px;font-size:var(--fs-sm)}
+  </style>
+lanes:
+  - id: overview
+    title: 建案与总览
+    tone: info
+  - id: review
+    title: 阅卷
+    tone: info
+  - id: facts
+    title: 事实
+    tone: info
+  - id: output
+    title: 核验与报告
+    tone: success
+  - id: errors
+    title: 错误与中断
+    tone: danger
+    enter: any
+    note: 失败回执与成功对称——每条错误正文自带下一步与落点按钮，未匹配不出按钮、不编去处
+screens:
+  - id: H00
+    title: 首次打开（无案件）
+    note: 空态讲清软件是什么、动线四步，第一行动就是建案；不摆功能清单
+  - id: O01
+    lane: overview
+    title: 案件总览
+    note: 主视图=进度叙述+四步进度条；专业细节折叠进详情区，公众不必展开
+  - id: R01
+    lane: review
+    title: 阅卷·接入文书
+    note: 拖入即接入；扫描识别未配置时明确拒绝，不悄悄降级
+  - id: R02
+    lane: review
+    title: 阅卷·检索与命中
+    note: 检索不重排序不加工；每条命中给「存为事实」入口
+  - id: F01
+    lane: facts
+    title: 事实·录入表单
+    note: 预填只填不写；片段可能被截短，须人工核对，提交回原文定位
+  - id: F02
+    lane: facts
+    title: 录入成功回执
+    note: 白话回执三件套：归档档位+通俗注解+事实性理由（只引用真实字段）
+  - id: F03
+    lane: facts
+    title: 事实看板·按证据升级
+    note: 五态分列；升级只依据证据不依据推测，前端无权改状态
+  - id: F04
+    lane: facts
+    title: 升级成功回执
+    note: 专业名+通俗注解成对出现，与录入回执同一口径
+  - id: V01
+    lane: output
+    title: 核验·检索出处
+    note: 法条/判例双检索；核验只呈现比对结果，不代作结论
+  - id: P01
+    lane: output
+    title: 报告·审校清单
+    note: 出报告前逐项检查；未通过的项点名缺什么、去哪补
+  - id: P02
+    lane: output
+    title: 报告导出完成
+    note: 默认隐去个人信息导出，全程留记录；回执说明遮蔽了什么
+  - id: X01
+    lane: errors
+    title: 核对不上原文
+    note: 定位失败：去卷宗检索核对，或留空按「无依据」录入——两条都可达
+  - id: X02
+    lane: errors
+    title: 升级被拒·缺证据
+    note: 升级只依据证据；落点直达阅卷接入文书，不空手回看板
+  - id: X03
+    lane: errors
+    title: 扫描来源封顶弱态
+    note: 扫描识别文本永不进强态；系统不自动改字，人工校对后重新录入
+  - id: X04
+    lane: errors
+    title: 说法矛盾·原样并列
+    note: 冲突不自动消解；互相矛盾的说法并列展示，由人判断
+  - id: X05
+    lane: errors
+    title: 文字识别未配置
+    note: 明确拒绝并说明改动了什么（什么都没改），指引配置入口
+  - id: X06
+    lane: errors
+    title: 审校未通过·导出被拦
+    note: 被拦必须可见可追溯；点名未过项并带回审校清单
+edges:
+  - { from: H00, to: O01, label: 新建案件 }
+  - { from: O01, to: R01, label: 去阅卷接入 }
+  - { from: R01, to: R02, label: 接入文书 }
+  - { from: R01, to: X05, label: 扫描件接入·组件未配置, kind: error }
+  - { from: R02, to: F01, label: 存为事实 }
+  - { from: F01, to: F02, label: 录入 }
+  - { from: F01, to: X01, label: 提交·核对不上原文, kind: error }
+  - { from: F02, to: F03, label: 查看看板 }
+  - { from: F03, to: F04, label: 按证据升级 }
+  - { from: F04, to: V01, label: 去核验 }
+  - { from: V01, to: P01, label: 出报告审校 }
+  - { from: P01, to: P02, label: 通过并导出 }
+  - { from: P01, to: X06, label: 检查未通过, kind: error }
+  - { from: X01, to: R02, label: 去卷宗检索核对 }
+  - { from: X02, to: R01, label: 去接入证据文书 }
+  - { from: X03, to: R02, label: 人工校对后重新核对 }
+  - { from: X04, to: F03, label: 处理后回看板 }
+  - { from: X05, to: R01, label: 回到阅卷 }
+  - { from: X06, to: P01, label: 回到审校清单, kind: back }
+  - { from: R02, to: R01, kind: back }
+  - { from: P02, to: O01, kind: back }
+notes:
+  - 全局语言：双受众成对语域——专业名首次出现必附通俗注解；内部组件名、里程碑码（D1）、引擎名（核验器）、状态枚举原值、冲突编号不得进入任何用户可见文案（v0.4 P7/P12 已实施）
+  - 失败回执与成功对称（P11）：错误正文必须带可见补救指引且只指向导航里真实存在的入口；前端按补救语出落点按钮（errHelp↔Go 文案成对契约），未匹配不出按钮
+  - 状态永远由后端状态机判定，前端只呈现；被拦截必须可见、可追溯；升级只依据证据不依据推测
+  - 每屏页脚常驻声明：OpenCourt 为 AI 辅助工具，不预测判决结果、不引导决策、不替代律师与法官判断
+  - P13 待定项：看板「按证据升级」目前把核验结果作为前端断言直传，后端仅复查扫描标记——是否改为后端确定性复核，待本图批准后再定
+  - 主行动每面板至多一个（.primary 靛蓝）；阶段名与导航标签一字不差；缺失字段如实显示「缺失/未知」并给补救指引，不得渲染占位内容

@@ -24,7 +24,10 @@ export const FACT_STATE_HINTS: Record<string, string> = {
 export function errHelp(err: string): "locate" | "ingest" | null {
   if (!err) return null;
   if (err.includes("检索卷宗") || err.includes("定位")) return "locate";
-  if (err.includes("先在「阅卷」接入")) return "ingest";
+  // 成对契约：Go 侧两种缺证据句式——「先在『阅卷』接入该文书」（录入）
+  // 与「需要先在『阅卷』为本案接入新的证据文书」（升级，P13），
+  // 按前缀「先在「阅卷」」匹配，改任一侧必须同步另一侧。
+  if (err.includes("先在「阅卷」")) return "ingest";
   return null;
 }
 

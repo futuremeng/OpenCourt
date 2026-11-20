@@ -1,0 +1,327 @@
+<script>window.app = { fact: "" };</script>
+
+<section data-screen="H00">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span>v0.4</span><span class="badge warn">尚未建案</span></div>
+    <main style="border-radius:8px;border-top:1px solid var(--border-strong)">
+      <h1>开个案件，从卷宗开始办案</h1>
+      <p style="font-size:var(--fs-md);max-width:640px">OpenCourt 是办案用的证据工作台：接入卷宗 → 核对原文逐条录入事实 → 核验每条结论的出处 → 审校通过后出报告。系统只依据本案接入的材料作判断，不替你推测。</p>
+      <div class="stepper">
+        <div class="step"><b>1 建案</b>材料按案件归档，不跨案串用</div>
+        <div class="step"><b>2 卷宗接入</b>拖入文书，逐份核对原文</div>
+        <div class="step"><b>3 整理事实</b>每条事实自动标注可靠程度</div>
+        <div class="step"><b>4 审校与报告</b>逐项检查通过才能导出</div>
+      </div>
+      <p><button class="btn primary" data-id="new-case" data-to="O01">新建案件</button></p>
+      <p class="muted">新建后本案为空；一切判定都从你接入的第一份文书开始。</p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。最终裁判权与诉讼决策权归属人类。</footer>
+  </div>
+</section>
+
+<section data-screen="O01">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span><span class="badge">外网检索 未启用</span><span class="badge">使用统计 关闭</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 网络购物合同纠纷 · 咨询 ▾</div>
+    <div class="tabs"><span class="tab on">案件总览</span><span class="tab">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab">报告</span><span class="tab">工具与数据</span></div>
+    <main>
+      <h2>本案进展</h2>
+      <p style="font-size:var(--fs-md)" data-id="progress-text">现在进行到第 2 步「卷宗接入」：本案还没有接入文书。把卷宗拖进来，就可以开始核对原文、逐条录入事实。</p>
+      <div class="stepper">
+        <div class="step done"><b>建案</b>已完成</div>
+        <div class="step now"><b>卷宗接入</b>本案 0 份文书 ← 现在</div>
+        <div class="step"><b>整理事实</b>0 条</div>
+        <div class="step"><b>审校与报告</b>待完成</div>
+      </div>
+      <p><button class="btn primary" data-id="go-review" data-to="R01">去阅卷接入文书</button></p>
+      <details style="margin-top:14px"><summary class="muted">专业细节：案件计数与事实可靠程度五态</summary>
+        <table><tr</table>><th>已溯源确认</th><th>单源未补强</th><th>对方主张未验证</th><th>存在冲突</th><th>无依据</th></tr>
+        <tr><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr></table>
+      </details>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="R01">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab on">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
+    <main>
+      <h2>接入卷宗</h2>
+      <div class="drop" data-id="drop-zone">
+        <p style="font-size:var(--fs-md)">把卷宗文件拖到这里，或选择文件</p>
+        <p class="muted">支持 PDF / txt / md / docx；扫描识别需要文字识别组件，未配置时会明确拒绝，不会悄悄降级</p>
+      </div>
+      <p><button class="btn primary" data-id="pick-files" data-to="R02">选择文件</button> <span class="muted">已接入 0 份</span></p>
+      <p class="muted">经扫描识别的文书会在列表中标注「扫描识别文本」，需人工校对后才可用于定案。</p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="R02">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab on">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
+    <main>
+      <h2>本案文书（3 份）</h2>
+      <div class="list">
+        <div class="row"><span>起诉状.pdf</span><span class="badge ok">已核对</span></div>
+        <div class="row"><span>答辩状.txt</span><span class="badge ok">已核对</span></div>
+        <div class="row"><span>合同扫描件.pdf</span><span class="badge warn">扫描识别文本 · 需人工校对</span></div>
+      </div>
+      <h2 style="margin-top:14px">检索卷宗</h2>
+      <input data-id="doc-search" placeholder="检索卷宗（结果保持原文顺序，不重排序、不加工）" value="合同">
+      <div class="hit" data-id="hit-1" style="margin-top:10px">《答辩状.txt》第 1 页：「双方之间的涉案交易系自然人之间的二手<b>合同</b>关系……」
+        <p style="margin:6px 0 0"><button class="btn primary" data-id="save-as-fact" data-to="F01">存为事实</button> <span class="muted">只预填到录入表单，不直接写入</span></p>
+      </div>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="F01">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
+    <main>
+      <h2>录入事实</h2>
+      <div class="receipt info" data-id="prefill-note">已从检索命中预填：《答辩状.txt》第 1 页。片段可能被检索截短，提交时会回原文核对，核对不上不会入库。</div>
+      <div style="display:grid;grid-template-columns:1fr 320px;gap:18px">
+        <div>
+          <label>事实描述（必填）</label>
+          <textarea data-id="fact-desc" rows="3">涉案交易系自然人之间的二手合同关系</textarea>
+        </div>
+        <div>
+          <label>来源文书（可空）</label>
+          <input data-id="fact-source" value="答辩状.txt">
+          <label>页码</label><input data-id="fact-page" value="1">
+          <label>原文片段</label><input data-id="fact-snippet" value="双方之间的涉案交易系自然人之间的二手合同关系……">
+          <p class="muted" style="margin-top:8px">手工填写的原文片段会立即回原文核对，核对不上不会入库，并留下记录。</p>
+        </div>
+      </div>
+      <p style="margin-top:12px"><button class="btn primary" data-id="submit-fact" data-to="F02">录入</button> <span class="muted">录入后系统按来源自动标注可靠程度，不由人手选</span></p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="F02">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
+    <main>
+      <h2>录入事实</h2>
+      <div class="receipt ok" role="status" data-id="outcome">已录入为「单源未补强」（有原文出处，但只有一方来源）：来自《答辩状.txt》第 1 页，已回原文核对。</div>
+      <p class="muted">五档可靠程度：原文核对过且多来源一致 / 有出处但仅一方来源 / 对方主张未核实 / 说法互相矛盾 / 未找到来源。</p>
+      <p><button class="btn primary" data-id="to-board" data-to="F03">查看事实看板</button> <button class="btn">继续录入下一条</button></p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="F03">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
+    <main>
+      <h2>事实看板（按可靠程度分列）</h2>
+      <p class="muted">只有同时满足原文核对通过、多来源一致、人工确认，才能升级为「已溯源确认」；不满足会被拒绝并说明原因。升级只依据证据，不依据推测。</p>
+      <div class="board" style="margin-top:10px">
+        <div class="col c1"><h3>已溯源确认（0）</h3><p class="sub">原文核对过，多来源一致，人已确认</p><p class="muted">暂无</p></div>
+        <div class="col c2"><h3>单源未补强（1）</h3><p class="sub">有原文出处，但只有一方来源</p>
+          <div class="card">涉案交易系自然人之间的二手合同关系<p class="muted">📄 答辩状.txt 第 1 页</p>
+            <button class="btn primary" data-id="upgrade" data-to="F04">按证据升级</button></div>
+        </div>
+        <div class="col c3"><h3>对方主张未验证（0）</h3><p class="sub">对方说的，还没核实</p><p class="muted">暂无</p></div>
+        <div class="col c4"><h3>存在冲突（0）</h3><p class="sub">不同材料说法互相矛盾</p><p class="muted">暂无</p></div>
+        <div class="col c5"><h3>无依据（0）</h3><p class="sub">没有找到来源</p><p class="muted">暂无</p></div>
+      </div>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="F04">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
+    <main>
+      <h2>事实看板（按可靠程度分列）</h2>
+      <div class="receipt ok" role="status" data-id="upgrade-ok">这条事实已按证据规则升级为「已溯源确认」（原文核对过，多来源一致，人已确认）。</div>
+      <div class="board">
+        <div class="col c1"><h3>已溯源确认（1）</h3><p class="sub">原文核对过，多来源一致，人已确认</p><div class="card">涉案交易系自然人之间的二手合同关系</div></div>
+        <div class="col c2"><h3>单源未补强（0）</h3><p class="sub">有原文出处，但只有一方来源</p><p class="muted">暂无</p></div>
+        <div class="col c3"><h3>对方主张未验证（0）</h3><p class="sub">对方说的，还没核实</p><p class="muted">暂无</p></div>
+        <div class="col c4"><h3>存在冲突（0）</h3><p class="sub">不同材料说法互相矛盾</p><p class="muted">暂无</p></div>
+        <div class="col c5"><h3>无依据（0）</h3><p class="sub">没有找到来源</p><p class="muted">暂无</p></div>
+      </div>
+      <p style="margin-top:12px"><button class="btn primary" data-id="to-verify" data-to="V01">去核验</button></p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="V01">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab">事实</span><span class="tab on">核验</span><span class="tab">报告</span></div>
+    <main>
+      <h2>核验结论出处</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+        <div>
+          <label>检索法条</label><input data-id="law-search" placeholder="如：网络购物合同 管辖">
+          <label>检索判例</label><input data-id="case-search" placeholder="同类案件裁判观点">
+        </div>
+        <div>
+          <h2>引用核对</h2>
+          <table><tr><th>本案引用</th><th>出处</th></tr>
+            <tr><td>「二手合同关系」表述</td><td>✓ 《答辩状.txt》第 1 页</td></tr>
+            <tr><td>管辖约定条款</td><td>缺失 · 未在已接入文书中找到</td></tr></table>
+          <p class="muted">核验只呈现比对结果，不代作结论；缺失项如实列出，不编出处。</p>
+        </div>
+      </div>
+      <p><button class="btn primary" data-id="make-report" data-to="P01">出报告并审校</button></p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="P01">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab on">报告</span></div>
+    <main>
+      <h2>出报告前逐项检查</h2>
+      <table>
+        <tr><th>检查项</th><th>结果</th><th>说明</th></tr>
+        <tr><td>引用有无出处</td><td class="badge ok" style="border:none">通过</td><td>3 条引用全部命中原文</td></tr>
+        <tr><td>与原文是否一致</td><td class="badge ok" style="border:none">通过</td><td>已回原文核对</td></tr>
+        <tr><td>可靠程度标注合规</td><td class="badge ok" style="border:none">通过</td><td>五态标注与证据一致</td></tr>
+        <tr><td>敏感信息是否遮蔽</td><td class="badge warn" style="border:1px solid var(--warn-border)">待处理</td><td>报告含当事人手机号 1 处，导出时按默认级别隐去</td></tr>
+        <tr><td>推理链是否完整</td><td class="badge ok" style="border:none">通过</td><td>结论均可回溯到事实与出处</td></tr>
+      </table>
+      <p class="muted" style="margin-top:8px">未通过检查的报告不会导出。</p>
+      <p><button class="btn primary" data-id="review-export" data-to="P02">审校并导出</button></p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="P02">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab on">报告</span></div>
+    <main>
+      <h2>报告已导出</h2>
+      <div class="receipt ok" role="status" data-id="export-ok">报告已导出。个人信息已按默认级别隐去（当事人手机号 1 处），全程留记录，可回溯核对。</div>
+      <p>📄 张某诉杭州某公司网络购物合同纠纷-报告.pdf <span class="muted">已保存到报告目录</span></p>
+      <p><button class="btn" data-id="back-overview" data-to="O01">回到案件总览</button></p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="X01">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 事实</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
+    <main>
+      <h2>录入未通过：核对不上原文</h2>
+      <div class="receipt bad" role="alert" data-id="locate-fail">原文片段在《答辩状.txt》第 1 页找不到对应句子，本次未写入。可在「阅卷」检索卷宗找到该页核对原句后重新提交；也可留空来源，按「无依据」录入。</div>
+      <p><button class="btn primary" data-id="goto-locate" data-to="R02">去卷宗检索核对</button> <button class="btn">留空按「无依据」录入</button></p>
+      <p class="muted">失败会留下记录，已录入的其他事实不受影响。</p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="X02">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 事实</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
+    <main>
+      <h2>升级被拒：还缺证据</h2>
+      <div class="receipt bad" role="alert" data-id="no-evidence">无法升级为「已溯源确认」：需要先在「阅卷」为本案接入新的证据文书；升级只依据证据，不依据推测。这条事实保持原状，未作任何变更。</div>
+      <p><button class="btn primary" data-id="goto-ingest" data-to="R01">去接入证据文书</button></p>
+      <p class="muted">被拒记录已写入复核记录，可回溯。</p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="X03">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 事实</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
+    <main>
+      <h2>升级被拒：来自扫描识别</h2>
+      <div class="receipt warn" role="alert" data-id="ocr-cap">无法升级为「已溯源确认」：这段文字来自扫描识别，可靠程度最高只能到「有原文出处，但只有一方来源」。系统不会自动改字；请在「阅卷」人工校对纠正后，重新录入核对。</div>
+      <p><button class="btn primary" data-id="goto-proofread" data-to="R02">去阅卷人工校对</button></p>
+      <p class="muted">扫描文书在列表中带「扫描识别文本」标注，未校对前不参与定案。</p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="X04">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 事实</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
+    <main>
+      <h2>存在冲突：原样并列，等人判断</h2>
+      <div class="receipt warn" role="alert" data-id="conflict">本案材料之间存在说法互相矛盾，系统不自动消解，以下两条原样并列展示，由人工判断后处理。</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="card c2">起诉状：定金 5 万元已支付<br><span class="muted">📄 起诉状.pdf 第 2 页</span></div>
+        <div class="card c4">答辩状：未收到定金<br><span class="muted">📄 答辩状.txt 第 1 页</span></div>
+      </div>
+      <p style="margin-top:10px"><button class="btn primary" data-id="back-board" data-to="F03">处理后回看板</button></p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="X05">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 阅卷</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab on">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
+    <main>
+      <h2>接入被拒：文字识别未配置</h2>
+      <div class="receipt bad" role="alert" data-id="ocr-missing">这份文件是扫描件，识别文字需要文字识别组件；当前未配置，本次接入已拒绝。本案现有文书未作任何改动，也没有内容被悄悄降级。</div>
+      <p><button class="btn primary" data-id="goto-review" data-to="R01">回到阅卷</button> <button class="btn">去「工具与数据」查看配置说明</button></p>
+      <p class="muted">配置说明在「工具与数据 → 运行状态」，来源如实标注。</p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
+
+<section data-screen="X06">
+  <div class="shell">
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span></div>
+    <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 报告</div>
+    <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab on">报告</span></div>
+    <main>
+      <h2>报告未导出：检查未通过</h2>
+      <div class="receipt bad" role="alert" data-id="gate-fail">报告未导出：敏感信息遮蔽检查未通过——报告含当事人姓名与手机号共 2 处，超出允许范围。未通过检查的报告不会导出；本次未生成任何文件。</div>
+      <table><tr><th>未过项</th><th>缺什么</th><th>去哪补</th></tr>
+        <tr><td>敏感信息遮蔽</td><td>姓名、手机号 2 处未处理</td><td>「报告」审校清单 → 遮蔽设置</td></tr></table>
+      <p style="margin-top:10px"><button class="btn primary" data-id="back-checklist" data-to="P01">回到审校清单</button></p>
+    </main>
+    <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
+  </div>
+</section>
