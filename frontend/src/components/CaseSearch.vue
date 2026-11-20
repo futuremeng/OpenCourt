@@ -4,6 +4,7 @@
 // 语义召回未启用/不可用时必须显式黄标降级说明，绝不冒充混合；
 // 结果是候选不是事实——本面板没有任何写事实库入口。
 import { onMounted, ref } from "vue";
+import { errText } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
 const query = ref("");
@@ -16,7 +17,7 @@ async function refreshStatus() {
   try {
     status.value = await App.CaseIndexStatus();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -28,7 +29,7 @@ async function runSearch() {
     report.value = await App.SearchCaseDocs(query.value.trim(), 10);
     await refreshStatus();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   } finally {
     busy.value = false;
   }

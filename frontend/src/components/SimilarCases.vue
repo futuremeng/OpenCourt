@@ -4,6 +4,7 @@
 // 临时通道（必须标注）；structured=false 必须提示降级并隐藏 facet；
 // facet 分布必须附固定标注「不是裁判概率或胜诉可能性」并同显语料规模。
 import { onMounted, ref } from "vue";
+import { errText } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
 const status = ref<any>(null);
@@ -22,7 +23,7 @@ async function refreshStatus() {
   try {
     status.value = await App.LocalCasesStatus();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -30,7 +31,7 @@ async function refreshRefs() {
   try {
     refs.value = await App.ListCaseRefs();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -44,7 +45,7 @@ async function runSearch() {
     );
     await refreshRefs();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   } finally {
     busy.value = false;
   }

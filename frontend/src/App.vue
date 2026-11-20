@@ -5,7 +5,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import * as App from "../wailsjs/go/main/App";
 import { EventsOn } from "../wailsjs/runtime/runtime";
-import { humanSize, profileLabel } from "./util";
+import { errText, humanSize, profileLabel } from "./util";
 import CaseBar from "./components/CaseBar.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import Workspace from "./views/Workspace.vue";
@@ -67,7 +67,7 @@ async function onCaseSwitched() {
   try {
     await (workspaceRef.value as any)?.onCaseSwitched?.();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -99,7 +99,7 @@ async function doAppUpdate() {
   try {
     await App.InstallAppUpdate(); // 成功即退出重启
   } catch (e) {
-    appUpdateProg.value = [...appUpdateProg.value, "更新失败: " + String(e)];
+    appUpdateProg.value = [...appUpdateProg.value, "更新失败: " + errText(e)];
     appUpdating.value = false;
   }
 }
@@ -108,7 +108,7 @@ onMounted(async () => {
   try {
     info.value = await App.AppInfo();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
   EventsOn("appupdate:progress", (m: any) => {
     appUpdateProg.value = [...appUpdateProg.value.slice(-6), String(Array.isArray(m) ? m[0] : m)];

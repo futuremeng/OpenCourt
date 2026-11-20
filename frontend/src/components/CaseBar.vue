@@ -3,6 +3,7 @@
 // 案件是一切事实/冲突/文档/要素的边界（docs/plan-v0.2.md D1）；
 // 案由为自由文本，不自动判定；阶段必须是枚举码。
 import { onMounted, ref } from "vue";
+import { errText } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
 const emit = defineEmits<{ (e: "switched"): void }>();
@@ -32,7 +33,7 @@ async function refresh() {
     cases.value = await App.ListCases();
     current.value = await App.CurrentCase();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -43,7 +44,7 @@ async function switchCase(id: string) {
     await refresh();
     emit("switched");
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -61,7 +62,7 @@ async function createCase() {
     await refresh();
     emit("switched");
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   } finally {
     creating.value = false;
   }

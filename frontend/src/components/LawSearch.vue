@@ -4,6 +4,7 @@
 // （OK / OL-1001..OL-1006）；UNKNOWN（效力待确认）与 pending（待人工确认）
 // 必须显式标出——不得静默通过；断链（OL-1006）标「无法溯源」。
 import { onMounted, ref } from "vue";
+import { errText } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
 const query = ref("");
@@ -28,7 +29,7 @@ async function search() {
     hits.value = await App.SearchLaw(query.value.trim(), 10);
     searched.value = true;
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   } finally {
     searching.value = false;
   }
@@ -48,7 +49,7 @@ async function verify() {
       notice.value = "文书中未抽取到「《法名》第X条」形态的引用";
     }
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   } finally {
     verifying.value = false;
   }
@@ -61,7 +62,7 @@ async function showRelations(refID: string) {
   try {
     relations.value = await App.GetLawRelations(refID);
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -74,7 +75,7 @@ async function refresh() {
     docs.value = await App.ListDocuments();
     refs.value = await App.ListLawRefs();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 

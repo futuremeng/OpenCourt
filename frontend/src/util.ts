@@ -25,6 +25,13 @@ export function toolLabel(t: string): string {
   return labels[t] || t;
 }
 
+// Wails 绑定把 Go 侧错误包成「Error: <原文>」。UI 只展示错误原文（语言规范：
+// 技术前缀不进界面），原文一字不改、不另编；剥的只是包裹前缀本身。
+export function errText(e: unknown): string {
+  const s = e instanceof Error ? e.message : String(e);
+  return s.replace(/^Error:\s*/, "");
+}
+
 export function humanSize(n: number): string {
   if (n >= 1 << 30) return (n / (1 << 30)).toFixed(1) + "GB";
   if (n >= 1 << 20) return Math.round(n / (1 << 20)) + "MB";

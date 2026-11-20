@@ -2,6 +2,7 @@
 // 网络查阅与立案辅助（BrowserOS）——自 App.vue 抽出（distill）。默认禁用；
 // 抓回内容先脱敏；登录/验证码/实名/最终提交一律交人执行。
 import { ref } from "vue";
+import { errText } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
 defineProps<{ enabled: boolean }>();
@@ -41,7 +42,7 @@ async function runWebResearch() {
     webResult.value = await App.ResearchWebPage(webUrl.value.trim(), nameList());
     emit("changed");
   } catch (e) {
-    webErr.value = String(e);
+    webErr.value = errText(e);
   } finally {
     webBusy.value = false;
   }
@@ -52,7 +53,7 @@ async function runGovListBrowse() {
   try {
     govResult.value = await App.BrowseGovList(govCat.value, govPages.value, govStart.value);
   } catch (e) {
-    govErr.value = String(e);
+    govErr.value = errText(e);
   } finally {
     govBusy.value = false;
   }
@@ -64,7 +65,7 @@ async function openAssist() {
   try {
     assistPage.value = await App.BrowserOpenPage(assistUrl.value.trim());
   } catch (e) {
-    assistErr.value = String(e);
+    assistErr.value = errText(e);
   }
 }
 
@@ -94,7 +95,7 @@ async function planFill() {
     const [values, states] = parseValues();
     assistCands.value = await App.BrowserPlanFill(assistPage.value.page_id, values, states);
   } catch (e) {
-    assistErr.value = String(e);
+    assistErr.value = errText(e);
   } finally {
     assistBusy.value = false;
   }
@@ -107,7 +108,7 @@ async function execAction(id: string) {
     assistReceipts.value = [rec, ...assistReceipts.value];
     assistCands.value = assistCands.value.filter((c) => c.action_id !== id);
   } catch (e) {
-    assistErr.value = String(e);
+    assistErr.value = errText(e);
   }
 }
 
@@ -118,7 +119,7 @@ async function handToHuman() {
     const st = await App.BrowserHandToHuman(assistPage.value.page_id, humanKind.value, humanReason.value);
     humanStatus.value = st.status;
   } catch (e) {
-    assistErr.value = String(e);
+    assistErr.value = errText(e);
   }
 }
 
@@ -128,7 +129,7 @@ async function awaitHuman() {
     const st = await App.BrowserAwaitHuman();
     humanStatus.value = st.status;
   } catch (e) {
-    assistErr.value = String(e);
+    assistErr.value = errText(e);
   }
 }
 </script>

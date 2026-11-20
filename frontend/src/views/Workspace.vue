@@ -5,7 +5,7 @@
 import { computed, onMounted, ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
 import type { domain } from "../../wailsjs/go/models";
-import { FACT_STATE_NAMES, profileLabel } from "../util";
+import { errText, FACT_STATE_NAMES, profileLabel } from "../util";
 import FactBoard from "../components/FactBoard.vue";
 import LawSearch from "../components/LawSearch.vue";
 import SimilarCases from "../components/SimilarCases.vue";
@@ -94,7 +94,7 @@ async function onCaseSwitched() {
     (docSearchRef.value as any)?.refresh?.();
     (simPanelRef.value as any)?.refresh?.();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -105,7 +105,7 @@ async function addFact() {
     desc.value = ""; snippet.value = "";
     await refresh();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 

@@ -6,6 +6,7 @@
 //   - 被门禁拦截的轮次同样出现在轮次视图（拦截必须可见）；
 //   - 轨迹抖动待复核时后端拒绝续演，此处只提供 SimReview 唯一恢复出口。
 import { onMounted, ref } from "vue";
+import { errText } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 import type { neutral, storage } from "../../wailsjs/go/models";
 
@@ -36,7 +37,7 @@ async function refresh() {
     status.value = await App.SimStatus();
     rounds.value = await App.ListSimRounds();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -50,7 +51,7 @@ async function runRound() {
     lastResult.value = await App.RunSimRound(phase.value, stance.value, conclusion.value, ids);
     await refresh();
   } catch (e) {
-    error.value = String(e); // 阶段守卫/待复核拦截：原因原样呈现，不旁路
+    error.value = errText(e); // 阶段守卫/待复核拦截：原因原样呈现，不旁路
   } finally {
     running.value = false;
   }
@@ -63,7 +64,7 @@ async function review() {
     notice.value = "已人工复核确认，恢复自动续演";
     await refresh();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -72,7 +73,7 @@ async function summarize() {
   try {
     issues.value = await App.SummarizeCaseIssues();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 

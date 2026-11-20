@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // 出报告前检查（旧称「输出门禁自检」）——自 App.vue 抽出（distill）。倾向性表述由后端强制拦截。
 import { ref } from "vue";
+import { errText } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
 const gateText = ref("");
@@ -15,7 +16,7 @@ async function checkGate() {
     const v = await App.CheckOutput(gateText.value);
     gateResult.value = v.length === 0 ? ["通过：未检测到引导性表述"] : v.map((x) => `[拦截] ${x.message}`);
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
     gateResult.value = [];
   } finally {
     checking.value = false;

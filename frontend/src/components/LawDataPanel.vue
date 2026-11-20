@@ -3,7 +3,7 @@
 import { onMounted, ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
-import { humanSize } from "../util";
+import { errText, humanSize } from "../util";
 
 const lawStatus = ref<any | null>(null);
 const lawMsgs = ref<string[]>([]);
@@ -34,7 +34,7 @@ async function checkLawUpdates() {
     }
     lawChecked.value = checked;
   } catch (e) {
-    lawIndexErr.value = String(e);
+    lawIndexErr.value = errText(e);
   }
 }
 
@@ -51,7 +51,7 @@ async function downloadSelected() {
     lawStatus.value = await App.DownloadAndInstallLawData(names);
     await checkLawUpdates();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   } finally {
     lawBusy.value = false;
   }
@@ -68,7 +68,7 @@ async function loadLawDataZip() {
     if (!path) return;
     await doLoadLawData(path);
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -79,7 +79,7 @@ async function loadLawDataDir() {
     if (!path) return;
     await doLoadLawData(path);
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -89,7 +89,7 @@ async function doLoadLawData(path: string) {
   try {
     lawStatus.value = await App.LoadLawData(path);
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   } finally {
     lawBusy.value = false;
   }
@@ -101,7 +101,7 @@ onMounted(() => {
   });
   refreshLawStatus()
     .then(() => checkLawUpdates())
-    .catch((e) => (error.value = String(e)));
+    .catch((e) => (error.value = errText(e)));
 });
 
 defineExpose({ refresh: refreshLawStatus });

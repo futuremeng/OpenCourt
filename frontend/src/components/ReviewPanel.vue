@@ -2,6 +2,7 @@
 // 审校与报告——自 App.vue 抽出（distill）。
 // 审校为确定性检查，模型不参与判定；原样导出须显式勾选确认并留审计。
 import { ref } from "vue";
+import { errText } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
 const props = defineProps<{ names: string[] }>();
@@ -23,7 +24,7 @@ async function runReview() {
   try {
     reviewReport.value = await App.ReviewCase();
   } catch (e) {
-    exportErr.value = String(e);
+    exportErr.value = errText(e);
   } finally {
     reviewBusy.value = false;
   }
@@ -35,7 +36,7 @@ async function exportReport(redacted: boolean) {
     const r = await App.ExportReport(redacted, !redacted && rawConfirm.value, props.names);
     exportPath.value = r.path;
   } catch (e) {
-    exportErr.value = String(e);
+    exportErr.value = errText(e);
   }
 }
 

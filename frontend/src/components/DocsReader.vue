@@ -2,6 +2,7 @@
 // 文档接入与阅卷（阶段二）——自 App.vue 抽出（distill）。
 // 纪律：模型只产候选事实，回原文定位失败即拒绝入库；时间/金额要素正则确定性抽取。
 import { onMounted, ref } from "vue";
+import { errText } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 
@@ -48,7 +49,7 @@ async function toggleAnnotations(docID: string) {
   try {
     annotations.value = { ...annotations.value, [docID]: await App.DocumentAnnotations(docID) };
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -63,7 +64,7 @@ async function pickAndIngest() {
       : `已接入 ${doc.file}（${doc.page_count} 页）。扫描件需 OCR 引擎，未配置会被拒绝。`;
     await refreshDocs();
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -74,7 +75,7 @@ async function runReader(docID: string) {
     await refreshTimeline();
     emit("changed");
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   } finally {
     busy.value = "";
   }
@@ -86,7 +87,7 @@ async function runBlindspots() {
     const reqs = requirements.value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
     blindspots.value = await App.RunBlindspots(reqs);
   } catch (e) {
-    error.value = String(e);
+    error.value = errText(e);
   }
 }
 
@@ -96,7 +97,7 @@ async function runElementMatchByCaseType() {
     const res = await App.RunElementMatchByCaseType(currentCaseType.value);
     elemMatch.value = { Covered: res.Covered || [], Missing: res.Missing || [] };
   } catch (e) {
-    elemMsg.value = String(e); // 无要件库等显式降级提示，绝不静默
+    elemMsg.value = errText(e); // 无要件库等显式降级提示，绝不静默
   } finally {
     elemBusy.value = false;
   }
@@ -115,7 +116,7 @@ EventsOn("docs:ingest", (r: any) => {
     ingestMsg.value = r.ocr_engine
       ? `拖入已接入 ${r.file}（${r.pages} 页，OCR:${r.ocr_engine}——封顶弱态）。`
       : `拖入已接入 ${r.file}（${r.pages} 页）。`;
-    refreshDocs().catch((e) => (error.value = String(e)));
+    refreshDocs().catch((e) => (error.value = errText(e)));
     emit("changed");
   } else {
     error.value = `拖入文件导入失败：${r?.error || "未知错误"}`;
@@ -123,7 +124,7 @@ EventsOn("docs:ingest", (r: any) => {
 });
 
 onMounted(() => {
-  refresh().catch((e) => (error.value = String(e)));
+  refresh().catch((e) => (error.value = errText(e)));
 });
 
 // 菜单「文件→导入卷宗文档…」(Cmd+O) 的落点
