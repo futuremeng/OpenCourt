@@ -74,8 +74,10 @@ func TestOCRSourceNeverUpgradesToStrong(t *testing.T) {
 	if err == nil {
 		t.Fatal("OCR 来源禁止进入已溯源确认（强态）")
 	}
-	if !strings.Contains(err.Error(), "OCR") {
-		t.Errorf("错误应明确指向 OCR 纪律: %v", err)
+	// v0.4 P12：面向用户的文案不再出现内部术语「OCR」，改说「扫描识别」；
+	// 断言随文案更新，测试意图不变（拒绝必须说明来源是扫描件）。
+	if !strings.Contains(err.Error(), "扫描识别") {
+		t.Errorf("错误应明确指向扫描来源纪律: %v", err)
 	}
 	// 弱态之间迁移不受 OCR 限制（降级/描述性迁移照常允许）。
 	if err := ArbitrateUpgrade(UpgradeRequest{

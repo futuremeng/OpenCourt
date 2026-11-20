@@ -117,14 +117,15 @@ async function addFact() {
   }
 }
 
-// 失败回执的补救按钮（v0.4 P11）：按错误正文里的补救语给可达落点；
+// 失败回执的补救落点（v0.4 P11/P12）：按错误正文里的补救语跳转；
 // 未匹配不出按钮，补救全在错误文字自身（errHelp 与 Go 文案是成对契约）。
+// 录入表单与事实看板共用同一 gotoHelp，不另开第二套补救路径。
 const factErrHelp = computed(() => errHelp(error.value));
-function runErrHelp() {
-  if (factErrHelp.value === "locate") {
+function gotoHelp(kind: string) {
+  if (kind === "locate") {
     switchStage("review");
     (docSearchRef.value as any)?.focusInput?.();
-  } else if (factErrHelp.value === "ingest") {
+  } else if (kind === "ingest") {
     importFile();
   }
 }
@@ -326,7 +327,7 @@ onMounted(async () => {
         <p v-if="factResult" class="fact-result" role="status">{{ factResult }}</p>
         <p v-if="error" class="error" role="status">
           {{ error }}
-          <button v-if="factErrHelp" class="primary" style="margin-left: 8px" @click="runErrHelp">
+          <button v-if="factErrHelp" class="primary" style="margin-left: 8px" @click="gotoHelp(factErrHelp)">
             {{ factErrHelp === "locate" ? "去卷宗检索核对" : "去接入该文书" }}
           </button>
         </p>
@@ -335,7 +336,7 @@ onMounted(async () => {
       <section class="panel wide" id="sec-facts">
         <h2>事实看板（按可靠程度分列）</h2>
         <p class="hint">只有同时满足原文核对通过、多来源一致、人工确认，才能升级为「已溯源确认」；不满足会被拒绝并说明原因。</p>
-        <FactBoard :facts="facts" @changed="refresh" />
+        <FactBoard :facts="facts" @changed="refresh" @goto="gotoHelp" />
       </section>
     </div>
 

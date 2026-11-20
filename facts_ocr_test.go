@@ -32,8 +32,9 @@ func TestUpgradeFactOCRCapped(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 三条件全满足也进不了强态——OCR 来源被状态机拒绝。
+	// （v0.4 P12：用户文案说「扫描识别」不说「OCR」，断言随文案更新，拒约不变。）
 	if _, err := a.UpgradeFact(fOCR.FactID, string(domain.StateTracedConfirmed), true, true, true); err == nil ||
-		!strings.Contains(err.Error(), "OCR") {
+		!strings.Contains(err.Error(), "扫描识别") {
 		t.Fatalf("OCR 来源事实经生产入口升级必须被拒: %v", err)
 	}
 	if got, _ := a.scope().GetFact(fOCR.FactID); got.State != domain.StateSingleSource {

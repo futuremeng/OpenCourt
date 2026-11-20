@@ -37,7 +37,7 @@ type UpgradeRequest struct {
 // 状态只能靠证据升级，不能靠推理升级。返回 nil 表示允许升级。
 func ArbitrateUpgrade(req UpgradeRequest) error {
 	if !req.Target.Valid() {
-		return fmt.Errorf("目标状态非法: %q", req.Target)
+		return fmt.Errorf("升级目标无法识别，本次未作任何变更")
 	}
 	from := req.Fact.State
 	if from == req.Target {
@@ -48,17 +48,17 @@ func ArbitrateUpgrade(req UpgradeRequest) error {
 	case domain.StateTracedConfirmed:
 		// D1 纪律：OCR 输出是识别不是识别原文——引擎可能错字，封顶弱态。
 		if req.SourceFromOCR {
-			return fmt.Errorf("拒绝升级到「已溯源确认」：来源文本由 OCR 产出，入库上限为「单源未补强」（D1：不得由模型自动改字，纠正只允许人工编辑后重新核验）")
+			return fmt.Errorf("无法升级为「已溯源确认」：这段文字来自扫描识别，可靠程度最高只能到「有原文出处，但只有一方来源」；系统不会自动改字，人工校对纠正后重新录入核对")
 		}
 		// 唯一路径：本方导入新材料 且 核验器能在原文定位 且 无内部矛盾。
 		if !req.EvidenceImported {
-			return fmt.Errorf("拒绝升级到「已溯源确认」：未导入新证据，状态只能靠证据升级，不能靠推理升级")
+			return fmt.Errorf("无法升级为「已溯源确认」：需要先在「阅卷」为本案接入新的证据文书；升级只依据证据，不依据推测")
 		}
 		if !req.LocatedInSource {
-			return fmt.Errorf("拒绝升级到「已溯源确认」：核验器无法在原文定位引用")
+			return fmt.Errorf("无法升级为「已溯源确认」：引用在原文中找不到对应句子；可在「阅卷」检索卷宗找到该页核对后重试")
 		}
 		if !req.NoInternalConflict {
-			return fmt.Errorf("拒绝升级到「已溯源确认」：存在内部矛盾")
+			return fmt.Errorf("无法升级为「已溯源确认」：本案材料之间存在说法互相矛盾，已原样并列展示，需人工判断后处理")
 		}
 		return nil
 
@@ -73,7 +73,7 @@ func ArbitrateUpgrade(req UpgradeRequest) error {
 	case domain.StateSingleSource, domain.StateOpponentClaim:
 		// 从已确认态退回弱态属于降级，允许；向上进入这两个态要求有对应来源。
 		if from == domain.StateUnsupported && !req.EvidenceImported {
-			return fmt.Errorf("拒绝进入 %s：无任何材料支持时不得进入弱事实态", req.Target.DisplayName())
+			return fmt.Errorf("不能直接标注为「%s」：没有任何材料支持时，只能按「未找到来源」标注", req.Target.DisplayName())
 		}
 		return nil
 
@@ -97,7 +97,7 @@ func ApplyUpgrade(req UpgradeRequest) (domain.Fact, error) {
 // 模型或自动逻辑调用一律被拒绝。
 func ResolveConflict(c domain.Conflict, resolverIsHuman bool) (domain.Conflict, error) {
 	if !resolverIsHuman {
-		return domain.Conflict{}, fmt.Errorf("拒绝自动消解冲突 %s：冲突必须并列展示，交由用户自行判断", c.ConflictID)
+		return domain.Conflict{}, fmt.Errorf("冲突不能自动消解：互相矛盾的说法会原样并列展示，由人判断")
 	}
 	c.IsResolved = true
 	return c, nil
