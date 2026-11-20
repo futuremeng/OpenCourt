@@ -137,11 +137,11 @@ const flowSteps = computed(() => {
   return [
     { id: "case", label: "建案", done: !!currentCase.value, meta: "",
       todo: "先在顶栏新建一个案件，一切材料都按案件归档。", action: "new-case", actionLabel: "新建案件" },
-    { id: "docs", label: "阅卷", done: docCount.value > 0, meta: `${docCount.value} 份文书`,
+    { id: "docs", label: "卷宗接入", done: docCount.value > 0, meta: `${docCount.value} 份文书`,
       todo: "把起诉状、合同等文书接入本案。", action: "import-doc", actionLabel: "导入文书" },
     { id: "facts", label: "整理事实", done: hasFacts, meta: `${facts.value.length} 条`,
       todo: "从文书中把有出处的事实逐条录入。", action: "document", actionLabel: "去录入事实" },
-    { id: "report", label: "审校 · 报告", done: false, meta: "",
+    { id: "report", label: "审校与报告", done: false, meta: "",
       todo: hasFacts ? "在「报告」阶段执行审校，通过审校后即可导出案件报告。" : "审校需要至少一条已录入的事实。", action: "report", actionLabel: "去审校" },
   ];
 });
