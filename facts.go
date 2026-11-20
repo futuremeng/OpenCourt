@@ -44,7 +44,7 @@ func (a *App) CreateFact(description, sourceFile string, pageNum int, snippet st
 	if sourceFile != "" {
 		c := domain.Citation{SourceFile: sourceFile, PageNum: pageNum, Snippet: snippet}
 		if !c.Valid() {
-			return domain.Fact{}, fmt.Errorf("引用不完整：填了来源文书就必须给页码与原文片段，否则无法回原文定位")
+			return domain.Fact{}, fmt.Errorf("引用不完整：填了来源文书就必须给页码与原文片段，否则无法回原文定位；也可留空来源按「无依据」录入")
 		}
 		docs := a.documentTexts()
 		if _, ok := docs[sourceFile]; !ok {
@@ -54,7 +54,7 @@ func (a *App) CreateFact(description, sourceFile string, pageNum int, snippet st
 		if !verify.Locate(c, docs) {
 			_ = a.auditLog.Log(a.profile.Role, "CREATE_REJECTED", filepath.Base(sourceFile),
 				fmt.Sprintf("引用片段未能在第 %d 页原文定位", pageNum))
-			return domain.Fact{}, fmt.Errorf("引用片段未能在来源文书第 %d 页原文中定位：请核对片段与页码（未入库）", pageNum)
+			return domain.Fact{}, fmt.Errorf("引用片段未能在来源文书第 %d 页原文中定位：可在「阅卷」检索卷宗找到该页后复制原句重新提交，或留空来源按「无依据」录入（未入库）", pageNum)
 		}
 		f.Citation = &c
 	}

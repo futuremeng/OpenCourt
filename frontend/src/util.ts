@@ -18,6 +18,16 @@ export const FACT_STATE_HINTS: Record<string, string> = {
   UNSUPPORTED: "没有找到来源",
 };
 
+// 失败回执的补救动作（v0.4 P11）：关键词对应 Go 错误文案里的补救语——
+// 改 Go 文案时必须同步这里（fail-help 契约）；未匹配一律不出按钮，
+// 补救只依赖错误正文自身的可见指引，不编按钮。
+export function errHelp(err: string): "locate" | "ingest" | null {
+  if (!err) return null;
+  if (err.includes("检索卷宗") || err.includes("定位")) return "locate";
+  if (err.includes("先在「阅卷」接入")) return "ingest";
+  return null;
+}
+
 // 录入成功后的白话回执（v0.4 P10）：专业名 + 通俗注解 + 归档理由。
 // 理由只引用回执里的真实字段（来源/页码/对方标记），不编判定过程；
 // 状态不在五态内时如实回退，不编名字。

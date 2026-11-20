@@ -5,7 +5,7 @@
 import { computed, onMounted, ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
 import type { domain } from "../../wailsjs/go/models";
-import { baseName, errText, FACT_STATE_NAMES, factOutcomeText, profileLabel, redactLabel } from "../util";
+import { baseName, errHelp, errText, FACT_STATE_NAMES, factOutcomeText, profileLabel, redactLabel } from "../util";
 import FactBoard from "../components/FactBoard.vue";
 import LawSearch from "../components/LawSearch.vue";
 import SimilarCases from "../components/SimilarCases.vue";
@@ -114,6 +114,18 @@ async function addFact() {
     await refresh();
   } catch (e) {
     error.value = errText(e);
+  }
+}
+
+// 失败回执的补救按钮（v0.4 P11）：按错误正文里的补救语给可达落点；
+// 未匹配不出按钮，补救全在错误文字自身（errHelp 与 Go 文案是成对契约）。
+const factErrHelp = computed(() => errHelp(error.value));
+function runErrHelp() {
+  if (factErrHelp.value === "locate") {
+    switchStage("review");
+    (docSearchRef.value as any)?.focusInput?.();
+  } else if (factErrHelp.value === "ingest") {
+    importFile();
   }
 }
 
@@ -312,7 +324,12 @@ onMounted(async () => {
           <button class="primary" @click="addFact">录入</button>
         </div>
         <p v-if="factResult" class="fact-result" role="status">{{ factResult }}</p>
-        <p v-if="error" class="error" role="status">{{ error }}</p>
+        <p v-if="error" class="error" role="status">
+          {{ error }}
+          <button v-if="factErrHelp" class="primary" style="margin-left: 8px" @click="runErrHelp">
+            {{ factErrHelp === "locate" ? "去卷宗检索核对" : "去接入该文书" }}
+          </button>
+        </p>
       </section>
 
       <section class="panel wide" id="sec-facts">
