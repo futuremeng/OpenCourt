@@ -129,6 +129,29 @@ const stateCounts = computed(() => {
 // 运行状态（自顶栏迁入工具区）：逐项如实显示，不渲染假状态
 const roleLabel = computed(() => profileLabel(props.info?.profile));
 
+// 双受众信息层级（v0.4 P8）：主视图先给公众一条进度叙述（全部由本案真实计数推导），
+// 专业计数与五态收进展开区；没有可读的「已出报告」状态，故「审校·报告」步骤如实
+// 显示为待进行，不编造已完成状态。
+const flowSteps = computed(() => {
+  const hasFacts = facts.value.length > 0;
+  return [
+    { id: "case", label: "建案", done: !!currentCase.value, meta: "",
+      todo: "先在顶栏新建一个案件，一切材料都按案件归档。", action: "new-case", actionLabel: "新建案件" },
+    { id: "docs", label: "阅卷", done: docCount.value > 0, meta: `${docCount.value} 份文书`,
+      todo: "把起诉状、合同等文书接入本案。", action: "import-doc", actionLabel: "导入文书" },
+    { id: "facts", label: "整理事实", done: hasFacts, meta: `${facts.value.length} 条`,
+      todo: "从文书中把有出处的事实逐条录入。", action: "document", actionLabel: "去录入事实" },
+    { id: "report", label: "审校 · 报告", done: false, meta: "",
+      todo: hasFacts ? "在「报告」阶段执行审校，通过审校后即可导出案件报告。" : "审校需要至少一条已录入的事实。", action: "report", actionLabel: "去审校" },
+  ];
+});
+const currentStep = computed(() => {
+  const i = flowSteps.value.findIndex((s) => !s.done);
+  return i < 0 ? flowSteps.value.length - 1 : i;
+});
+const nextStep = computed(() => flowSteps.value[currentStep.value]);
+const progressLine = computed(() => `现在进行到第 ${currentStep.value + 1} 步「${nextStep.value.label}」：${nextStep.value.todo}`);
+
 // 向导步骤的落点；未识别的 action 由 Onboard 只展示文字、不给按钮。
 // 落点可能不在当前阶段：先切阶段再执行（不新增第二入口）。
 function stepAction(action: string) {
@@ -206,19 +229,38 @@ onMounted(async () => {
       <Onboard v-if="guide.length" :steps="guide" :status="stepStatus" @action="stepAction" />
       <div class="stage-grid">
         <section class="panel wide">
-          <h2>本案状态</h2>
+          <h2>本案进展</h2>
           <template v-if="currentCase">
-            <div class="mrow">
-              <span class="badge on">当前案件：{{ currentCase.title }}</span>
-              <span class="badge">本案文档 {{ docCount }} 份</span>
-              <span class="badge">本案事实 {{ facts.length }} 条</span>
-            </div>
-            <div class="mrow states">
-              <span v-for="c in stateCounts" :key="c.key" class="state-chip" :class="c.key.toLowerCase()">
-                {{ c.label }} {{ c.n }}
-              </span>
-            </div>
-            <p class="hint">以上计数来自当前案件的真实数据。五态即事实的可靠程度，由系统按来源情况自动判定：原文核对通过且多来源交叉一致才能进入最高档。</p>
+            <p class="progress-line">{{ progressLine }}</p>
+            <ol class="flow-steps" aria-label="案件进度">
+              <li
+                v-for="(s, i) in flowSteps"
+                :key="s.id"
+                :class="{ done: s.done, current: i === currentStep }"
+                :aria-current="i === currentStep ? 'step' : undefined"
+              >
+                <span class="flow-mark" aria-hidden="true">{{ s.done ? "✓" : i === currentStep ? "▶" : "·" }}</span>
+                <span>{{ s.label }}</span>
+                <span v-if="s.done && s.meta" class="step-meta">{{ s.meta }}</span>
+              </li>
+            </ol>
+            <p class="mrow">
+              <button class="btn primary" @click="stepAction(nextStep.action)">{{ nextStep.actionLabel }}</button>
+            </p>
+            <details class="pro">
+              <summary>专业细节：案件计数与事实可靠程度五态</summary>
+              <div class="mrow">
+                <span class="badge on">当前案件：{{ currentCase.title }}</span>
+                <span class="badge">本案文档 {{ docCount }} 份</span>
+                <span class="badge">本案事实 {{ facts.length }} 条</span>
+              </div>
+              <div class="mrow states">
+                <span v-for="c in stateCounts" :key="c.key" class="state-chip" :class="c.key.toLowerCase()">
+                  {{ c.label }} {{ c.n }}
+                </span>
+              </div>
+              <p class="hint">以上计数来自当前案件的真实数据。五态即事实的可靠程度，由系统按来源情况自动判定：原文核对通过且多来源交叉一致才能进入最高档。</p>
+            </details>
           </template>
           <EmptyState v-else text="尚未选择案件。事实与文档都以案件为边界。">
             <button v-if="!guide.length" class="btn primary" @click="emit('focus-new-case')">新建案件</button>
@@ -335,6 +377,15 @@ onMounted(async () => {
 .num { width: 80px; }
 .error { color: var(--bad); font-size: var(--fs-sm); }
 .mrow { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
+/* 本案进展（v0.4 P8 双受众层级） */
+.progress-line { margin: 6px 0 10px; font-size: var(--fs-md); }
+.flow-steps { list-style: none; display: flex; gap: 16px; padding: 0; margin: 0 0 12px; flex-wrap: wrap; font-size: var(--fs-sm); color: var(--text-2); }
+.flow-steps li { display: flex; gap: 5px; align-items: baseline; }
+.flow-steps li.done { color: var(--text-3); }
+.flow-steps li.current { color: var(--accent-ink); font-weight: 600; }
+.step-meta { color: var(--text-3); font-size: var(--fs-xs); }
+.pro { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+.pro summary { cursor: pointer; font-size: var(--fs-sm); color: var(--text-2); }
 .badge { border-radius: var(--r-pill); padding: 3px 12px; font-size: var(--fs-xs); background: var(--neutral-bg); color: var(--text-2); }
 .badge.on { background: var(--accent-soft); color: var(--accent-ink); }
 /* 五态计数：底色即五态令牌（DESIGN.md：五态色只用于看板与状态标注） */
