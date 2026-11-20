@@ -5,7 +5,7 @@
 import { computed, onMounted, ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
 import type { domain } from "../../wailsjs/go/models";
-import { baseName, errText, FACT_STATE_NAMES, profileLabel, redactLabel } from "../util";
+import { baseName, errText, FACT_STATE_NAMES, factOutcomeText, profileLabel, redactLabel } from "../util";
 import FactBoard from "../components/FactBoard.vue";
 import LawSearch from "../components/LawSearch.vue";
 import SimilarCases from "../components/SimilarCases.vue";
@@ -34,6 +34,8 @@ const pageNum = ref(1);
 const snippet = ref("");
 const fromOpponent = ref(false);
 const error = ref("");
+// 录入成功后的白话回执（v0.4 P10）：归入哪一档 + 为什么，全部取自后端回传的真实字段
+const factResult = ref("");
 
 // 向导进度取真实状态（当前案件 / 本案文档数），不是点击计数
 const currentCase = ref<any | null>(null);
@@ -103,10 +105,12 @@ async function onCaseSwitched() {
 
 async function addFact() {
   error.value = "";
+  factResult.value = "";
   try {
-    await App.CreateFact(desc.value, sourceFile.value, pageNum.value, snippet.value, fromOpponent.value);
+    const f = await App.CreateFact(desc.value, sourceFile.value, pageNum.value, snippet.value, fromOpponent.value);
     desc.value = ""; snippet.value = "";
     prefillNote.value = "";
+    factResult.value = factOutcomeText(f);
     await refresh();
   } catch (e) {
     error.value = errText(e);
@@ -118,6 +122,7 @@ async function addFact() {
 const prefillNote = ref("");
 function prefillFromHit(h: { file: string; page: number; snippet: string }) {
   if (!h.file) return;
+  factResult.value = "";
   sourceFile.value = h.file;
   pageNum.value = h.page || 1;
   snippet.value = h.snippet || "";
@@ -306,6 +311,7 @@ onMounted(async () => {
           <label><input type="checkbox" v-model="fromOpponent" /> 来自对方文书/陈述</label>
           <button class="primary" @click="addFact">录入</button>
         </div>
+        <p v-if="factResult" class="fact-result" role="status">{{ factResult }}</p>
         <p v-if="error" class="error" role="status">{{ error }}</p>
       </section>
 
@@ -387,6 +393,7 @@ onMounted(async () => {
 .full { width: 100%; }
 .num { width: 80px; }
 .error { color: var(--bad); font-size: var(--fs-sm); }
+.fact-result { color: var(--ok); font-size: var(--fs-sm); margin: 6px 0 0; }
 .mrow { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
 /* 本案进展（v0.4 P8 双受众层级） */
 .progress-line { margin: 6px 0 10px; font-size: var(--fs-md); }

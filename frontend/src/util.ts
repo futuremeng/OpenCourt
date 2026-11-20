@@ -18,6 +18,33 @@ export const FACT_STATE_HINTS: Record<string, string> = {
   UNSUPPORTED: "没有找到来源",
 };
 
+// 录入成功后的白话回执（v0.4 P10）：专业名 + 通俗注解 + 归档理由。
+// 理由只引用回执里的真实字段（来源/页码/对方标记），不编判定过程；
+// 状态不在五态内时如实回退，不编名字。
+export function factOutcomeText(f: any): string {
+  const state: string = f?.state || "";
+  const name = FACT_STATE_NAMES[state];
+  if (!name) return `已录入，状态未知（${state || "未返回"}）。`;
+  const hint = FACT_STATE_HINTS[state] ? `（${FACT_STATE_HINTS[state]}）` : "";
+  const cit = f?.citation;
+  const file = cit?.SourceFile ? baseName(cit.SourceFile) : "";
+  let why = "";
+  if (state === "SINGLE_SOURCE" && file && cit.PageNum >= 1) {
+    why = `：来自《${file}》第 ${cit.PageNum} 页，已回原文核对`;
+  } else if (state === "OPPONENT_CLAIM") {
+    why = file && cit.PageNum >= 1
+      ? `：来自对方提交的《${file}》第 ${cit.PageNum} 页，尚未核实`
+      : file ? `：来自对方提交的《${file}》，尚未核实` : "：来自对方陈述，尚未核实";
+  } else if (state === "UNSUPPORTED") {
+    why = "：没有找到可核对的来源";
+  } else if (state === "CONFLICTED") {
+    why = "：与其他材料说法不一致，已同时列出";
+  } else if (state === "TRACED_CONFIRMED") {
+    why = "：引用已回原文核对且经人工确认";
+  }
+  return `已录入为「${name}」${hint}${why}。`;
+}
+
 // 审校检查项中文显示名（check 标识仅留日志与审计）。
 export function checkLabel(c: string): string {
   const m: Record<string, string> = {
