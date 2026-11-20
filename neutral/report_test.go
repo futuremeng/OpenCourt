@@ -18,7 +18,7 @@ func TestReportWeakStateNeverInFactSection(t *testing.T) {
 			{FactID: "FACT-CLAIM", Description: "对方主张C", State: domain.StateOpponentClaim},
 			{FactID: "FACT-NOSRC", Description: "缺来源强态D", State: domain.StateTracedConfirmed},
 		},
-		Conflicts: []domain.Conflict{{ConflictID: "C-1", FactIDs: []string{"FACT-WEAK"}, ConflictPoint: "交付时间"}},
+		Conflicts:  []domain.Conflict{{ConflictID: "C-1", FactIDs: []string{"FACT-WEAK"}, ConflictPoint: "交付时间"}},
 		Blindspots: []Blindspot{{Question: "是否交付", Supplement: "补充签收单"}},
 		SimRounds: []SimRoundView{
 			{RoundID: "R-1", Phase: "调查", FactIDs: []string{"FACT-STRONG"}},
