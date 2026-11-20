@@ -1,6 +1,10 @@
 package profiles
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestLoadAllProfiles(t *testing.T) {
 	for _, role := range []string{"court", "plaintiff", "defendant", "party"} {
@@ -36,6 +40,30 @@ func TestCourtGuideFourSteps(t *testing.T) {
 			t.Errorf("引导动作重复: %s", s.Action)
 		}
 		seen[s.Action] = true
+	}
+}
+
+// TestGuideJSONKeys 引导步骤经 Wails 绑定到前端时的序列化契约：
+// 前端向导按 title/text/action 小写键读取；缺 json 标签会序列化成
+// Title/Text/Action，向导四步全部渲染成空壳且状态永不完成（GUI 实测暴露）。
+func TestGuideJSONKeys(t *testing.T) {
+	p, err := Load(".", "court")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := json.Marshal(p.Guide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"title":`, `"text":`, `"action":`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("Guide JSON 缺小写键 %s: %s", want, b)
+		}
+	}
+	for _, bad := range []string{`"Title":`, `"Text":`, `"Action":`} {
+		if strings.Contains(string(b), bad) {
+			t.Errorf("Guide JSON 不应含大写字段 %s: %s", bad, b)
+		}
 	}
 }
 

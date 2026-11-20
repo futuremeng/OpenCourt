@@ -17,6 +17,12 @@
   （建案→接入→看板上板）。`vue-tsc` 0 错误、`vite build` 通过、`go test ./profiles/`
   新增 guide 声明与「其余 Profile 无 guide」两用例
 
+  ### 修复
+  - **P1 向导序列化键名**：`GuideStep` 只有 yaml 标签，经 Wails 绑定序列化后键名变成
+    大写的 `Title/Text/Action`，前端按小写读取致四步全部渲染成空壳（标题/文案为空、
+    无动作按钮、完成状态永不点亮）——GUI 实走首次暴露；补小写 json 标签与序列化
+    契约用例（`TestGuideJSONKeys`），重建后向导四步渲染与完成态实测正常
+
 ## v0.3.0（2026-11-20）
 
 ### 变更

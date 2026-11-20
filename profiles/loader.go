@@ -40,9 +40,11 @@ type Profile struct {
 // （new-case / import-doc / document / report），未识别的值前端只展示
 // 文字不给按钮——缺入口就如实缺入口，不得编一个去处。
 type GuideStep struct {
-	Title  string `yaml:"title"`
-	Text   string `yaml:"text"`
-	Action string `yaml:"action"`
+	// json 标签同样必须小写：Wails 把 Guide 原样序列化给前端向导渲染，
+	// 前端按 title/text/action 读取，大小写不符会让四步全部渲染成空壳。
+	Title  string `yaml:"title" json:"title"`
+	Text   string `yaml:"text" json:"text"`
+	Action string `yaml:"action" json:"action"`
 }
 
 // ToolEnabled 报告某工具在该 Profile 下是否可用（默认拒绝：出现在
