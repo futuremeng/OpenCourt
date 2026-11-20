@@ -2,6 +2,21 @@
 
 本项目遵循 Semantic Versioning，版本语义见开发文档 10.4。
 
+## Unreleased
+
+### 新增
+- **v0.4 P1 法院场景包骨架**：① 引导动线入 Profile——`court/profile.yaml` 声明四步
+  向导（建案→卷宗接入→阅卷与事实板→产出审校报告），`profiles.GuideStep` 随
+  `AppInfo.guide` 透出；向导按数据渲染，代码零 `role` 分支，其余三个 Profile 未声明即
+  保持自由动线（plan-v0.4 D4）；② `views/Onboard.vue` 首屏向导：步骤完成状态一律
+  来自真实计数（当前案件/本案文档/已录事实），不自称完成；每步空状态由
+  `components/EmptyState.vue` 呈现并给下一步按钮，未识别的 action 只展示文字不给按钮；
+  跨案件隔离在建案步文案显式可见；③ `App.vue` 拆为外壳 + `views/Workspace.vue`：
+  菜单/快捷键落点经暴露方法转发，外壳不再持有功能面板 ref；滚动锚点
+  `sec-facts`/`sec-report`；验收标准「安装→首份事实板 ≤3 步」在向导内达成
+  （建案→接入→看板上板）。`vue-tsc` 0 错误、`vite build` 通过、`go test ./profiles/`
+  新增 guide 声明与「其余 Profile 无 guide」两用例
+
 ## v0.3.0（2026-11-20）
 
 ### 变更

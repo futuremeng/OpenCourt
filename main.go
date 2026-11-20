@@ -337,6 +337,8 @@ func (a *App) AppInfo() map[string]any {
 		"modelEnabled":   a.settings.Model.Enabled,
 		"browserEnabled": a.browser != nil && a.browser.Enabled(),
 		"disabledTools":  a.profile.DisabledTools,
+		// 引导动线（v0.4 P1）：nil 表示该 Profile 无向导，前端保持自由动线。
+		"guide": a.profile.Guide,
 	}
 }
 

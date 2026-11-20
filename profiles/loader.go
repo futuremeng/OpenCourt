@@ -30,6 +30,19 @@ type Profile struct {
 	// 避免误以为已按立场分库隔离。
 	DataDir     string   `yaml:"data_dir"`
 	OutputRules []string `yaml:"output_rules"`
+	// Guide 是引导动线（v0.4 P1 法院场景包）：声明该 Profile 的向导步骤。
+	// 向导组件按数据渲染，代码里不出现 role 判断；未声明的 Profile 保持
+	// 现有自由动线（开发文档 plan-v0.4 D4）。
+	Guide []GuideStep `yaml:"guide"`
+}
+
+// GuideStep 一步引导：标题 + 文案 + 动作。Action 是稳定标识
+// （new-case / import-doc / document / report），未识别的值前端只展示
+// 文字不给按钮——缺入口就如实缺入口，不得编一个去处。
+type GuideStep struct {
+	Title  string `yaml:"title"`
+	Text   string `yaml:"text"`
+	Action string `yaml:"action"`
 }
 
 // ToolEnabled 报告某工具在该 Profile 下是否可用（默认拒绝：出现在

@@ -17,6 +17,42 @@ func TestLoadAllProfiles(t *testing.T) {
 	}
 }
 
+// TestCourtGuideFourSteps 法院场景包（v0.4 P1）：court Profile 声明四步
+// 引导动线，动作标识不得重复（前端按标识映射落点）。
+func TestCourtGuideFourSteps(t *testing.T) {
+	p, err := Load(".", "court")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Guide) != 4 {
+		t.Fatalf("court 引导应为 4 步，实得 %d", len(p.Guide))
+	}
+	seen := map[string]bool{}
+	for i, s := range p.Guide {
+		if s.Title == "" || s.Text == "" || s.Action == "" {
+			t.Errorf("引导第 %d 步字段不全: %+v", i+1, s)
+		}
+		if seen[s.Action] {
+			t.Errorf("引导动作重复: %s", s.Action)
+		}
+		seen[s.Action] = true
+	}
+}
+
+// TestOtherProfilesNoGuide 其余三个 Profile 保持自由动线（plan-v0.4 D4）：
+// 引导是数据，不是代码分支；未声明即无向导。
+func TestOtherProfilesNoGuide(t *testing.T) {
+	for _, role := range []string{"plaintiff", "defendant", "party"} {
+		p, err := Load(".", role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(p.Guide) != 0 {
+			t.Errorf("%s 不应声明引导动线，实得 %d 步", role, len(p.Guide))
+		}
+	}
+}
+
 func TestCourtDisablesStrategy(t *testing.T) {
 	p, err := Load(".", "court")
 	if err != nil {
