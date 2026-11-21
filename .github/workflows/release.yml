@@ -56,10 +56,11 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          # 版本单一来源：发布 tag 注入 main.version（未打 tag 的手动触发保留代码内默认值）
+          # 版本单一来源：发布 tag 注入 main.version（去 v 前缀：前端已有 v{{ version }}
+          # 拼接，带前缀会渲染成 vv；未打 tag 的手动触发保留代码内默认值）
           LDFLAGS=""
           if [ -n "${GITHUB_REF_NAME}" ] && [ "${GITHUB_EVENT_NAME}" = "push" ]; then
-            LDFLAGS="-ldflags=-X=main.version=${GITHUB_REF_NAME}"
+            LDFLAGS="-ldflags=-X=main.version=${GITHUB_REF_NAME#v}"
           fi
           if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
             wails build -clean -tags webkit2_41 $LDFLAGS
@@ -95,6 +96,19 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
+      # tag 是版本声明，必须与源码默认值互检（LocalCases 同构）：在 main.go
+      # 仍写旧值的树上发 v0.4.0，「版本单一来源」在 ldflags 注入处第一次断裂。
+      - name: the tag is the version
+        run: |
+          src=$(sed -n 's/^var version = "\([^"]*\)"/\1/p' main.go | head -1)
+          if [ "${GITHUB_REF_NAME#v}" != "$src" ]; then
+            echo "tag ${GITHUB_REF_NAME} 去 v 后与 main.go 默认值 $src 不一致" >&2
+            exit 1
+          fi
+          echo "OpenCourt $src"
+
       - uses: actions/download-artifact@v4
         with:
           path: bundles
