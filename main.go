@@ -34,7 +34,9 @@ import (
 var assets embed.FS
 
 // version 应用版本（Semantic Versioning）。
-const version = "0.1.0-preview"
+// var 而非 const：发版流水线经 -ldflags -X main.version=<tag> 注入，
+// -X 对 const 静默无效（曾导致发布包界面停留在旧版本号）。
+var version = "0.1.0-preview"
 
 // App 应用服务：Wails bindings 的绑定对象。
 //

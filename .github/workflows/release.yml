@@ -84,3 +84,56 @@ jobs:
           name: ${{ matrix.artifact }}
           path: |
             ${{ matrix.artifact }}*
+
+  # tag 推上去不能只把制品存进 Actions（90 天过期），必须创建 GitHub Release
+  # 才算对外发布；重复跑同一 tag 时替换旧资产而非报错（LocalCases 同构写法）。
+  release:
+    name: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: bundles
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          first=$(find bundles -type f | head -1)
+          if [ -z "$first" ]; then
+            echo "build 作业没有产出任何安装包" >&2
+            exit 1
+          fi
+
+          # 重命名成可读且标架构的名字：macOS runner 是 Apple Silicon，
+          # 非 universal，资产名不再沿用构建期的误导命名。
+          version=${GITHUB_REF_NAME#v}
+          mkdir -p dist
+          for f in $(find bundles -type f | sort); do
+            case "$f" in
+              *OpenCourt-linux.zip) cp "$f" "dist/OpenCourt-$version-linux-amd64.zip" ;;
+              *OpenCourt-macos-universal.zip) cp "$f" "dist/OpenCourt-$version-macos-arm64.app.zip" ;;
+              *OpenCourt.exe) cp "$f" "dist/OpenCourt-$version-windows-amd64.exe" ;;
+              *) echo "预期外的制品: $f" >&2; exit 1 ;;
+            esac
+          done
+          (cd dist && sha256sum *) > SHA256SUMS
+          cat SHA256SUMS
+
+          cat > notes.md <<'MD'
+          开源视听庭审辅助工具。安装包附 SHA256SUMS：`sha256sum -c SHA256SUMS`。
+          界面左下角版本号与本 Release 的 tag 一致（发版流水线经 ldflags 注入）。
+          MD
+
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" --clobber dist/* SHA256SUMS
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "OpenCourt $GITHUB_REF_NAME" \
+              --notes-file notes.md \
+              dist/* SHA256SUMS
+          fi

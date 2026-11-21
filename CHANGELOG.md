@@ -5,6 +5,10 @@
 ## Unreleased
 
 ### 变更
+- **发版链路修复**：`main.version` 由 const 改为 var（ldflags `-X` 对 const 静默
+  无效，发布包界面曾停留在旧版本号）；release.yml 新增 release 作业：tag 推送
+  后自动创建 GitHub Release（三平台制品重命名标架构 + SHA256SUMS + 说明），
+  同一 tag 重跑以 --clobber 替换旧资产；此前只 upload-artifact 不对外发布
 - **v0.4 P13 升级三条件后端确定性复核**（design-flow case-journey 批准项）：
   看板「按证据升级」不再把前端断言当核验结果——后端进强态前确定性
   重算：引用必须回原文定位得上（复用录入侧同一 locator）、来源文书必须
