@@ -3,7 +3,7 @@
 // 案件是一切事实/冲突/文档/要素的边界（docs/plan-v0.2.md D1）；
 // 案由为自由文本，不自动判定；阶段必须是枚举码。
 import { onMounted, ref } from "vue";
-import { errText } from "../util";
+import { CASE_STAGE_NAMES, errText, stageLabel } from "../util";
 import * as App from "../../wailsjs/go/main/App";
 
 const emit = defineEmits<{ (e: "switched"): void }>();
@@ -16,17 +16,8 @@ const stage = ref("CONSULT");
 const error = ref("");
 const creating = ref(false);
 
-const stages = [
-  { code: "CONSULT", label: "咨询" },
-  { code: "FILING", label: "起诉" },
-  { code: "FIRST_TRIAL", label: "一审" },
-  { code: "APPEAL", label: "上诉" },
-  { code: "SECOND_TRIAL", label: "二审" },
-];
-
-function stageLabel(code: string): string {
-  return stages.find((s) => s.code === code)?.label || code;
-}
+// 阶段名唯一来源在 util.CASE_STAGE_NAMES（与总览筛选共用）；顺序即枚举顺序
+const stages = Object.entries(CASE_STAGE_NAMES).map(([code, label]) => ({ code, label }));
 
 async function refresh() {
   try {

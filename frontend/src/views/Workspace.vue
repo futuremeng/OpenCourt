@@ -4,8 +4,8 @@
 // 引导动线是 Profile 数据（profile.guide）：有则渲染向导，代码不判断 role。
 import { computed, onMounted, ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
-import type { domain } from "../../wailsjs/go/models";
-import { baseName, errHelp, errText, FACT_STATE_NAMES, factOutcomeText, profileLabel, redactLabel } from "../util";
+import type { domain, neutral } from "../../wailsjs/go/models";
+import { baseName, CASE_STAGE_NAMES, errHelp, errText, FACT_STATE_NAMES, factOutcomeText, profileLabel, redactLabel, stageLabel } from "../util";
 import FactBoard from "../components/FactBoard.vue";
 import LawSearch from "../components/LawSearch.vue";
 import SimilarCases from "../components/SimilarCases.vue";
@@ -24,8 +24,9 @@ const props = defineProps<{
   guide: { title: string; text: string; action: string }[];
 }>();
 
-// 向导里「新建案件」的落点在壳层的 CaseBar，经事件上抛
-const emit = defineEmits<{ (e: "focus-new-case"): void }>();
+// 向导里「新建案件」的落点在壳层的 CaseBar，经事件上抛；
+// 左栏案件列表切换案件也上抛，由壳层刷新 CaseBar 后走同一刷新链路
+const emit = defineEmits<{ (e: "focus-new-case"): void; (e: "case-changed"): void }>();
 
 const facts = ref<domain.Fact[]>([]);
 const desc = ref("");
@@ -91,7 +92,7 @@ async function refreshWizard() {
 async function onCaseSwitched() {
   error.value = "";
   try {
-    await Promise.all([refresh(), refreshWizard()]);
+    await Promise.all([refresh(), refreshWizard(), loadCaseSpace()]);
     await (docsReaderRef.value as any)?.refresh?.();
     await (reviewPanelRef.value as any)?.refresh?.();
     (lawSearchRef.value as any)?.refresh?.();
@@ -157,6 +158,80 @@ const stateCounts = computed(() => {
   }
   return counts;
 });
+
+// ---- 案件空间（已批准 design-flow case-journey O01 三栏）----
+// 左：真实案件列表 + 阶段筛选；中：五态事实块（冲突原样并列）；右：按时间要素
+// 锚定的时间线。阶段、日期与出处都取后端真实字段，前端不编；缺什么如实列出。
+const cases = ref<any[]>([]);
+const caseQuery = ref("");
+const stageFilter = ref("");
+const conflicts = ref<domain.Conflict[]>([]);
+const timeline = ref<neutral.TimelineItem[]>([]);
+const caseStages = Object.entries(CASE_STAGE_NAMES).map(([code, label]) => ({ code, label }));
+
+// 筛选只按标题包含与阶段字段匹配（不编造「已归档」「待复核」等后端没有的状态）
+const filteredCases = computed(() => {
+  const q = caseQuery.value.trim();
+  return cases.value.filter(
+    (c) => (!stageFilter.value || c.stage === stageFilter.value) && (!q || String(c.title || "").includes(q))
+  );
+});
+
+// 案件列表与本案冲突/时间线：挂载与案件切换后刷新；失败如实上报
+async function loadCaseSpace() {
+  try {
+    const [cs, cf, tl] = await Promise.all([App.ListCases(), App.ListConflicts(), App.BuildTimeline()]);
+    cases.value = cs || [];
+    conflicts.value = cf || [];
+    timeline.value = tl || [];
+  } catch (e) {
+    error.value = errText(e);
+  }
+}
+
+// 左栏切换案件：SwitchCase 成功后上抛，壳层刷新 CaseBar 并回调 onCaseSwitched
+async function selectCase(id: string) {
+  if (currentCase.value?.case_id === id) return;
+  error.value = "";
+  try {
+    await App.SwitchCase(id);
+    emit("case-changed");
+  } catch (e) {
+    error.value = errText(e);
+  }
+}
+
+// 中栏事实块按五态分组（五态由后端判定，前端只呈现）
+const factById = computed(() => new Map(facts.value.map((f) => [f.fact_id, f])));
+const confirmedFacts = computed(() => facts.value.filter((f) => f.state === "TRACED_CONFIRMED"));
+const openFacts = computed(() => facts.value.filter((f) => f.state === "SINGLE_SOURCE" || f.state === "OPPONENT_CLAIM"));
+const unsupportedFacts = computed(() => facts.value.filter((f) => f.state === "UNSUPPORTED"));
+// 争议事实：未消解的冲突按事实分组原样并列；不属于未消解冲突的冲突态事实
+// 单独列出，同样不自动消解
+const conflictGroups = computed(() => {
+  const groups = conflicts.value
+    .filter((c) => !c.is_resolved)
+    .map((c) => ({
+      conflict_id: c.conflict_id,
+      point: c.conflict_point,
+      facts: (c.fact_ids || []).map((id) => factById.value.get(id)).filter((f): f is domain.Fact => !!f),
+    }));
+  const covered = new Set(groups.flatMap((g) => g.facts.map((f) => f.fact_id)));
+  const orphans = facts.value.filter((f) => f.state === "CONFLICTED" && !covered.has(f.fact_id));
+  return { groups, orphans };
+});
+const hasFacts = computed(() => facts.value.length > 0);
+
+// 时间线：有日期依据的入节点，没有的不虚构、列入「待补」
+const datedTimeline = computed(() => timeline.value.filter((t) => t.Date && t.Date.trim()));
+const undatedTimeline = computed(() => timeline.value.filter((t) => !(t.Date && t.Date.trim())));
+
+// 出处的法言法语：《文书名》第 N 页；没有来源字段就返回空串，不编出处
+function citationText(citation?: domain.Citation | null): string {
+  if (!citation || !citation.SourceFile) return "";
+  const name = baseName(citation.SourceFile);
+  return citation.PageNum >= 1 ? `《${name}》第 ${citation.PageNum} 页` : `《${name}》`;
+}
 
 // 运行状态（自顶栏迁入工具区）：逐项如实显示，不渲染假状态
 const roleLabel = computed(() => profileLabel(props.info?.profile));
@@ -238,7 +313,7 @@ defineExpose({ onCaseSwitched, importFile,
 });
 
 onMounted(async () => {
-  await Promise.all([refresh(), refreshWizard()]);
+  await Promise.all([refresh(), refreshWizard(), loadCaseSpace()]);
 });
 </script>
 
@@ -295,6 +370,99 @@ onMounted(async () => {
           <p v-else class="hint">事实与文档都以案件为边界：建好案件后，接入卷宗、录入事实都会归入本案。</p>
           <p v-if="error" class="error" role="status">{{ error }}</p>
         </section>
+
+        <!-- 案件空间（已批准画布 case-journey O01）：左案件列表与筛选、中五态事实、右时间线；
+             后端没有的状态不出现，没有依据的日期不虚构 -->
+        <div class="case-space panel">
+          <aside class="rail" aria-label="案件列表">
+            <h2>案件</h2>
+            <input v-model="caseQuery" class="full" placeholder="按案件标题过滤" aria-label="按案件标题过滤" />
+            <div class="chips" role="group" aria-label="按案件阶段筛选">
+              <button class="chip" :class="{ on: !stageFilter }" :aria-pressed="!stageFilter" @click="stageFilter = ''">全部</button>
+              <button
+                v-for="s in caseStages"
+                :key="s.code"
+                class="chip"
+                :class="{ on: stageFilter === s.code }"
+                :aria-pressed="stageFilter === s.code"
+                @click="stageFilter = stageFilter === s.code ? '' : s.code"
+              >{{ s.label }}</button>
+            </div>
+            <button
+              v-for="c in filteredCases"
+              :key="c.case_id"
+              class="case-item"
+              :class="{ on: currentCase && c.case_id === currentCase.case_id }"
+              :aria-current="currentCase && c.case_id === currentCase.case_id ? 'true' : undefined"
+              @click="selectCase(c.case_id)"
+            >
+              <b>{{ c.title }}</b>
+              <span class="ci-meta"><template v-if="c.case_type">{{ c.case_type }} · </template>{{ stageLabel(c.stage) }}</span>
+            </button>
+            <p v-if="!cases.length" class="hint">还没有案件：在顶栏新建一个，一切材料都按案件归档。</p>
+            <p v-else-if="!filteredCases.length" class="hint">没有符合条件的案件：筛选只按标题文字与阶段匹配。</p>
+            <p class="muted">阶段与事实状态都取自后端保存的字段，此处只呈现，前端不判定。</p>
+          </aside>
+
+          <section class="center">
+            <h2>本案事实与文书</h2>
+            <div class="doc-tabs" aria-label="文书选项卡">
+              <span class="doc-tab on">案件综述</span>
+              <button v-for="d in docs" :key="d.doc_id" class="doc-tab" @click="switchStage('review')">{{ baseName(d.file) }}</button>
+            </div>
+            <template v-if="currentCase">
+              <h3>案件背景</h3>
+              <p class="muted">案件背景以带出处的事实块呈现；系统不生成叙述来补全卷宗里没有的信息。</p>
+              <div v-if="confirmedFacts.length" class="fact-block confirmed">
+                <h3>无争议事实 <span class="tag ok">已溯源确认</span></h3>
+                <p v-for="f in confirmedFacts" :key="f.fact_id">{{ f.description }}<span class="vchip">{{ citationText(f.citation) || "已溯源确认" }}</span></p>
+              </div>
+              <div v-if="conflictGroups.groups.length || conflictGroups.orphans.length" class="fact-block conflicted">
+                <h3>争议事实 <span class="tag bad">存在冲突</span></h3>
+                <p v-for="g in conflictGroups.groups" :key="g.conflict_id">
+                  <template v-if="g.point">{{ g.point }}：</template><span v-for="(f, i) in g.facts" :key="f.fact_id">{{ i ? "；" : "" }}{{ f.description }}<span v-if="citationText(f.citation)" class="vchip">{{ citationText(f.citation) }}</span></span>
+                </p>
+                <p v-for="f in conflictGroups.orphans" :key="f.fact_id">{{ f.description }}<span v-if="citationText(f.citation)" class="vchip">{{ citationText(f.citation) }}</span></p>
+                <p class="muted">互相矛盾的说法原样并列，系统不自动消解，由承办人判断。</p>
+              </div>
+              <div v-if="openFacts.length" class="fact-block open">
+                <h3>待核事实 <span class="tag info">尚未补强</span></h3>
+                <p v-for="f in openFacts" :key="f.fact_id">{{ f.description }}<span v-if="citationText(f.citation)" class="vchip">{{ citationText(f.citation) }}</span><span class="vchip">{{ FACT_STATE_NAMES[f.state] || f.state }}</span></p>
+                <p class="muted">这些事实只有单一来源或来自对方陈述，卷宗内暂无补强材料。</p>
+                <button class="link-btn" @click="gotoHelp('locate')">去阅卷检索核对 ›</button>
+              </div>
+              <div v-if="unsupportedFacts.length" class="fact-block nobasis">
+                <h3>无依据事实 <span class="tag">无依据</span></h3>
+                <p v-for="f in unsupportedFacts" :key="f.fact_id">{{ f.description }}<span class="vchip">没有找到可核对的来源</span></p>
+              </div>
+              <p v-if="!hasFacts" class="hint">本案还没有已录入的事实：在「事实」阶段录入后，会按可靠程度出现在这里。</p>
+              <p class="mrow"><button class="btn primary" @click="importFile()">接入新文书</button></p>
+            </template>
+            <p v-else class="hint">事实与文档都以案件为边界：在左侧列表选择或新建案件后，事实块与时间线会出现在这里。</p>
+          </section>
+
+          <aside class="rail" aria-label="案件时间线">
+            <h2>案件时间线</h2>
+            <p class="muted">按文书中的时间要素锚定；没有日期依据的节点不虚构，列入「待补」。</p>
+            <ul v-if="datedTimeline.length" class="tl">
+              <li v-for="t in datedTimeline" :key="t.Fact.fact_id">
+                <span class="when">{{ t.Date }}</span>
+                <span>{{ t.Fact.description }}</span><span class="vchip">{{ citationText(t.Fact.citation) || (FACT_STATE_NAMES[t.Fact.state] || t.Fact.state) }}</span>
+              </li>
+            </ul>
+            <p v-else-if="timeline.length" class="hint">文书中未找到可锚定的时间要素；以下事实均无日期依据，列入「待补」。</p>
+            <p v-else class="hint">本案还没有已录入的事实，时间线待案件推进后生成。</p>
+            <template v-if="undatedTimeline.length">
+              <h3>待补</h3>
+              <ul class="tl pending">
+                <li v-for="t in undatedTimeline" :key="t.Fact.fact_id">
+                  <span class="when">待补</span>
+                  <span>{{ t.Fact.description }}</span><span class="vchip">{{ citationText(t.Fact.citation) || "卷宗内暂无日期依据" }}</span>
+                </li>
+              </ul>
+            </template>
+          </aside>
+        </div>
       </div>
     </div>
 
@@ -436,4 +604,55 @@ onMounted(async () => {
 .status-list > div:last-child { border-bottom: 0; }
 .status-list dt { flex: 1; color: var(--text-3); font-size: var(--fs-sm); }
 .status-list dd { margin: 0; font-size: var(--fs-sm); color: var(--text-1); }
+/* 案件空间（case-journey O01 三栏）：左案件栏 / 中事实栏 / 右时间线栏；<900px 堆叠为单列 */
+.case-space { grid-column: 1 / -1; display: grid; grid-template-columns: 250px minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+@media (max-width: 900px) {
+  .case-space { grid-template-columns: 1fr; }
+}
+.case-space h2 { margin: 0 0 8px; font-size: var(--fs-md); }
+.case-space h3 { margin: 12px 0 6px; font-size: var(--fs-sm); color: var(--text-2); }
+.case-space .muted { color: var(--text-3); font-size: var(--fs-xs); margin: 6px 0; }
+.case-space input.full { width: 100%; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.chip {
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-2);
+  border-radius: var(--r-pill); padding: 3px 10px; font-size: var(--fs-xs); min-height: 26px;
+}
+.chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.case-item {
+  display: block; width: 100%; text-align: left; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--r-2); padding: 8px 10px; margin-bottom: 8px;
+}
+.case-item.on { border-color: var(--accent); background: var(--accent-soft); }
+.case-item b { display: block; font-size: var(--fs-sm); font-weight: 600; }
+.ci-meta { color: var(--text-3); font-size: var(--fs-xs); }
+.doc-tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 12px; }
+.doc-tab {
+  border: 1px solid var(--border-strong); background: var(--surface-sunken); color: var(--text-2);
+  border-radius: var(--r-1); padding: 4px 10px; font-size: var(--fs-xs); min-height: 26px;
+}
+.doc-tab.on { background: var(--accent); border-color: var(--accent); color: var(--text-inv); }
+/* 五态事实块：底色即五态令牌（DESIGN.md：五态色只用于看板与状态标注） */
+.fact-block { border: 1px solid var(--border); border-radius: var(--r-2); padding: 10px 12px; margin-bottom: 10px; }
+.fact-block.confirmed { background: var(--state-confirmed); }
+.fact-block.conflicted { background: var(--state-conflicted); }
+.fact-block.open { background: var(--state-single); }
+.fact-block.nobasis { background: var(--state-unsupported); }
+.fact-block h3 { margin: 0 0 6px; font-size: var(--fs-sm); }
+.fact-block p { margin: 0 0 6px; font-size: var(--fs-md); }
+.fact-block .muted { margin: 4px 0 0; }
+.tag { display: inline-block; border-radius: var(--r-1); padding: 1px 8px; font-size: var(--fs-xs); font-weight: 600; vertical-align: 1px; background: var(--neutral-bg); color: var(--text-2); }
+.tag.ok { background: var(--ok-bg); color: var(--ok); }
+.tag.bad { background: var(--bad-bg); color: var(--bad); }
+.tag.info { background: var(--info-bg); color: var(--info); }
+.vchip {
+  display: inline-block; margin: 0 2px; padding: 1px 8px; border-radius: var(--r-pill);
+  background: var(--info-bg); border: 1px solid var(--info-border); color: var(--info); font-size: var(--fs-xs);
+}
+.tl { list-style: none; margin: 0; padding: 0 0 0 16px; border-left: 2px solid var(--border-strong); }
+.tl li { position: relative; padding: 0 0 10px 8px; font-size: var(--fs-sm); }
+.tl li::before { content: ""; position: absolute; left: -21px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.tl.pending li::before { background: var(--surface); border: 2px solid var(--border-strong); }
+.when { display: block; color: var(--text-3); font-size: var(--fs-xs); }
+.link-btn { border: 0; background: none; color: var(--accent); padding: 2px 6px; min-height: 24px; font-size: var(--fs-xs); }
 </style>

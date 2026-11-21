@@ -2,7 +2,7 @@
 // App 外壳（v0.4 P1）：顶栏 / 案件切换 / 更新横幅 / 拖放遮罩 / 设置面板。
 // 工作台与引导动线在 views/；菜单与快捷键经 Workspace 暴露的方法转发，
 // 外壳不再持有各功能面板的 ref。
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import * as App from "../wailsjs/go/main/App";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 import { errText, humanSize, profileLabel } from "./util";
@@ -17,6 +17,57 @@ const error = ref("");
 const guide = computed<any[]>(() =>
   Array.isArray(info.value?.guide) ? info.value!.guide : []
 );
+
+// --- 显示设置（已批准画布 case-journey 的「实现待办」，本版兑现）---
+// 字号三档缩放根字号令牌；深浅色默认跟随系统，手动选择不改其余界面。
+// 选择存 localStorage，启动即应用；弹层键盘可达（aria-expanded/Escape/关闭回焦）。
+const displayOpen = ref(false);
+const displaySize = ref<"compact" | "normal" | "large">("normal");
+const themeMode = ref<"system" | "light" | "dark">("system");
+const displayBtn = ref<HTMLElement | null>(null);
+const displayPop = ref<HTMLElement | null>(null);
+
+function applyDisplay() {
+  const el = document.documentElement;
+  el.classList.toggle("fs-compact", displaySize.value === "compact");
+  el.classList.toggle("fs-large", displaySize.value === "large");
+  if (themeMode.value === "system") el.removeAttribute("data-theme");
+  else el.setAttribute("data-theme", themeMode.value);
+}
+function saveDisplay() {
+  localStorage.setItem("opencourt-display", JSON.stringify({ size: displaySize.value, theme: themeMode.value }));
+  applyDisplay();
+}
+function loadDisplay() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("opencourt-display") || "");
+    if (saved && typeof saved === "object") {
+      if (["compact", "normal", "large"].includes(saved.size)) displaySize.value = saved.size;
+      if (["system", "light", "dark"].includes(saved.theme)) themeMode.value = saved.theme;
+    }
+  } catch {
+    /* 存储损坏视同未设置，按默认跟随系统 */
+  }
+  applyDisplay();
+}
+function setDisplaySize(v: "compact" | "normal" | "large") { displaySize.value = v; saveDisplay(); }
+function setTheme(v: "system" | "light" | "dark") { themeMode.value = v; saveDisplay(); }
+function toggleDisplay() {
+  displayOpen.value = !displayOpen.value;
+  if (displayOpen.value) nextTick(() => displayPop.value?.focus());
+}
+function closeDisplay() {
+  if (!displayOpen.value) return;
+  displayOpen.value = false;
+  displayBtn.value?.focus();
+}
+function onDisplayDocDown(e: MouseEvent) {
+  if (!displayOpen.value) return;
+  const t = e.target as Node;
+  if (displayPop.value?.contains(t) || displayBtn.value?.contains(t)) return;
+  closeDisplay();
+}
+loadDisplay();
 
 // 顶栏只留对办案有后果的状态（v0.4 P3，docs/design-workflow.md）：
 // 已启用不再用告警黄；使用统计（隐私相关）开启才显 warn；脱敏级别迁入工具区。
@@ -51,8 +102,12 @@ function onDragEnd() {
 }
 
 function onGlobalKey(e: KeyboardEvent) {
-  if (e.key === "Escape" && settingsOpen.value) {
-    settingsOpen.value = false;
+  if (e.key === "Escape") {
+    if (settingsOpen.value) {
+      settingsOpen.value = false;
+      return;
+    }
+    closeDisplay();
     return;
   }
   // 与菜单栏同快捷键的浏览器兜底（wails dev 纯浏览器调试时菜单不可用）
@@ -69,6 +124,13 @@ async function onCaseSwitched() {
   } catch (e) {
     error.value = errText(e);
   }
+}
+
+// 左栏案件列表里切换案件：CaseBar 自带错误提示，刷新后走同一条统一刷新链路
+// （与 CaseBar 自身切换同一落点，不开第二套刷新路径）
+async function onCaseChanged() {
+  await (caseBarRef.value as any)?.refresh?.();
+  await onCaseSwitched();
 }
 
 // 向导「新建案件」落点：聚焦 CaseBar 的新案件输入
@@ -129,6 +191,7 @@ onMounted(async () => {
   document.addEventListener("dragenter", onDragEnter);
   document.addEventListener("dragleave", onDragLeave);
   document.addEventListener("dragend", onDragEnd);
+  document.addEventListener("mousedown", onDisplayDocDown);
   window.addEventListener("keydown", onGlobalKey);
   checkAppUpdate();
 });
@@ -137,6 +200,7 @@ onUnmounted(() => {
   document.removeEventListener("dragenter", onDragEnter);
   document.removeEventListener("dragleave", onDragLeave);
   document.removeEventListener("dragend", onDragEnd);
+  document.removeEventListener("mousedown", onDisplayDocDown);
   window.removeEventListener("keydown", onGlobalKey);
 });
 </script>
@@ -155,6 +219,38 @@ onUnmounted(() => {
       <span class="badge" :class="info.telemetry ? 'warn' : ''">
         使用统计 {{ info.telemetry ? "开启" : "关闭" }}
       </span>
+    </div>
+    <div class="display-wrap">
+      <button
+        ref="displayBtn"
+        class="badge display-btn"
+        :aria-expanded="displayOpen ? 'true' : 'false'"
+        aria-controls="display-pop"
+        @click="toggleDisplay"
+      >显示设置 ▾</button>
+      <div
+        v-if="displayOpen"
+        id="display-pop"
+        ref="displayPop"
+        class="display-pop"
+        tabindex="-1"
+        role="group"
+        aria-label="显示设置"
+      >
+        <p class="dp-label">字号</p>
+        <div class="dp-row">
+          <button class="btn sm" :aria-pressed="displaySize === 'compact'" @click="setDisplaySize('compact')">紧凑</button>
+          <button class="btn sm" :aria-pressed="displaySize === 'normal'" @click="setDisplaySize('normal')">标准</button>
+          <button class="btn sm" :aria-pressed="displaySize === 'large'" @click="setDisplaySize('large')">大字</button>
+        </div>
+        <p class="dp-label">配色</p>
+        <div class="dp-row">
+          <button class="btn sm" :aria-pressed="themeMode === 'system'" @click="setTheme('system')">跟随系统</button>
+          <button class="btn sm" :aria-pressed="themeMode === 'light'" @click="setTheme('light')">浅色</button>
+          <button class="btn sm" :aria-pressed="themeMode === 'dark'" @click="setTheme('dark')">深色</button>
+        </div>
+        <p class="dp-note">只影响字号与配色；默认跟随系统外观，手动选择会记住并下次启动继续生效。</p>
+      </div>
     </div>
   </header>
   <p v-if="error" class="error" role="status">{{ error }}</p>
@@ -184,7 +280,7 @@ onUnmounted(() => {
     </ul>
   </div>
 
-  <Workspace ref="workspaceRef" :info="info" :guide="guide" @focus-new-case="focusNewCase" />
+  <Workspace ref="workspaceRef" :info="info" :guide="guide" @focus-new-case="focusNewCase" @case-changed="onCaseChanged" />
 
   <!-- 拖放导入遮罩（文件拖入窗口时的落点提示；导入经 Go 侧同一管道） -->
   <div v-if="dragging" class="drop-overlay" role="status">
@@ -210,6 +306,19 @@ onUnmounted(() => {
 .badge { background: var(--topbar-badge); border-radius: var(--r-pill); padding: 3px 12px; font-size: var(--fs-xs); }
 .badge.profile, .badge.on { background: var(--accent); }
 .badge.warn { background: var(--warn); }
+/* 显示设置入口与弹层（顶栏右侧；弹层用表面令牌，深浅色自动跟随） */
+.display-wrap { position: relative; }
+.display-btn { border: 0; color: var(--text-inv); font-size: var(--fs-xs); min-height: 26px; padding: 3px 12px; border-radius: var(--r-pill); }
+.display-btn:hover:not(:disabled) { background: var(--topbar-badge); }
+.display-pop {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; width: 230px;
+  background: var(--surface); color: var(--text-1); border: 1px solid var(--border-strong);
+  border-radius: var(--r-2); padding: 10px 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: var(--fs-sm);
+}
+.dp-label { margin: 6px 0 4px; font-size: var(--fs-xs); color: var(--text-3); }
+.dp-row { display: flex; gap: 6px; }
+.dp-note { margin: 8px 0 0; font-size: var(--fs-xs); color: var(--text-3); }
 .update-banner { margin: 12px 24px 0; border: 1px solid var(--info-border); background: var(--info-bg); border-radius: var(--r-3); padding: 10px 14px; }
 .ub-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ub-title { font-weight: 600; color: var(--info); }

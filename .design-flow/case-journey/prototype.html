@@ -2,7 +2,7 @@
 
 <section data-screen="H00">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span>v0.4</span><span class="badge warn">尚未建案</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span>v0.4</span><span class="badge warn">尚未建案</span><span class="badge">显示设置 ▾</span></div>
     <main style="border-radius:8px;border-top:1px solid var(--border-strong)">
       <h1>开个案件，从卷宗开始办案</h1>
       <p style="font-size:var(--fs-md);max-width:640px">OpenCourt 是办案用的证据工作台：接入卷宗 → 核对原文逐条录入事实 → 核验每条结论的出处 → 审校通过后出报告。系统只依据本案接入的材料作判断，不替你推测。</p>
@@ -21,22 +21,73 @@
 
 <section data-screen="O01">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span><span class="badge">外网检索 未启用</span><span class="badge">使用统计 关闭</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span><span class="badge">外网检索 未启用</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 网络购物合同纠纷 · 咨询 ▾</div>
     <div class="tabs"><span class="tab on">案件总览</span><span class="tab">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab">报告</span><span class="tab">工具与数据</span></div>
     <main>
-      <h2>本案进展</h2>
-      <p style="font-size:var(--fs-md)" data-id="progress-text">现在进行到第 2 步「卷宗接入」：本案还没有接入文书。把卷宗拖进来，就可以开始核对原文、逐条录入事实。</p>
+      <p style="font-size:var(--fs-md)" data-id="progress-text">已接入 3 份文书，事实整理进行中：5 条事实里 1 条两说并存、1 条待补强。下一步是把物流单据接入卷宗。</p>
       <div class="stepper">
         <div class="step done"><b>建案</b>已完成</div>
-        <div class="step now"><b>卷宗接入</b>本案 0 份文书 ← 现在</div>
-        <div class="step"><b>整理事实</b>0 条</div>
+        <div class="step done"><b>卷宗接入</b>3 份文书</div>
+        <div class="step now"><b>整理事实</b>5 条 ← 现在</div>
         <div class="step"><b>审校与报告</b>待完成</div>
       </div>
-      <p><button class="btn primary" data-id="go-review" data-to="R01">去阅卷接入文书</button></p>
+      <div class="cols">
+        <aside class="rail">
+          <h3>案件</h3>
+          <input data-id="case-search" placeholder="检索案件">
+          <div class="chips">
+            <span class="chip on" data-id="f-all">全部案件</span>
+            <span class="chip" data-id="f-active">进行中</span>
+            <span class="chip" data-id="f-review">待复核</span>
+            <span class="chip" data-id="f-report">已出报告</span>
+            <span class="chip" data-id="f-arch">已归档</span>
+          </div>
+          <div class="caseitem on" data-id="case-1"><b>张某诉杭州某公司网络购物合同纠纷</b><br><span class="badge warn">待复核 2 条</span></div>
+          <div class="caseitem" data-id="case-2"><b>李某与某银行保证合同纠纷</b><br><span class="badge ok">已出报告</span></div>
+          <div class="caseitem" data-id="case-3"><b>某物业诉业主物业服务合同纠纷</b><br><span class="badge bad">存在冲突 1 处</span></div>
+          <p class="muted" style="margin:8px 0 0">状态由后端状态机判定，此处只呈现。</p>
+        </aside>
+        <div>
+          <div class="docbar">
+            <span class="doc on" data-id="doc-overview">案件综述</span>
+            <span class="doc" data-id="doc-1">起诉状.pdf</span>
+            <span class="doc" data-id="doc-2">答辩状.txt</span>
+            <span class="doc" data-id="doc-3">合同扫描件.pdf</span>
+          </div>
+          <h2>案件背景</h2>
+          <p class="muted" style="margin:0 0 10px">仅依据本案接入文书的事实性陈述，每句标注出处；系统不补全缺失信息。</p>
+          <p style="font-size:var(--fs-md)">2024 年 2 月 20 日，张某在该公司网店下单购买洗碗机一台<span class="vchip">《起诉状》</span>；双方约定 3 月 5 日前送达<span class="vchip">《合同扫描件》· 扫描识别文本，需人工校对</span>。</p>
+          <div class="fact" data-id="fact-agreed">
+            <h3 style="margin:0 0 6px">无争议事实 <span class="tag agreed">已溯源确认</span></h3>
+            <p style="margin:0;font-size:var(--fs-md)">双方之间存在网络购物合同关系。起诉状与答辩状陈述一致。</p>
+          </div>
+          <div class="fact" data-id="fact-disputed">
+            <h3 style="margin:0 0 6px">争议事实 <span class="tag disputed">存在冲突</span></h3>
+            <p style="margin:0 0 6px;font-size:var(--fs-md)">发货时间：原告称「3 月 1 日已发货」<span class="vchip">《起诉状》</span>；被告称「3 月 1 日尚未备货」<span class="vchip">《答辩状》</span>。</p>
+            <p class="muted" style="margin:0">两说原样并列，系统不自动消解，由承办人判断。</p>
+          </div>
+          <div class="fact" data-id="fact-open">
+            <h3 style="margin:0 0 6px">待核事实 <span class="tag single">单源未补强</span></h3>
+            <p style="margin:0 0 6px;font-size:var(--fs-md)">物流签收情况仅见于起诉状引述，卷宗内暂无物流单据。</p>
+            <p style="margin:0"><button class="btn link" data-id="check-logistics" data-to="R02">去阅卷检索核对 ›</button></p>
+          </div>
+          <p><button class="btn primary" data-id="go-review" data-to="R01">接入新文书</button></p>
+        </div>
+        <aside class="rail">
+          <h3>案件时间线</h3>
+          <p class="muted" style="margin:0 0 8px">按文书中的时间要素锚定；没有日期依据的节点不虚构，列入「待补」。</p>
+          <ul class="tl">
+            <li><div class="when">2024-02-20</div>下单购买<span class="vchip">已溯源确认</span></li>
+            <li><div class="when">2024-03-01</div>原告称已发货<span class="vchip">《起诉状》</span>；同日被告称尚未备货<span class="vchip">《答辩状》</span>——两说并列</li>
+            <li><div class="when">待补</div>到货时间：卷宗内暂无单据。补证方向：物流面单或平台物流记录</li>
+          </ul>
+          <p class="muted" style="margin:6px 0 0">升级只依据证据，不依据推测。</p>
+        </aside>
+      </div>
       <details style="margin-top:14px"><summary class="muted">专业细节：案件计数与事实可靠程度五态</summary>
-        <table><tr</table>><th>已溯源确认</th><th>单源未补强</th><th>对方主张未验证</th><th>存在冲突</th><th>无依据</th></tr>
-        <tr><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr></table>
+        <table><tr><th>已溯源确认</th><th>单源未补强</th><th>对方主张未验证</th><th>存在冲突</th><th>无依据</th></tr>
+        <tr><td>3</td><td>1</td><td>1</td><td>1</td><td>0</td></tr></table>
       </details>
     </main>
     <footer>OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。</footer>
@@ -45,7 +96,7 @@
 
 <section data-screen="R01">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab on">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
     <main>
@@ -63,7 +114,7 @@
 
 <section data-screen="R02">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab on">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
     <main>
@@ -85,7 +136,7 @@
 
 <section data-screen="F01">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
     <main>
@@ -112,7 +163,7 @@
 
 <section data-screen="F02">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
     <main>
@@ -127,7 +178,7 @@
 
 <section data-screen="F03">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
     <main>
@@ -150,7 +201,7 @@
 
 <section data-screen="F04">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
     <main>
@@ -171,7 +222,7 @@
 
 <section data-screen="V01">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab">事实</span><span class="tab on">核验</span><span class="tab">报告</span></div>
     <main>
@@ -197,7 +248,7 @@
 
 <section data-screen="P01">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab on">报告</span></div>
     <main>
@@ -219,7 +270,7 @@
 
 <section data-screen="P02">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge on">智能模型 已启用</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab on">报告</span></div>
     <main>
@@ -234,7 +285,7 @@
 
 <section data-screen="X01">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 事实</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
     <main>
@@ -249,7 +300,7 @@
 
 <section data-screen="X02">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 事实</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
     <main>
@@ -264,7 +315,7 @@
 
 <section data-screen="X03">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 事实</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
     <main>
@@ -279,7 +330,7 @@
 
 <section data-screen="X04">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 事实</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab on">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
     <main>
@@ -297,7 +348,7 @@
 
 <section data-screen="X05">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 阅卷</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab on">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab">报告</span></div>
     <main>
@@ -312,7 +363,7 @@
 
 <section data-screen="X06">
   <div class="shell">
-    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span></div>
+    <div class="topbar"><span class="logo">OpenCourt</span><span class="badge on">使用角色：法院</span><span class="badge">显示设置 ▾</span></div>
     <div class="caseline">当前案件：张某诉杭州某公司网络购物合同纠纷 · 报告</div>
     <div class="tabs"><span class="tab">案件总览</span><span class="tab">阅卷</span><span class="tab">事实</span><span class="tab">核验</span><span class="tab on">报告</span></div>
     <main>

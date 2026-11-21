@@ -47,9 +47,10 @@
 }
 
 /* 深色模式（桌面设计规范：跟随系统外观，令牌层整体换值；
-   组件仍只引用 var(--…)，禁止针对深色单独写色） */
+   组件仍只引用 var(--…)，禁止针对深色单独写色）。
+   顶栏「显示设置」手动选浅色时排除本块（data-theme="light"） */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     /* 表面与线 */
     --bg: #17181c;
     --surface: #1f2126;
@@ -88,9 +89,54 @@
   }
 }
 
+/* 手动选深色（顶栏显示设置）：浅色系统下也生效。
+   色值与上方系统深色块逐行一致，两处修改必须同步 */
+:root[data-theme="dark"] {
+  /* 表面与线 */
+  --bg: #17181c;
+  --surface: #1f2126;
+  --surface-sunken: #26282e;
+  --border: #33363e;
+  --border-strong: #454a54;
+
+  /* 文字 */
+  --text-1: #e6e8ec;
+  --text-2: #c9cdd5;
+  --text-3: #9aa1ad;
+  --text-inv: #fff;
+
+  /* 品牌强调（靛蓝：深色下提亮保证对比度） */
+  --accent: #6366f1;
+  --accent-soft: #262a4d;
+  --accent-ink: #a5b4fc;
+
+  /* 反馈语义（前景提亮、底/边框改深底，语义与浅色一一对应） */
+  --ok: #34d399;   --ok-bg: #06281f;
+  --warn: #fbbf24; --warn-bg: #2a2007; --warn-border: #6b5312;
+  --bad: #f87171;  --bad-bg: #2b1214;  --bad-border: #6b2326;
+  --info: #6cb2f0; --info-bg: #12203a; --info-border: #2c4a73;
+  --neutral-bg: #26282e;
+
+  /* 事实五态（与浅色五态同序换深底，色相不变） */
+  --state-confirmed: #06281f;
+  --state-single: #12203a;
+  --state-opponent: #2a2007;
+  --state-conflicted: #2b1214;
+  --state-unsupported: #26282e;
+
+  /* 顶栏 */
+  --topbar-bg: #0b0d10;
+  --topbar-badge: #343841;
+}
+
+/* 字号三档（顶栏显示设置）：缩放根字号令牌，由壳层写在 html 上；
+   选择器带 :root 前缀，确保晚于上方 :root 阶梯生效 */
+:root.fs-compact { --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 15px; --fs-xl: 18px; }
+:root.fs-large { --fs-xs: 14px; --fs-sm: 15px; --fs-md: 16px; --fs-lg: 18px; --fs-xl: 24px; }
+
 * { box-sizing: border-box; }
 /* --wails-drop-target: 标记整个窗口为拖放目标（Wails macOS 按此 CSS 属性识别落点） */
-body { margin: 0; color: var(--text-1); background: var(--bg); --wails-drop-target: drop; }
+body { margin: 0; color: var(--text-1); background: var(--bg); --wails-drop-target: drop; font-size: var(--fs-md); }
 
 button {
   border: 1px solid var(--border-strong); background: var(--surface);

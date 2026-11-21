@@ -1,5 +1,20 @@
 // 跨组件共享的小工具
 
+// 案件阶段（封闭枚举，顺序即办案动线）；CaseBar 与总览案件空间筛选共用，禁止另立。
+// 枚举以 Go 侧 domain.CaseStage 为准（CONSULT/FILING/FIRST_TRIAL/APPEAL/SECOND_TRIAL），
+// 没有「已归档」「待复核」等状态——界面不得出现后端不存在的阶段。
+export const CASE_STAGE_NAMES: Record<string, string> = {
+  CONSULT: "咨询",
+  FILING: "起诉",
+  FIRST_TRIAL: "一审",
+  APPEAL: "上诉",
+  SECOND_TRIAL: "二审",
+};
+
+export function stageLabel(code: string): string {
+  return CASE_STAGE_NAMES[code] || code;
+}
+
 // 事实五态（产品核心语义，顺序即看板列序）；FactBoard 与总览计数共用，禁止另立
 export const FACT_STATE_NAMES: Record<string, string> = {
   TRACED_CONFIRMED: "已溯源确认",

@@ -61,6 +61,28 @@ style: |
   .card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:8px;font-size:var(--fs-sm)}
   .c1{background:var(--state-confirmed)} .c2{background:var(--state-single)} .c3{background:var(--state-opponent)} .c4{background:var(--state-conflicted)} .c5{background:var(--state-unsupported)}
   .hit{padding:10px 12px;border:1px solid var(--info-border);border-radius:8px;background:var(--info-bg);margin-bottom:8px;font-size:var(--fs-sm)}
+  .cols{display:grid;grid-template-columns:250px 1fr 300px;gap:14px;align-items:start}
+  .rail{border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:10px}
+  .rail h3{margin:0 0 8px;font-size:var(--fs-sm)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  .chip{padding:3px 10px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface);font-size:var(--fs-xs);color:var(--text-2)}
+  .chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+  .caseitem{padding:9px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;font-size:var(--fs-sm);color:var(--text-2)}
+  .caseitem.on{border-color:var(--accent);background:var(--accent-soft);color:var(--text-1)}
+  .docbar{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:12px}
+  .doc{padding:5px 12px;border:1px solid var(--border-strong);border-radius:8px;font-size:var(--fs-xs);background:var(--surface-sunken);color:var(--text-2)}
+  .doc.on{background:var(--accent);border-color:var(--accent);color:var(--text-inv)}
+  .fact{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px}
+  .tag{padding:2px 8px;border-radius:6px;font-size:var(--fs-xs);font-weight:600;vertical-align:1px}
+  .tag.disputed{background:var(--state-conflicted);color:var(--bad)}
+  .tag.agreed{background:var(--state-confirmed);color:var(--ok)}
+  .tag.single{background:var(--state-single);color:var(--info)}
+  .vchip{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--info-bg);color:var(--info);border:1px solid var(--info-border);font-size:var(--fs-xs);margin:0 2px}
+  .tl{list-style:none;margin:0;padding:0;position:relative}
+  .tl::before{content:"";position:absolute;left:5px;top:4px;bottom:4px;width:2px;background:var(--border-strong)}
+  .tl li{position:relative;padding:0 0 12px 20px;font-size:var(--fs-sm)}
+  .tl li::before{content:"";position:absolute;left:1px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid var(--accent)}
+  .tl .when{color:var(--text-3);font-size:var(--fs-xs)}
   </style>
 lanes:
   - id: overview
@@ -87,7 +109,7 @@ screens:
   - id: O01
     lane: overview
     title: 案件总览
-    note: 主视图=进度叙述+四步进度条；专业细节折叠进详情区，公众不必展开
+    note: 四步进度条下接三栏案件空间（参考图布局）——左：案件列表+状态筛选；中：文书选项卡+背景叙述+五态事实（冲突原样并列）；右：按时间锚定的时间线；状态与日期均由后端判定，前端不编；专业细节折叠
   - id: R01
     lane: review
     title: 阅卷·接入文书
@@ -150,7 +172,8 @@ screens:
     note: 被拦必须可见可追溯；点名未过项并带回审校清单
 edges:
   - { from: H00, to: O01, label: 新建案件 }
-  - { from: O01, to: R01, label: 去阅卷接入 }
+  - { from: O01, to: R01, label: 接入新文书 }
+  - { from: O01, to: R02, label: 去阅卷检索核对 }
   - { from: R01, to: R02, label: 接入文书 }
   - { from: R01, to: X05, label: 扫描件接入·组件未配置, kind: error }
   - { from: R02, to: F01, label: 存为事实 }
@@ -171,6 +194,7 @@ edges:
   - { from: R02, to: R01, kind: back }
   - { from: P02, to: O01, kind: back }
 notes:
+  - 顶栏常驻「显示设置」入口（弹层：字号三档、深浅色），属实现待办；在实现前不得在真实版本中出现，画布中仅作预告
   - 全局语言：双受众成对语域——专业名首次出现必附通俗注解；内部组件名、里程碑码（D1）、引擎名（核验器）、状态枚举原值、冲突编号不得进入任何用户可见文案（v0.4 P7/P12 已实施）
   - 失败回执与成功对称（P11）：错误正文必须带可见补救指引且只指向导航里真实存在的入口；前端按补救语出落点按钮（errHelp↔Go 文案成对契约），未匹配不出按钮
   - 状态永远由后端状态机判定，前端只呈现；被拦截必须可见、可追溯；升级只依据证据不依据推测
