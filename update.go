@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -106,7 +105,7 @@ func (a *App) InstallAppUpdate() error {
 		fmt.Sprintf("%s %s origin=%s", dmgPath, gateNote, a.settings.App.UpdateAPI))
 	emit("安装包校验通过，即将退出并完成替换重启…")
 	cmd := exec.Command("/bin/sh", scriptPath)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // 脱离应用进程组，应用退出后继续
+	detachCommand(cmd) // 脱离应用进程组，应用退出后继续（按平台拆分：Windows 无 Setsid 字段）
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("启动更新脚本失败: %w", err)
 	}
