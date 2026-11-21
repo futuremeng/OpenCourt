@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -78,6 +79,9 @@ func TestParseTesseractTSV(t *testing.T) {
 // writeFakeBinary 生成输出固定内容的 shell 桩程序。
 func writeFakeBinary(t *testing.T, content string) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("桩是 sh 脚本，Windows 无法 exec；生产路径用真实 tesseract/helper 的 .exe，不经此桩")
+	}
 	path := filepath.Join(t.TempDir(), "fakebin")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\ncat <<'EOF'\n"+content+"EOF\n"), 0o755); err != nil {
 		t.Fatal(err)

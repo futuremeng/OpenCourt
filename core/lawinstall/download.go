@@ -99,20 +99,25 @@ func DownloadFile(ctx context.Context, url, destPath, wantSHA string, progress f
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	// Windows 删不掉句柄未关的文件：所有失败路径必须先关句柄再删。
+	// 否则报「已丢弃」而盘上实际残留损坏包，谎报了磁盘状态。
+	discard := func() {
+		_ = out.Close()
+		_ = os.Remove(destPath)
+	}
 	h := sha256.New()
 	buf := make([]byte, 256*1024)
 	var done int64
 	lastReport := time.Now()
 	for {
 		if err := ctx.Err(); err != nil {
-			os.Remove(destPath)
+			discard()
 			return err
 		}
 		n, rerr := resp.Body.Read(buf)
 		if n > 0 {
 			if _, werr := out.Write(buf[:n]); werr != nil {
-				os.Remove(destPath)
+				discard()
 				return werr
 			}
 			h.Write(buf[:n])
@@ -126,9 +131,13 @@ func DownloadFile(ctx context.Context, url, destPath, wantSHA string, progress f
 			break
 		}
 		if rerr != nil {
-			os.Remove(destPath)
+			discard()
 			return fmt.Errorf("下载中断: %w", rerr)
 		}
+	}
+	// 先落盘关句柄，后续校验失败的删除在 Windows 上才删得掉
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("写入下载文件失败: %w", err)
 	}
 	if progress != nil {
 		progress(done, resp.ContentLength)
