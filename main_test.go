@@ -98,7 +98,16 @@ func newTestApp(t *testing.T) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &App{settings: config.Default(), dataDir: dir, auditLog: lg}
+	a := &App{settings: config.Default(), dataDir: dir, auditLog: lg}
+	// 测试结束按与生产 shutdown 相同的顺序关资源：Windows 上不关的 SQLite
+	// 句柄会阻止 TempDir 清理（Unix 可删打开文件才一直没暴露这个问题）。
+	t.Cleanup(func() {
+		a.closeLawSource()
+		if a.store != nil {
+			a.store.Close()
+		}
+	})
+	return a
 }
 
 // mkCoreDir 造合法 core 包目录（真实 SQLite，sdk 可打开）。
