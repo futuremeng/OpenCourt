@@ -12,6 +12,9 @@ config/settings.yaml
 data/
 *.db
 *.jsonl
+# 例外：eval/samples 是 go:embed 的构建输入（gateeval.go），必须入库；
+# 不入库则 CI 检出缺文件，go build/test 在 eval 包直接编译失败。
+!eval/samples/*.jsonl
 
 # 注意：frontend/wailsjs/ 为手写 bindings（wails dev/build 时官方生成器会覆盖），
 # 保持入库以便纯前端构建；frontend/dist/index.html 为 go:embed 占位页，保持入库。
