@@ -29,13 +29,15 @@ jobs:
           ref: main
           path: .deps/OpenLaw
 
-      - name: Point replace directive at the checked-out copy
-        run: go mod edit -replace github.com/futuremeng/OpenLaw=./.deps/OpenLaw
-
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+
+      # 必须在 setup-go 之后：macOS runner 不预装 Go，早于此步会 command not found
+      # （Linux/Windows 镜像自带 Go 才掩盖了这个顺序 bug）。
+      - name: Point replace directive at the checked-out copy
+        run: go mod edit -replace github.com/futuremeng/OpenLaw=./.deps/OpenLaw
 
       - uses: actions/setup-node@v4
         with:
