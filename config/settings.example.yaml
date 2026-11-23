@@ -62,4 +62,10 @@ ingest:
     lang: ""              # tesseract 语言包（默认 chi_sim+eng）
     min_confidence: 0.6   # 低于此置信度的页标黄「需人工校对」
 
+app:
+  # 程序自身更新：检查端点（空 = 关闭）。默认离线纪律：auto_update 默认 false，
+  # 启动零出站；检查只在用户显式开启自动检查、或在设置面板手动点「立即检查」时发生。
+  update_api: https://api.github.com/repos/futuremeng/OpenCourt/releases/latest
+  auto_update: false         # 默认关闭自动更新检查（默认离线，零出站）
+
 data_dir: data

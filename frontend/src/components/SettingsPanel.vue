@@ -5,8 +5,8 @@ import { ref } from "vue";
 import * as App from "../../wailsjs/go/main/App";
 import { profileLabel, redactLabel, toolLabel } from "../util";
 
-defineProps<{ mode: "settings" | "about"; info: Record<string, any> | null }>();
-const emit = defineEmits<{ (e: "close"): void }>();
+defineProps<{ mode: "settings" | "about"; info: Record<string, any> | null; updateMsg?: string }>();
+const emit = defineEmits<{ (e: "close"): void; (e: "check-update"): void }>();
 
 const openingDir = ref(false);
 async function openDataDir() {
@@ -50,6 +50,14 @@ async function openDataDir() {
         <dt>使用统计</dt><dd>{{ info?.telemetry ? "开启" : "关闭" }}</dd>
         <dt>智能模型</dt><dd>{{ info?.modelEnabled ? "已启用" : "离线" }}</dd>
         <dt>外网检索</dt><dd>{{ info?.browserEnabled ? "已启用" : "未启用" }}</dd>
+        <dt>程序更新</dt>
+        <dd>
+          {{ info?.autoUpdate ? "自动检查已开启" : "自动检查已关闭（默认离线，启动零出站）" }}
+          <button class="sm" @click="emit('check-update')">立即检查</button>
+          <div class="hint">开启自动检查：在 settings.yaml 设 app.auto_update: true，重启生效；
+            关闭时仅在点击「立即检查」时才连接更新源。</div>
+          <div v-if="updateMsg" class="hint">{{ updateMsg }}</div>
+        </dd>
         <dt>已禁用的功能</dt><dd>{{ (info?.disabledTools || []).map((t: string) => toolLabel(t)).join("、") || "无" }}</dd>
       </dl>
     </div>

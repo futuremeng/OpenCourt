@@ -282,6 +282,15 @@ func TestCheckAndDownloadLawData(t *testing.T) {
 
 // --- 案件实体（v0.2 M1）：建案/切换/隔离/重启恢复 ---
 
+// TestAppInfoAutoUpdateDefaultOff AppInfo 面向前端的 autoUpdate 默认必须为 false：
+// 前端据此门控启动时的自动更新检查（默认零出站，与 main.go 头部「默认离线」宣称一致）。
+func TestAppInfoAutoUpdateDefaultOff(t *testing.T) {
+	a := newCaseApp(t, t.TempDir())
+	if got := a.AppInfo()["autoUpdate"]; got != false {
+		t.Errorf("AppInfo().autoUpdate 默认必须 false（启动零出站）: %v", got)
+	}
+}
+
 // newCaseApp 打开真实 SQLite 的最小 App（案件绑定测试用）。
 func newCaseApp(t *testing.T, dir string) *App {
 	t.Helper()

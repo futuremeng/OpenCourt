@@ -81,3 +81,34 @@ func TestOCREngineDefaultsAndEnv(t *testing.T) {
 		t.Fatalf("OCR 环境变量覆盖失败: %+v", s.Ingest.OCR)
 	}
 }
+
+// TestAppAutoUpdateDefaultsAndEnv 自动更新检查默认关闭（启动零出站，与
+// 「默认离线」纪律一致）；yaml app.auto_update 与 OPENCOURT_AUTO_UPDATE 可开启。
+func TestAppAutoUpdateDefaultsAndEnv(t *testing.T) {
+	s := Default()
+	if s.App.AutoUpdate {
+		t.Fatal("自动更新检查必须默认关闭：启动不得向更新源发请求")
+	}
+	// yaml 显式开启
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.yaml")
+	if err := os.WriteFile(path, []byte("app:\n  auto_update: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.App.AutoUpdate {
+		t.Error("yaml app.auto_update 应能开启自动检查")
+	}
+	// 环境变量覆盖（无配置文件时也生效）
+	t.Setenv("OPENCOURT_AUTO_UPDATE", "true")
+	s, err = Load("__not_exists__.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.App.AutoUpdate {
+		t.Error("OPENCOURT_AUTO_UPDATE 环境变量覆盖失败")
+	}
+}

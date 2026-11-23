@@ -72,6 +72,10 @@ type Settings struct {
 	// App 程序自身更新（GitHub Releases latest API；空 = 关闭自动检查）。
 	App struct {
 		UpdateAPI string `yaml:"update_api"`
+		// AutoUpdate 自动更新检查（默认 false：启动零出站，与「默认离线」纪律一致）。
+		// 检查只发生在两种情形：用户在配置中显式开启，或在设置面板手动触发；
+		// 其余时间绝不向更新源发请求。端点地址保留默认值供这两种情形使用。
+		AutoUpdate bool `yaml:"auto_update"`
 		// AllowUnsigned 自构建/内部分发逃生口：true 时跳过 macOS Gatekeeper
 		// 评估（spctl）。默认 false——sha256 只证明「与发布文件一致」，
 		// 不证明「发布方是谁」。
@@ -98,6 +102,8 @@ func Default() *Settings {
 	// （发布流程由 scripts/package-lawdata.sh 生成并上传；镜像用 index_url 覆盖）。
 	s.OpenLaw.IndexURL = "https://github.com/futuremeng/OpenLaw/releases/latest/download/index.json"
 	s.App.UpdateAPI = "https://api.github.com/repos/futuremeng/OpenCourt/releases/latest"
+	// AutoUpdate 默认 false（零值）：启动不做任何自动更新检查，默认零出站；
+	// 上面的端点地址只在用户显式开启或手动触发时才会被访问。
 	// OCR 默认 none：扫描件/图片明确拒绝（安全默认）；黄标阈值 0.6。
 	s.Ingest.OCR.Engine = "none"
 	s.Ingest.OCR.MinConfidence = 0.6
@@ -215,6 +221,9 @@ func (s *Settings) applyEnv() {
 	}
 	if v, ok := get("UPDATE_API"); ok {
 		s.App.UpdateAPI = v
+	}
+	if v, ok := get("AUTO_UPDATE"); ok {
+		s.App.AutoUpdate = parseBool(v)
 	}
 	if v, ok := get("RETRIEVE_VECTOR_DIM"); ok {
 		if n, err := strconv.Atoi(v); err == nil {

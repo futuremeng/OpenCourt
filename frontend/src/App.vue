@@ -139,18 +139,27 @@ function focusNewCase() {
 }
 
 // --- 程序自身更新（横幅 + 一键下载安装重启；高危动作用页内两步确认，不用原生 confirm） ---
+// 默认零出站：自动检查默认关闭（app.auto_update，AppInfo.autoUpdate），仅当用户在
+// 配置中显式开启才在启动时请求更新源；面板「立即检查」是另一条手动触发路径。
 const appUpdate = ref<any | null>(null);
 const appUpdating = ref(false);
 const appUpdateProg = ref<string[]>([]);
 const showUpdateNotes = ref(false);
 const updateConfirm = ref(false);
+const updateCheckMsg = ref("");
 
-async function checkAppUpdate() {
+async function checkAppUpdate(manual = false) {
   try {
     const r = await App.CheckAppUpdate();
     if (r.ok && r.available) appUpdate.value = r;
-  } catch {
-    /* 离线等情况静默跳过 */
+    else if (manual) {
+      // 手动触发的结果必须如实回显（失败可见纪律）：已是最新说清楚，失败原样报。
+      updateCheckMsg.value = r.ok
+        ? `已检查：当前 v${r.current} 已是最新（最新 v${r.latest}）`
+        : `检查更新未成功：${r.error}`;
+    }
+  } catch (e) {
+    if (manual) updateCheckMsg.value = "检查更新未成功：" + errText(e);
   }
 }
 
@@ -193,7 +202,9 @@ onMounted(async () => {
   document.addEventListener("dragend", onDragEnd);
   document.addEventListener("mousedown", onDisplayDocDown);
   window.addEventListener("keydown", onGlobalKey);
-  checkAppUpdate();
+  // 默认零出站：自动更新检查默认关闭，仅当用户在配置中显式开启（app.auto_update）
+  // 才在启动时请求更新源；手动检查走设置面板「立即检查」。
+  if (info.value?.autoUpdate) checkAppUpdate();
 });
 
 onUnmounted(() => {
@@ -288,7 +299,8 @@ onUnmounted(() => {
   </div>
 
   <!-- 设置 / 关于面板（Cmd+,） -->
-  <SettingsPanel v-if="settingsOpen" :mode="settingsMode" :info="info" @close="settingsOpen = false" />
+  <SettingsPanel v-if="settingsOpen" :mode="settingsMode" :info="info" :update-msg="updateCheckMsg"
+    @check-update="checkAppUpdate(true)" @close="settingsOpen = false" />
 
   <footer class="disclaimer">
     OpenCourt 为 AI 辅助工具：不预测判决结果、不引导决策、不替代律师与法官判断。最终裁判权与诉讼决策权归属人类。

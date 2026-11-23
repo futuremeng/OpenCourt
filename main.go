@@ -331,12 +331,14 @@ func newID(prefix string) string {
 // AppInfo 返回应用与当前 Profile 概况（前端首屏展示）。
 func (a *App) AppInfo() map[string]any {
 	return map[string]any{
-		"version":        version,
-		"profile":        a.profile.Name,
-		"role":           a.profile.Role,
-		"dataDir":        a.dataDir,
-		"redactLevel":    a.settings.Security.RedactLevel,
-		"telemetry":      a.settings.Security.Telemetry,
+		"version":     version,
+		"profile":     a.profile.Name,
+		"role":        a.profile.Role,
+		"dataDir":     a.dataDir,
+		"redactLevel": a.settings.Security.RedactLevel,
+		"telemetry":   a.settings.Security.Telemetry,
+		// autoUpdate 默认 false：前端据此门控启动时的自动更新检查（默认零出站）。
+		"autoUpdate":     a.settings.App.AutoUpdate,
 		"modelEnabled":   a.settings.Model.Enabled,
 		"browserEnabled": a.browser != nil && a.browser.Enabled(),
 		"disabledTools":  a.profile.DisabledTools,

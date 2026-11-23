@@ -4,6 +4,22 @@
 
 ## Unreleased
 
+### 变更
+- **启动默认零出站**：自动更新检查默认关闭（新增配置 `app.auto_update`，默认 false，
+  可经 `OPENCOURT_AUTO_UPDATE` 覆盖），修复启动时无条件请求 api.github.com 与
+  「默认离线」宣称相悖的问题；仅当用户在配置中显式开启、或在设置面板「立即检查」
+  手动触发时才连接更新源，手动检查结果如实回显（失败可见纪律不弱化）；
+  设置面板新增「程序更新」行如实呈现自动检查状态与开启指引
+- **发布 macOS 包版本注入与重签名**：release 流水线在 tag 事件下 zip 前对 .app 用
+  plutil 注入 CFBundleShortVersionString/CFBundleVersion（去 v 的 tag 值），修复「关于」
+  面板停在 wails.json 陈旧 productVersion 的问题；plutil 改动破坏既有 ad-hoc 签名封印，
+  注入后重新 `codesign --force --sign -` 并 `codesign --verify` 自检后再打包；
+  wails.json productVersion 同步为 0.4.1（本地构建显示值，发布产物由注入覆盖）；
+  Release notes 补首启拦截指引（macOS 右键→打开 / xattr 去隔离属性；Windows
+  SmartScreen「更多信息→仍要运行」；SHA256SUMS 核对）
+- 删除陈旧 `build/release_notes.md`（v0.1.0-preview 时代的发布文案，已无任何
+  工作流/文档引用；对外说明唯一入口为 release.yml publish 步骤的 notes 模板）
+
 ## v0.4.1（2026-11-21）
 
 ### 变更
