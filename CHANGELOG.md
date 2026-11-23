@@ -2,7 +2,7 @@
 
 本项目遵循 Semantic Versioning，版本语义见开发文档 10.4。
 
-## Unreleased
+## v0.4.2（2026-11-23）
 
 ### 变更
 - **启动默认零出站**：自动更新检查默认关闭（新增配置 `app.auto_update`，默认 false，
