@@ -75,6 +75,19 @@ jobs:
         run: |
           cd build/bin
           if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            # 版本注入：.app 的 Info.plist 两个版本字段来自 wails.json 的
+            # productVersion 模板值（本地构建的显示值），发布时必须以去 v 的
+            # tag 覆盖，否则「关于」面板停在陈旧值。workflow_dispatch 无 tag
+            # 不注入（与 Build 步骤的 ldflags 同一事件判据）。
+            if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+              ver="${GITHUB_REF_NAME#v}"
+              plutil -replace CFBundleShortVersionString -string "$ver" OpenCourt.app/Contents/Info.plist
+              plutil -replace CFBundleVersion -string "$ver" OpenCourt.app/Contents/Info.plist
+              # plutil 改动 bundle 资源会破坏 wails build 已打的 ad-hoc 签名封印，
+              # 必须重新签名后再 zip（OpenLaw build-app.sh 同构：签名 + 自检）。
+              codesign --force --sign - OpenCourt.app
+              codesign --verify --verbose=2 OpenCourt.app
+            fi
             zip -r ../../${{ matrix.artifact }}.zip OpenCourt.app
           elif [ "${{ matrix.os }}" = "windows-latest" ]; then
             cp OpenCourt.exe ../../${{ matrix.artifact }}
@@ -142,7 +155,14 @@ jobs:
 
           cat > notes.md <<'MD'
           开源视听庭审辅助工具。安装包附 SHA256SUMS：`sha256sum -c SHA256SUMS`。
-          界面左下角版本号与本 Release 的 tag 一致（发版流水线经 ldflags 注入）。
+          界面左下角版本号与本 Release 的 tag 一致（发版流水线经 ldflags 注入，
+          macOS 包另将版本写入 Info.plist，「关于」面板同源）。
+
+          首次启动提示：macOS 包为 ad-hoc 签名、未经 Apple 公证，首次打开若被
+          Gatekeeper 拦截，请右键应用 →「打开」，或执行
+          `xattr -d com.apple.quarantine OpenCourt.app` 后重试。
+          Windows 安装包未代码签名，SmartScreen 提示时请点「更多信息」→「仍要运行」。
+          运行前可用 `sha256sum -c SHA256SUMS` 核对文件完整性。
           MD
 
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
